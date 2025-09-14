@@ -1,0 +1,12 @@
+{
+  "name": "unikor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "npx serve public",
+    "provision": "node scripts/provision_users.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.5.0"
+  }
+}
