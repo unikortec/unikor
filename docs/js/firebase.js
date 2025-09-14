@@ -1,14 +1,16 @@
 <script type="module">
-// public/js/firebase.js
+// portal/public/js/firebase.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+import { getAuth }       from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
-/* TODO: Trocar pelos dados do SEU projeto (frente pode conter essas chaves públicas). */
 export const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "seu-projeto.firebaseapp.com",
-  projectId: "seu-projeto",
-  appId: "SUA_APP_ID"
+  apiKey: "AIzaSyC12s4PvUWtNxOlShPc7zXlzq4XWqlVo2w",
+  authDomain: "unikorapp.firebaseapp.com",
+  projectId: "unikorapp",
+  storageBucket: "unikorapp.firebasestorage.app",
+  messagingSenderId: "329806123621",
+  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c",
+  measurementId: "G-WLXV3YK3EN"
 };
 
 export const app  = initializeApp(firebaseConfig);
