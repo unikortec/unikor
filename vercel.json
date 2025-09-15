@@ -2,10 +2,6 @@
   "version": 2,
   "routes": [
     { "handle": "filesystem" },
-    {
-      "src": "/(.*)",
-      "has": [{ "type": "header", "key": "accept", "value": ".*text/html.*" }],
-      "dest": "/index.html"
-    }
+    { "src": "/.*", "dest": "/index.html" }
   ]
 }
