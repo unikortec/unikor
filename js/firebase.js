@@ -1,4 +1,3 @@
-<script type="module">
 // portal/public/js/firebase.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth }       from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -16,3 +15,4 @@ export const firebaseConfig = {
 export const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 </script>
+
