@@ -1,4 +1,3 @@
-<script type="module">
 // public/js/icons.js
 export const Icons = {
   logo: `
