@@ -17,15 +17,21 @@
 <body>
 
   <!-- LOGIN -->
-  <section id="scrLogin" class="screen active login-screen">
-    <div class="container login-container">
-      <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" class="login-logo">
+  <section id="scrLogin" class="screen screen--login active">
+    <div class="container container--narrow">
+      <div class="login-logo">
+        <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
+      </div>
+
       <h1 class="login-title">Bem-vindo</h1>
+
       <label for="email">E-mail</label>
-      <input id="email" type="email" placeholder="nome@unikor.com.br" autocomplete="username"/>
+      <input id="email" type="email" placeholder="leo@unikor.com.br" autocomplete="username"/>
+
       <label for="senha">Senha</label>
       <input id="senha" type="password" placeholder="••••••••" autocomplete="current-password"/>
-      <button id="btnEntrar" class="btn">Entrar</button>
+
+      <button id="btnEntrar" class="btn btn--primary">Entrar</button>
       <div class="muted">
         <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
       </div>
@@ -34,24 +40,27 @@
 
   <!-- DASHBOARD -->
   <section id="scrDash" class="screen" style="display:none">
-    <div class="container" id="dashContainer"></div>
+    <div class="container container--wide" id="dashContainer"></div>
+    <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
+  <!-- App -->
   <script type="module">
-    import { injectBaseStyles, renderTopbar } from "./js/ui.js";
+    import { injectBaseStyles, renderHeader } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
-    // Registrar Service Worker
+    // SW
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('Falha ao registrar SW:', err));
+        .catch(err => console.warn('SW:', err));
     }
 
+    // CSS base
     injectBaseStyles();
 
-    // Login
+    // Ações login
     $('#btnEntrar').addEventListener('click', async () => {
       const email = $('#email').value.trim();
       const senha = $('#senha').value;
@@ -68,101 +77,78 @@
       catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
     });
 
-    // Navegação por tile
-    document.addEventListener('click', (ev) => {
+    // Tiles navegação por clique
+    document.addEventListener('click',(ev)=>{
       const tile = ev.target.closest('.tile');
-      if (tile) window.location.href = tile.dataset.href;
+      if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    // Estado de autenticação
+    // Estado de auth
     onUser(async (user) => {
       const scrLogin = $('#scrLogin');
       const scrDash  = $('#scrDash');
+      const dash     = $('#dashContainer');
+      const btnOut   = $('#btnLogout');
       const fab      = $('#fabConfig');
-      const container= $('#dashContainer');
 
       if (!user) {
+        // tela login
         scrLogin.classList.add('active');
         scrLogin.style.display = 'block';
-        scrDash.classList.remove('active');
-        scrDash.style.display = 'none';
+        scrDash.style.display  = 'none';
+        btnOut.style.display   = 'none';
+        fab.style.display      = 'none';
         return;
       }
 
-      const token   = await user.getIdTokenResult(true);
-      const role    = token?.claims?.role ?? 'geral';
+      // claims
+      const token = await user.getIdTokenResult(true);
+      const role  = token?.claims?.role ?? 'geral';
 
-      // Topbar com LOGO verde horizontal
-      container.innerHTML = `
-        <div class="topbar">
-          <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" style="height:42px">
-          <button id="btnSair" class="btn link">Sair</button>
-        </div>
-      `;
+      // monta header do dashboard (logo verde central)
+      dash.innerHTML = '';
+      dash.appendChild(renderHeader({
+        logoSrc: "assets/logo/unikorverde-logo.svg"
+      }));
 
-      $('#btnSair').onclick = () => doLogout();
-
-      // Grid de módulos
+      // grid de módulos
       const grid = document.createElement('div');
       grid.className = 'grid';
-      const makeTile = (href, svg, titulo) => {
+      const mk = (href, svg, titulo)=>{
         const el = document.createElement('div');
-        el.className = 'tile';
-        el.dataset.href = href;
-        const icon = document.createElement('div');
-        icon.innerHTML = svg;
-        const label = document.createElement('div');
-        label.className = 'tile-title';
-        label.textContent = titulo;
-        el.append(icon, label);
-        return el;
+        el.className = 'tile'; el.dataset.href = href;
+        const icon = document.createElement('div'); icon.className="tile-icon"; icon.innerHTML = svg;
+        const label = document.createElement('div'); label.className="tile-title"; label.textContent = titulo;
+        el.append(icon,label); return el;
       };
       grid.append(
-        makeTile('pedidos.html',    Icons.pedidos,    'Pedidos'),
-        makeTile('relatorios.html', Icons.relatorios, 'Relatório'),
-        makeTile('estoque.html',    Icons.estoque,    'Estoque'),
-        makeTile('despesas.html',   Icons.despesas,   'Despesas'),
-        makeTile('crm.html',        Icons.crm,        'CRM'),
-        makeTile('dashboard.html',  Icons.dashboard,  'Dashboard'),
+        mk('pedidos.html',   Icons.pedidos,    'Pedidos'),
+        mk('relatorios.html',Icons.relatorios, 'Relatório'),
+        mk('estoque.html',   Icons.estoque,    'Estoque'),
+        mk('despesas.html',  Icons.despesas,   'Despesas'),
+        mk('crm.html',       Icons.crm,        'CRM'),
+        mk('dashboard.html', Icons.dashboard,  'Dashboard'),
       );
-      container.appendChild(grid);
+      dash.appendChild(grid);
 
-      // FAB Config
-      fab.innerHTML = Icons.gearFilled;
-      if (role === 'master') {
+      // botão sair pequeno no topo direito
+      btnOut.style.display = 'inline-flex';
+      btnOut.onclick = () => doLogout();
+
+      // FAB de configurações (apenas master)
+      fab.innerHTML = Icons.gearOutline; // novo ícone corrigido
+      if (role === 'master'){
         fab.style.display = 'flex';
-        fab.classList.add('visible');
         fab.onclick = () => window.location.href = 'config.html';
       } else {
         fab.style.display = 'none';
+        fab.onclick = null;
       }
 
+      // mostra dashboard
       scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
-      scrDash.classList.add('active');     scrDash.style.display = 'block';
+      scrDash.style.display  = 'block';
     });
   </script>
-
-  <style>
-    /* LOGIN COM FUNDO VERDE */
-    .login-screen {
-      display:flex;
-      justify-content:center;
-      align-items:center;
-      min-height:100vh;
-      background:linear-gradient(180deg,#1e7f46,#29a55a);
-    }
-    .login-container {
-      width:100%;
-      max-width:360px;
-      padding:20px;
-      background:#fff;
-      border-radius:16px;
-      box-shadow:0 6px 20px rgba(0,0,0,.15);
-      text-align:center;
-    }
-    .login-logo { width:120px; margin-bottom:18px }
-    .login-title { color:#1e7f46; font-size:26px; font-weight:800; margin-bottom:18px }
-  </style>
-
 </body>
 </html>
