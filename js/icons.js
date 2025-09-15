@@ -52,4 +52,3 @@ export const Icons = {
     <circle cx="12" cy="12" r="3.5" fill="#fff"/>
   </svg>`
 };
-</script>
