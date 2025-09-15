@@ -1,9 +1,11 @@
-/* UNIKOR Portal – Service Worker (v1.0.0) */
-const CACHE = "unikor-portal-v1.0.0";
+/* UNIKOR Portal – Service Worker (v1.0.1) */
+const CACHE = "unikor-portal-v1.0.1";
 const CORE = [
   "./index.html","./manifest.json","./favicon.ico",
   "./js/firebase.js","./js/auth.js","./js/guard.js","./js/ui.js","./js/icons.js",
-  "./assets/logo/unikor-logo.svg","./assets/logo/unikor-logo.png"
+  "./assets/logo/unikor-logo.svg","./assets/logo/unikor-logo.png",
+  "./assets/logo/android-chrome-192x192.png","./assets/logo/android-chrome-512x512.png",
+  "./assets/logo/apple-touch-icon.png","./assets/logo/favicon-32x32.png","./assets/logo/favicon-16x16.png"
 ];
 
 self.addEventListener("install", (e)=>{
@@ -40,3 +42,4 @@ self.addEventListener("fetch",(e)=>{
     }
   })());
 });
+
