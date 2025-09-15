@@ -13,8 +13,6 @@
   <!-- Ícones -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
-  <!-- Se tiver favicon.ico na raiz, pode habilitar: -->
-  <!-- <link rel="shortcut icon" href="favicon.ico"> -->
 </head>
 <body>
 
@@ -22,12 +20,12 @@
   <section id="scrLogin" class="screen active">
     <div class="container">
       <div class="logo-stack" style="text-align:center; margin:28px 0 14px">
-        <div id="logoLogin" style="width:52px;height:52px;margin:0 auto 8px;color:#1e7f46"></div>
+        <img src="assets/logo/unikor-logo.svg" alt="Logo Unikor" width="90" style="margin:0 auto 8px;display:block"/>
         <div class="logo-text">UNIKOR</div>
       </div>
 
       <div class="login-card">
-        <h1>Bem-vindo(a)</h1>
+        <h1>Bem-vindo</h1>
         <label for="email">E-mail</label>
         <input id="email" type="email" placeholder="nome@unikor.com.br" autocomplete="username"/>
         <label for="senha">Senha</label>
@@ -46,22 +44,20 @@
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
-  <!-- ÚNICO ponto de entrada -->
+  <!-- SCRIPT -->
   <script type="module">
-    // Importa módulos (ajuste os nomes se necessário)
     import { injectBaseStyles, renderTopbar } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
-    // Registrar Service Worker (./sw.js na raiz)
+    // Registrar Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .catch(err => console.warn('Falha ao registrar o SW:', err));
     }
 
-    // Estilos base + logo
+    // Estilos base
     injectBaseStyles();
-    $('#logoLogin').innerHTML = Icons.logo;
 
     // Handlers de login / reset
     $('#btnEntrar').addEventListener('click', async () => {
@@ -110,7 +106,7 @@
       container.innerHTML = '';
       const topbar = renderTopbar({
         title: 'UNIKOR',
-        logoSVG: Icons.logo,
+        logoSVG: `<img src="assets/logo/unikorverde-logo.svg" alt="Logo Unikor Verde" width="34">`,
         showLogout: true,
         onLogout: () => doLogout(),
       });
@@ -133,7 +129,7 @@
       };
       grid.append(
         makeTile('pedidos.html',    Icons.pedidos,    'Pedidos'),
-        makeTile('relatorios.html', Icons.relatorios, 'Relatórios'),
+        makeTile('relatorios.html', Icons.relatorios, 'Relatório'),
         makeTile('estoque.html',    Icons.estoque,    'Estoque'),
         makeTile('despesas.html',   Icons.despesas,   'Despesas'),
         makeTile('crm.html',        Icons.crm,        'CRM'),
