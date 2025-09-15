@@ -1,4 +1,3 @@
-<script type="module">
 // public/js/guard.js
 import { auth } from "./firebase.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
@@ -18,3 +17,4 @@ export function requireAuth({ roles=null, onReady }){
   });
 }
 </script>
+
