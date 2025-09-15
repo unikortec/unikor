@@ -2,6 +2,7 @@
   "version": 2,
   "routes": [
     { "handle": "filesystem" },
+    { "src": "/[^/]+\\.(js|css|json|png|svg|ico|jpg|jpeg|webp|gif)$", "dest": "/$1" },
     { "src": "/.*", "dest": "/index.html" }
   ]
 }
