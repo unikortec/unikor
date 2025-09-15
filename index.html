@@ -13,12 +13,15 @@
   <!-- Ícones -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <!-- LOGIN -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="container container--narrow">
+    <div class="card">
       <div class="login-logo">
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
@@ -26,10 +29,10 @@
       <h1 class="login-title">Bem-vindo</h1>
 
       <label for="email">E-mail</label>
-      <input id="email" type="email" placeholder="leo@unikor.com.br" autocomplete="username"/>
+      <input id="email" type="email" placeholder="E-mail" autocomplete="username"/>
 
       <label for="senha">Senha</label>
-      <input id="senha" type="password" placeholder="••••••••" autocomplete="current-password"/>
+      <input id="senha" type="password" placeholder="Senha" autocomplete="current-password"/>
 
       <button id="btnEntrar" class="btn btn--primary">Entrar</button>
       <div class="muted">
@@ -39,28 +42,32 @@
   </section>
 
   <!-- DASHBOARD -->
-  <section id="scrDash" class="screen" style="display:none">
-    <div class="container container--wide" id="dashContainer"></div>
+  <section id="scrDash" style="display:none">
+    <div class="dash-header">
+      <!-- logo verde grande -->
+      <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+    </div>
+
     <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
+
+    <div class="grid" id="dashGrid"></div>
+
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
-  <!-- App -->
   <script type="module">
-    import { injectBaseStyles, renderHeader } from "./js/ui.js";
+    import { doLogin, doLogout, doReset, onUser, $ as $q } from "./js/auth.js";
     import { Icons } from "./js/icons.js";
-    import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
-    // SW
+    const $ = (sel)=> document.querySelector(sel);
+
+    // Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .catch(err => console.warn('SW:', err));
     }
 
-    // CSS base
-    injectBaseStyles();
-
-    // Ações login
+    // Login actions
     $('#btnEntrar').addEventListener('click', async () => {
       const email = $('#email').value.trim();
       const senha = $('#senha').value;
@@ -77,66 +84,64 @@
       catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
     });
 
-    // Tiles navegação por clique
+    // Navegação por tile
     document.addEventListener('click',(ev)=>{
       const tile = ev.target.closest('.tile');
       if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    // Estado de auth
+    function buildGrid(){
+      const grid = $('#dashGrid');
+      grid.innerHTML = '';
+      const mk = (href, svg, titulo)=>{
+        const el = document.createElement('div');
+        el.className = 'tile'; el.dataset.href = href;
+        const icon = document.createElement('div'); icon.className="tile-icon"; icon.innerHTML = svg;
+        const label = document.createElement('div'); label.className="tile-title"; label.textContent = titulo;
+        el.append(icon, label);
+        return el;
+      };
+      grid.append(
+        mk('pedidos.html',    Icons.pedidos,    'Pedidos'),
+        mk('relatorios.html', Icons.relatorios, 'Relatório'),
+        mk('estoque.html',    Icons.estoque,    'Estoque'),
+        mk('despesas.html',   Icons.despesas,   'Despesas'),
+        mk('crm.html',        Icons.crm,        'CRM'),
+        mk('dashboard.html',  Icons.dashboard,  'Dashboard'),
+      );
+    }
+
+    // Estado de autenticação
     onUser(async (user) => {
       const scrLogin = $('#scrLogin');
       const scrDash  = $('#scrDash');
-      const dash     = $('#dashContainer');
       const btnOut   = $('#btnLogout');
       const fab      = $('#fabConfig');
 
       if (!user) {
-        // tela login
-        scrLogin.classList.add('active');
-        scrLogin.style.display = 'block';
+        // volta para login
+        scrLogin.style.display = 'flex';
         scrDash.style.display  = 'none';
         btnOut.style.display   = 'none';
         fab.style.display      = 'none';
         return;
       }
 
-      // claims
-      const token = await user.getIdTokenResult(true);
-      const role  = token?.claims?.role ?? 'geral';
+      // claims (papel)
+      let role = 'geral';
+      try {
+        const token = await user.getIdTokenResult(true);
+        role = token?.claims?.role ?? 'geral';
+      } catch {}
 
-      // monta header do dashboard (logo verde central)
-      dash.innerHTML = '';
-      dash.appendChild(renderHeader({
-        logoSrc: "assets/logo/unikorverde-logo.svg"
-      }));
+      buildGrid();
 
-      // grid de módulos
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      const mk = (href, svg, titulo)=>{
-        const el = document.createElement('div');
-        el.className = 'tile'; el.dataset.href = href;
-        const icon = document.createElement('div'); icon.className="tile-icon"; icon.innerHTML = svg;
-        const label = document.createElement('div'); label.className="tile-title"; label.textContent = titulo;
-        el.append(icon,label); return el;
-      };
-      grid.append(
-        mk('pedidos.html',   Icons.pedidos,    'Pedidos'),
-        mk('relatorios.html',Icons.relatorios, 'Relatório'),
-        mk('estoque.html',   Icons.estoque,    'Estoque'),
-        mk('despesas.html',  Icons.despesas,   'Despesas'),
-        mk('crm.html',       Icons.crm,        'CRM'),
-        mk('dashboard.html', Icons.dashboard,  'Dashboard'),
-      );
-      dash.appendChild(grid);
-
-      // botão sair pequeno no topo direito
+      // botão sair (pequeno topo-direito)
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB de configurações (apenas master)
-      fab.innerHTML = Icons.gearOutline; // novo ícone corrigido
+      // FAB engrenagem (somente master)
+      fab.innerHTML = Icons.gearFilled;   // usa o que já existe no seu icons.js
       if (role === 'master'){
         fab.style.display = 'flex';
         fab.onclick = () => window.location.href = 'config.html';
@@ -146,7 +151,7 @@
       }
 
       // mostra dashboard
-      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
+      scrLogin.style.display = 'none';
       scrDash.style.display  = 'block';
     });
   </script>
