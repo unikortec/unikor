@@ -17,23 +17,17 @@
 <body>
 
   <!-- LOGIN -->
-  <section id="scrLogin" class="screen active">
-    <div class="container">
-      <div class="logo-stack" style="text-align:center; margin:28px 0 14px">
-        <img src="assets/logo/unikor-logo.svg" alt="Logo Unikor" width="90" style="margin:0 auto 8px;display:block"/>
-        <div class="logo-text">UNIKOR</div>
-      </div>
-
-      <div class="login-card">
-        <h1>Bem-vindo</h1>
-        <label for="email">E-mail</label>
-        <input id="email" type="email" placeholder="nome@unikor.com.br" autocomplete="username"/>
-        <label for="senha">Senha</label>
-        <input id="senha" type="password" placeholder="••••••••" autocomplete="current-password"/>
-        <button id="btnEntrar" class="btn">Entrar</button>
-        <div class="muted">
-          <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
-        </div>
+  <section id="scrLogin" class="screen active login-screen">
+    <div class="container login-container">
+      <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" class="login-logo">
+      <h1 class="login-title">Bem-vindo</h1>
+      <label for="email">E-mail</label>
+      <input id="email" type="email" placeholder="nome@unikor.com.br" autocomplete="username"/>
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" placeholder="••••••••" autocomplete="current-password"/>
+      <button id="btnEntrar" class="btn">Entrar</button>
+      <div class="muted">
+        <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
       </div>
     </div>
   </section>
@@ -44,7 +38,6 @@
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
-  <!-- SCRIPT -->
   <script type="module">
     import { injectBaseStyles, renderTopbar } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
@@ -53,13 +46,12 @@
     // Registrar Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('Falha ao registrar o SW:', err));
+        .catch(err => console.warn('Falha ao registrar SW:', err));
     }
 
-    // Estilos base
     injectBaseStyles();
 
-    // Handlers de login / reset
+    // Login
     $('#btnEntrar').addEventListener('click', async () => {
       const email = $('#email').value.trim();
       const senha = $('#senha').value;
@@ -99,18 +91,16 @@
 
       const token   = await user.getIdTokenResult(true);
       const role    = token?.claims?.role ?? 'geral';
-      const nomeRaw = user.displayName || (user.email?.split('@')[0] || 'Usuário');
-      const nomeFmt = nomeRaw.charAt(0).toUpperCase() + nomeRaw.slice(1);
 
-      // Topbar
-      container.innerHTML = '';
-      const topbar = renderTopbar({
-        title: 'UNIKOR',
-        logoSVG: `<img src="assets/logo/unikorverde-logo.svg" alt="Logo Unikor Verde" width="34">`,
-        showLogout: true,
-        onLogout: () => doLogout(),
-      });
-      container.appendChild(topbar);
+      // Topbar com LOGO verde horizontal
+      container.innerHTML = `
+        <div class="topbar">
+          <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" style="height:42px">
+          <button id="btnSair" class="btn link">Sair</button>
+        </div>
+      `;
+
+      $('#btnSair').onclick = () => doLogout();
 
       // Grid de módulos
       const grid = document.createElement('div');
@@ -137,7 +127,7 @@
       );
       container.appendChild(grid);
 
-      // FAB Config (apenas MASTER)
+      // FAB Config
       fab.innerHTML = Icons.gearFilled;
       if (role === 'master') {
         fab.style.display = 'flex';
@@ -145,14 +135,34 @@
         fab.onclick = () => window.location.href = 'config.html';
       } else {
         fab.style.display = 'none';
-        fab.classList.remove('visible');
-        fab.onclick = null;
       }
 
-      // Exibe dashboard
       scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
       scrDash.classList.add('active');     scrDash.style.display = 'block';
     });
   </script>
+
+  <style>
+    /* LOGIN COM FUNDO VERDE */
+    .login-screen {
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      min-height:100vh;
+      background:linear-gradient(180deg,#1e7f46,#29a55a);
+    }
+    .login-container {
+      width:100%;
+      max-width:360px;
+      padding:20px;
+      background:#fff;
+      border-radius:16px;
+      box-shadow:0 6px 20px rgba(0,0,0,.15);
+      text-align:center;
+    }
+    .login-logo { width:120px; margin-bottom:18px }
+    .login-title { color:#1e7f46; font-size:26px; font-weight:800; margin-bottom:18px }
+  </style>
+
 </body>
 </html>
