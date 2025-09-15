@@ -1,4 +1,3 @@
-<script type="module">
 // public/js/ui.js
 export const Theme = {
   brand:"#1e7f46", brand600:"#1a703e",
@@ -62,3 +61,4 @@ export function renderTopbar({title="UNIKOR", logoSVG, showLogout=false, onLogou
   return bar;
 }
 </script>
+
