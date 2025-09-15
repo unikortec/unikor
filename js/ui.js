@@ -60,5 +60,4 @@ export function renderTopbar({title="UNIKOR", logoSVG, showLogout=false, onLogou
   bar.appendChild(left); bar.appendChild(holder);
   return bar;
 }
-</script>
 
