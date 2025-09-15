@@ -5,10 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <base href="./">
   <title>UNIKOR • Portal</title>
+
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1e7f46"/>
+
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
+  <!-- se tiver um favicon.ico direto na pasta docs, vale adicionar também:
+  <link rel="shortcut icon" href="favicon.ico"> -->
 </head>
 <body>
 
@@ -40,17 +44,19 @@
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
-  <!-- SCRIPTS -->
-  <script type="module" src="./js/ui.js"></script>
-  <script type="module" src="./js/icons.js"></script>
-  <script type="module" src="./js/firebase.js"></script>
-  <script type="module" src="./js/auth.js"></script>
-
+  <!-- ÚNICO ponto de entrada de módulos -->
   <script type="module">
     import { injectBaseStyles, renderTopbar } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
+    // Registrar SW (docs/sw.js)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .catch(err => console.warn('SW register falhou:', err));
+    }
+
+    // estilos base + logo
     injectBaseStyles();
     document.getElementById("logoLogin").innerHTML = Icons.logo;
 
@@ -66,8 +72,10 @@
     document.getElementById("linkEsqueci").addEventListener("click", async (ev)=>{
       ev.preventDefault();
       const email = prompt("Qual seu e-mail?");
-      if (email){ try{ await doReset(email); alert("E-mail de redefinição enviado."); }
-      catch(e){ alert("Não foi possível enviar: " + (e?.message || e)); } }
+      if (email){
+        try{ await doReset(email); alert("E-mail de redefinição enviado."); }
+        catch(e){ alert("Não foi possível enviar: " + (e?.message || e)); }
+      }
     });
 
     // navegação por tile
@@ -91,7 +99,7 @@
       }
 
       const token = await user.getIdTokenResult(true);
-      const role = token?.claims?.role || "geral";
+      const role = token?.claims?.role ?? "geral";
       const nomeBase = user.displayName || (user.email?.split("@")[0] || "Usuário");
       const nomeFmt = nomeBase.charAt(0).toUpperCase() + nomeBase.slice(1);
 
@@ -103,24 +111,25 @@
         showLogout:true, onLogout: ()=> doLogout()
       });
       container.appendChild(topbar);
-      document.getElementById("bemVindo").textContent = `Bem-vindo(a), ${nomeFmt}`;
 
       // grid
       const grid = document.createElement("div"); grid.className="grid";
-      function tile(href, svg, titulo){
+      const tile = (href, svg, titulo) => {
         const el = document.createElement("div");
         el.className="tile"; el.dataset.href=href;
         const icon = document.createElement("div"); icon.innerHTML=svg;
         const label= document.createElement("div"); label.className="tile-title"; label.textContent=titulo;
         el.appendChild(icon); el.appendChild(label);
         return el;
-      }
-      grid.appendChild(tile("pedidos.html",    Icons.pedidos,    "Pedidos"));
-      grid.appendChild(tile("relatorios.html", Icons.relatorios, "Relatórios"));
-      grid.appendChild(tile("estoque.html",    Icons.estoque,    "Estoque"));
-      grid.appendChild(tile("despesas.html",   Icons.despesas,   "Despesas"));
-      grid.appendChild(tile("crm.html",        Icons.crm,        "CRM"));
-      grid.appendChild(tile("dashboard.html",  Icons.dashboard,  "Dashboard"));
+      };
+      grid.append(
+        tile("pedidos.html",    Icons.pedidos,    "Pedidos"),
+        tile("relatorios.html", Icons.relatorios, "Relatórios"),
+        tile("estoque.html",    Icons.estoque,    "Estoque"),
+        tile("despesas.html",   Icons.despesas,   "Despesas"),
+        tile("crm.html",        Icons.crm,        "CRM"),
+        tile("dashboard.html",  Icons.dashboard,  "Dashboard")
+      );
       container.appendChild(grid);
 
       // FAB Config (somente MASTER)
