@@ -1,5 +1,5 @@
 /* UNIKOR Portal – Service Worker (v1.0.2) */
-const CACHE = "unikor-portal-v1.0.2.5";
+const CACHE = "unikor-portal-v1.0.2.6";
 
 const CORE = [
   // Shell & PWA
@@ -81,6 +81,7 @@ self.addEventListener("fetch", (event) => {
     }
   })());
 });
+
 
 
 
