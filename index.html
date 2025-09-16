@@ -10,32 +10,35 @@
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1e7f46"/>
 
-  <!-- Ícones -->
+  <!-- Favicon / Logos -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
   <!-- CSS -->
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
   <!-- LOGIN -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="container container--narrow">
+    <div class="container">
       <div class="login-logo">
+        <!-- logo grande do mock -->
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
 
       <h1 class="login-title">Bem-vindo</h1>
 
-      <label for="email">E-mail</label>
-      <input id="email" type="email" placeholder="E-mail" autocomplete="username"/>
+      <!-- rótulos escondidos para acessibilidade -->
+      <label class="sr-only" for="email">E-mail</label>
+      <input id="email" class="input" type="email" placeholder="E-mail" autocomplete="username"/>
 
-      <label for="senha">Senha</label>
-      <input id="senha" type="password" placeholder="Senha" autocomplete="current-password"/>
+      <label class="sr-only" for="senha">Senha</label>
+      <input id="senha" class="input" type="password" placeholder="Senha" autocomplete="current-password"/>
 
-      <button id="btnEntrar" class="btn btn--primary">Entrar</button>
-      <div class="muted">
+      <button id="btnEntrar" class="btn btn--enter">Entrar</button>
+
+      <div class="login-foot">
         <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
       </div>
     </div>
@@ -43,8 +46,8 @@
 
   <!-- DASHBOARD -->
   <section id="scrDash" class="screen" style="display:none">
-    <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     <div class="container container--wide" id="dashContainer"></div>
+    <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
   </section>
 
@@ -52,6 +55,7 @@
   <script type="module">
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
+    import { requireAuth } from "./js/guard.js";
 
     // SW
     if ('serviceWorker' in navigator) {
@@ -59,82 +63,84 @@
         .catch(err => console.warn('SW:', err));
     }
 
-    // Ações login
-    $('#btnEntrar').addEventListener('click', async () => {
-      const email = $('#email').value.trim();
-      const senha = $('#senha').value;
-      if (!email || !senha) { alert('Informe e-mail e senha.'); return; }
-      try { await doLogin(email, senha); }
-      catch (e) { alert('Falha ao entrar: ' + (e?.message || e)); }
+    // helpers
+    function el(html){
+      const t = document.createElement('template'); t.innerHTML = html.trim();
+      return t.content.firstElementChild;
+    }
+
+    // navegação via tiles
+    document.addEventListener('click',(ev)=>{
+      const tile = ev.target.closest('.tile');
+      if (tile) window.location.href = tile.dataset.href;
     });
 
-    $('#linkEsqueci').addEventListener('click', async (ev) => {
+    // Ações login
+    document.getElementById('btnEntrar').addEventListener('click', async ()=>{
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+      if (!email || !senha){ alert('Informe e-mail e senha.'); return; }
+      try { await doLogin(email, senha); }
+      catch(e){ alert('Falha ao entrar: ' + (e?.message || e)); }
+    });
+
+    document.getElementById('linkEsqueci').addEventListener('click', async (ev)=>{
       ev.preventDefault();
       const email = prompt('Qual seu e-mail?');
       if (!email) return;
       try { await doReset(email); alert('E-mail de redefinição enviado.'); }
-      catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
+      catch(e){ alert('Não foi possível enviar: ' + (e?.message || e)); }
     });
 
-    // Tiles navegação
-    document.addEventListener('click',(ev)=>{
-      const tile = ev.target.closest('.tile');
-      if (tile){ window.location.href = tile.dataset.href; }
-    });
+    // Estado de auth → troca de telas
+    onUser(async (user)=>{
+      const scrLogin = document.getElementById('scrLogin');
+      const scrDash  = document.getElementById('scrDash');
+      const dash     = document.getElementById('dashContainer');
+      const btnOut   = document.getElementById('btnLogout');
+      const fab      = document.getElementById('fabConfig');
 
-    // Estado de auth
-    onUser(async (user) => {
-      const scrLogin = $('#scrLogin');
-      const scrDash  = $('#scrDash');
-      const dash     = $('#dashContainer');
-      const btnOut   = $('#btnLogout');
-      const fab      = $('#fabConfig');
-
-      if (!user) {
-        scrLogin.classList.add('active');
-        scrLogin.style.display = 'block';
-        scrDash.style.display  = 'none';
-        btnOut.style.display   = 'none';
-        fab.style.display      = 'none';
+      if (!user){
+        scrLogin.classList.add('active'); scrLogin.style.display='block';
+        scrDash.style.display='none'; btnOut.style.display='none'; fab.style.display='none';
         return;
       }
 
+      // claims
       const token = await user.getIdTokenResult(true);
       const role  = token?.claims?.role ?? 'geral';
 
-      // Header com logo verde central
-      dash.innerHTML = `
-        <header class="dash-header">
-          <img class="dash-logo" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" />
-        </header>
-      `;
+      // header (logo verde centralizado)
+      dash.innerHTML = '';
+      dash.appendChild(el(`
+        <div class="header">
+          <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+        </div>
+      `));
 
-      // Grade 2x3 (compacta para caber em 1 tela em muitos celulares)
-      const grid = document.createElement('div');
-      grid.className = 'grid';
-      const mk = (href, svg, titulo)=>{
-        const el = document.createElement('div');
-        el.className = 'tile'; el.dataset.href = href;
-        const icon = document.createElement('div'); icon.className="tile-icon"; icon.innerHTML = svg;
-        const label = document.createElement('div'); label.className="tile-title"; label.textContent = titulo;
-        el.append(icon,label); return el;
-      };
-      grid.append(
-        mk('pedidos.html',   Icons.pedidos,    'Pedidos'),
-        mk('relatorios.html',Icons.relatorios, 'Relatório'),
-        mk('estoque.html',   Icons.estoque,    'Estoque'),
-        mk('despesas.html',  Icons.despesas,   'Despesas'),
-        mk('crm.html',       Icons.crm,        'CRM'),
-        mk('dashboard.html', Icons.dashboard,  'Dashboard'),
-      );
-      dash.appendChild(grid);
+      // grid 2x3
+      const mk = (href, svg, titulo) => `
+        <div class="tile" data-href="${href}">
+          <div class="tile-icon">${svg}</div>
+          <div class="tile-title">${titulo}</div>
+        </div>`;
+      dash.appendChild(el(`
+        <div class="grid">
+          ${mk('pedidos.html',    Icons.pedidos,    'Pedidos')}
+          ${mk('relatorios.html', Icons.relatorios, 'Relatório')}
+          ${mk('estoque.html',    Icons.estoque,    'Estoque')}
+          ${mk('despesas.html',   Icons.despesas,   'Despesas')}
+          ${mk('crm.html',        Icons.crm,        'CRM')}
+          ${mk('dashboard.html',  Icons.dashboard,  'Dashboard')}
+        </div>
+      `));
 
-      // Botão sair
+      // Sair (canto superior direito)
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB configurações (somente MASTER)
-      fab.innerHTML = Icons.gearOutline;
+      // FAB Config (somente master)
+      fab.innerHTML = Icons.gearOutline || Icons.gearFilled;
       if (role === 'master'){
         fab.style.display = 'flex';
         fab.onclick = () => window.location.href = 'config.html';
@@ -143,9 +149,9 @@
         fab.onclick = null;
       }
 
-      // mostra dashboard
-      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
-      scrDash.style.display  = 'block';
+      // mostrar dashboard
+      scrLogin.classList.remove('active'); scrLogin.style.display='none';
+      scrDash.style.display='block';
     });
   </script>
 </body>
