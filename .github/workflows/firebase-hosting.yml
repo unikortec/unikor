@@ -1,20 +1,36 @@
-name: Deploy to Firebase Hosting (Token)
+name: Deploy to Firebase Hosting (SA)
 
 on:
   push:
-    branches: [ portal ]   # troque para main se preferir
+    branches: [ "portal" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout código
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Instalar Firebase CLI
+      - name: Write SA key file
+        run: |
+          echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}" > $HOME/sa.json
+
+      - name: Auth with Google (workload identity via key file)
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS_JSON }}
+
+      - name: Install Firebase CLI
         run: npm i -g firebase-tools
 
-      - name: Deploy para Firebase Hosting
-        run: firebase deploy --only hosting --project unikorapp
+      # Se tiver build, rode aqui
+      # - name: Build
+      #   run: npm ci && npm run build
+
+      - name: Deploy to Firebase Hosting
         env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GOOGLE_APPLICATION_CREDENTIALS: $HOME/sa.json
+        run: |
+          firebase --version
+          firebase deploy --only hosting --project unikorapp
