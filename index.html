@@ -10,148 +10,156 @@
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1e7f46"/>
 
-  <!-- Favicon / Logos -->
+  <!-- Ícones -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
-  <!-- CSS -->
-  <link rel="stylesheet" href="style.css"/>
+  <!-- Estilos globais -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- LOGIN -->
+  <!-- LOGIN (mesmo visual que já aprovamos – sem alterações agora) -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="container">
-      <div class="login-logo">
-        <!-- logo grande do mock -->
-        <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
-      </div>
-
+    <div class="login-wrap">
+      <img class="login-logo" src="assets/logo/unikor-logo.svg" alt="UNIKOR" />
       <h1 class="login-title">Bem-vindo</h1>
 
-      <!-- rótulos escondidos para acessibilidade -->
-      <label class="sr-only" for="email">E-mail</label>
-      <input id="email" class="input" type="email" placeholder="E-mail" autocomplete="username"/>
+      <label for="email" class="login-label sr-only">E-mail</label>
+      <input id="email" type="email" placeholder="E-mail" autocomplete="username" class="login-input"/>
 
-      <label class="sr-only" for="senha">Senha</label>
-      <input id="senha" class="input" type="password" placeholder="Senha" autocomplete="current-password"/>
+      <label for="senha" class="login-label sr-only">Senha</label>
+      <input id="senha" type="password" placeholder="Senha" autocomplete="current-password" class="login-input"/>
 
       <button id="btnEntrar" class="btn btn--enter">Entrar</button>
-
-      <div class="login-foot">
-        <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
-      </div>
+      <a id="linkEsqueci" class="login-forgot" href="#">Esqueci minha senha</a>
     </div>
+    <div class="login-bg"></div>
   </section>
 
   <!-- DASHBOARD -->
   <section id="scrDash" class="screen" style="display:none">
-    <div class="container container--wide" id="dashContainer"></div>
-    <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
-    <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
+    <header class="dash-header">
+      <div class="dash-brand">
+        <img class="dash-logo" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+      </div>
+      <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
+    </header>
+
+    <div class="dash-welcome" id="dashWelcome">BEM-VINDO</div>
+
+    <main class="grid" id="dashGrid">
+      <!-- tiles por JS -->
+    </main>
+
+    <button id="fabConfig" class="fab" title="Configurações" style="display:none" aria-label="Configurações">
+      <!-- ícone inline para ter nitidez -->
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
+        <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.06 7.06 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.34.5h-3.68a.5.5 0 0 0-.49.41L9.81 3.45c-.58.22-1.12.52-1.63.88l-2.4-.97a.5.5 0 0 0-.6.22L3.26 7.9a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L3.38 13.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.36 1.05.66 1.63.88l.36 2.54c.04.24.25.41.49.41h3.68c.24 0 .45-.17.49-.41l.36-2.54c.58-.22 1.12-.52 1.63-.88l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
+      </svg>
+    </button>
   </section>
 
-  <!-- App -->
+  <!-- JS -->
   <script type="module">
+    import { doLogin, doReset, doLogout, onUser, $ } from "./js/auth.js";
     import { Icons } from "./js/icons.js";
-    import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
-    import { requireAuth } from "./js/guard.js";
 
-    // SW
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('SW:', err));
-    }
-
-    // helpers
-    function el(html){
-      const t = document.createElement('template'); t.innerHTML = html.trim();
-      return t.content.firstElementChild;
-    }
-
-    // navegação via tiles
-    document.addEventListener('click',(ev)=>{
-      const tile = ev.target.closest('.tile');
-      if (tile) window.location.href = tile.dataset.href;
-    });
-
-    // Ações login
-    document.getElementById('btnEntrar').addEventListener('click', async ()=>{
-      const email = document.getElementById('email').value.trim();
-      const senha = document.getElementById('senha').value;
+    // LOGIN actions
+    $('#btnEntrar').addEventListener('click', async () => {
+      const email = $('#email').value.trim();
+      const senha = $('#senha').value;
       if (!email || !senha){ alert('Informe e-mail e senha.'); return; }
       try { await doLogin(email, senha); }
-      catch(e){ alert('Falha ao entrar: ' + (e?.message || e)); }
+      catch (e) {
+        const map = {
+          'auth/invalid-credential': 'E-mail ou senha inválidos.',
+          'auth/user-not-found': 'Usuário não encontrado.',
+          'auth/wrong-password': 'Senha incorreta.',
+          'auth/too-many-requests': 'Muitas tentativas; tente de novo mais tarde.'
+        };
+        alert(map[e?.code] || ('Falha ao entrar: ' + (e?.message || e)));
+        console.log(e);
+      }
     });
 
-    document.getElementById('linkEsqueci').addEventListener('click', async (ev)=>{
+    $('#linkEsqueci').addEventListener('click', async (ev) => {
       ev.preventDefault();
       const email = prompt('Qual seu e-mail?');
       if (!email) return;
       try { await doReset(email); alert('E-mail de redefinição enviado.'); }
-      catch(e){ alert('Não foi possível enviar: ' + (e?.message || e)); }
+      catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
     });
 
-    // Estado de auth → troca de telas
-    onUser(async (user)=>{
-      const scrLogin = document.getElementById('scrLogin');
-      const scrDash  = document.getElementById('scrDash');
-      const dash     = document.getElementById('dashContainer');
-      const btnOut   = document.getElementById('btnLogout');
-      const fab      = document.getElementById('fabConfig');
+    // navegação por tile
+    document.addEventListener('click', (ev) => {
+      const tile = ev.target.closest('.tile');
+      if (tile){ window.location.href = tile.dataset.href; }
+    });
 
-      if (!user){
-        scrLogin.classList.add('active'); scrLogin.style.display='block';
-        scrDash.style.display='none'; btnOut.style.display='none'; fab.style.display='none';
+    // Estado de auth
+    onUser(async (user) => {
+      const scrLogin = $('#scrLogin');
+      const scrDash  = $('#scrDash');
+      const grid     = $('#dashGrid');
+      const welcome  = $('#dashWelcome');
+      const btnOut   = $('#btnLogout');
+      const fab      = $('#fabConfig');
+
+      if (!user) {
+        // mostra login
+        scrLogin.classList.add('active');
+        scrLogin.style.display = 'block';
+        scrDash.style.display  = 'none';
+        btnOut.style.display   = 'none';
+        fab.style.display      = 'none';
         return;
       }
 
-      // claims
-      const token = await user.getIdTokenResult(true);
-      const role  = token?.claims?.role ?? 'geral';
+      // nome bonito
+      const nick = (user.displayName || user.email?.split('@')[0] || 'Usuário')
+                    .replace(/(^|\s)\S/g, s => s.toUpperCase());
+      welcome.textContent = `BEM-VINDO, ${nick}`;
 
-      // header (logo verde centralizado)
-      dash.innerHTML = '';
-      dash.appendChild(el(`
-        <div class="header">
-          <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
-        </div>
-      `));
-
-      // grid 2x3
-      const mk = (href, svg, titulo) => `
-        <div class="tile" data-href="${href}">
+      // monta grid
+      grid.innerHTML = '';
+      const mk = (href, svg, titulo) => {
+        const el = document.createElement('div');
+        el.className = 'tile';
+        el.dataset.href = href;
+        el.innerHTML = `
           <div class="tile-icon">${svg}</div>
-          <div class="tile-title">${titulo}</div>
-        </div>`;
-      dash.appendChild(el(`
-        <div class="grid">
-          ${mk('pedidos.html',    Icons.pedidos,    'Pedidos')}
-          ${mk('relatorios.html', Icons.relatorios, 'Relatório')}
-          ${mk('estoque.html',    Icons.estoque,    'Estoque')}
-          ${mk('despesas.html',   Icons.despesas,   'Despesas')}
-          ${mk('crm.html',        Icons.crm,        'CRM')}
-          ${mk('dashboard.html',  Icons.dashboard,  'Dashboard')}
-        </div>
-      `));
+          <div class="tile-title">${titulo}</div>`;
+        return el;
+      };
 
-      // Sair (canto superior direito)
+      grid.append(
+        mk('app/pedidos/',    Icons.pedidos,    'Pedidos'),
+        mk('app/relatorios/', Icons.relatorios, 'Relatório'),
+        mk('app/estoque/',    Icons.estoque,    'Estoque'),
+        mk('app/despesas/',   Icons.despesas,   'Despesas'),
+        mk('app/crm/',        Icons.crm,        'CRM'),
+        mk('app/dashboard/',  Icons.dashboard,  'Dashboard'),
+      );
+
+      // exibe dashboard
+      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
+      scrDash.style.display = 'block';
+
+      // botão sair
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB Config (somente master)
-      fab.innerHTML = Icons.gearOutline || Icons.gearFilled;
-      if (role === 'master'){
-        fab.style.display = 'flex';
-        fab.onclick = () => window.location.href = 'config.html';
-      } else {
-        fab.style.display = 'none';
-        fab.onclick = null;
-      }
-
-      // mostrar dashboard
-      scrLogin.classList.remove('active'); scrLogin.style.display='none';
-      scrDash.style.display='block';
+      // FAB (apenas master)
+      try {
+        const token = await user.getIdTokenResult(true);
+        if ((token?.claims?.role || 'geral') === 'master'){
+          fab.style.display = 'flex';
+          fab.onclick = () => window.location.href = 'config.html';
+        } else {
+          fab.style.display = 'none'; fab.onclick = null;
+        }
+      } catch {}
     });
   </script>
 </body>
