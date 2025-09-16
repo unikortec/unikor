@@ -14,17 +14,19 @@
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
-  <!-- CSS global -->
+  <!-- Estilos -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- LOGIN (100% verde) -->
+  <!-- LOGIN -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="container container--login">
+    <div class="login-card">
       <div class="login-logo">
+        <!-- logo de fundo verde -->
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
+
       <h1 class="login-title">Bem-vindo</h1>
 
       <label for="email">E-mail</label>
@@ -34,53 +36,54 @@
       <input id="senha" type="password" placeholder="Senha" autocomplete="current-password"/>
 
       <button id="btnEntrar" class="btn btn--primary">Entrar</button>
-      <div class="muted">
-        <a id="linkEsqueci" href="#" class="link">Esqueci minha senha</a>
-      </div>
+      <a id="linkEsqueci" href="#" class="link-forgot">Esqueci minha senha</a>
     </div>
   </section>
 
   <!-- DASHBOARD -->
   <section id="scrDash" class="screen" style="display:none">
-    <!-- header com logo central -->
-    <header class="app-header">
-      <img class="wordmark" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+    <header class="dash-header">
+      <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" class="dash-brand">
+      <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     </header>
 
-    <!-- grid 2x3 -->
-    <main id="dashContainer" class="grid"></main>
-
-    <!-- sair pequeno no topo direito -->
-    <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
+    <main class="dash-main" id="dashContainer"></main>
 
     <!-- engrenagem -->
-    <button id="fabConfig" class="fab" title="Configurações" style="display:none"></button>
+    <button id="fabConfig" class="fab" title="Configurações" style="display:none">
+      <!-- ícone vem por JS, mas deixo fallback -->
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path fill="none" stroke="currentColor" stroke-width="2"
+          d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 4a8.1 8.1 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6H10.5l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.4L6 11a8.1 8.1 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.3 2.6h4.7l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"/>
+      </svg>
+    </button>
   </section>
 
   <!-- App -->
   <script type="module">
+    import { renderIcons, injectHelpers } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
-    // Service Worker
+    // helpers básicos no window (query $, etc.)
+    injectHelpers();
+
+    // Registrar Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .catch(err => console.warn('SW:', err));
     }
 
-    // Helpers
-    const L = (sel)=>document.querySelector(sel);
-
-    // Ações do login
-    L('#btnEntrar').addEventListener('click', async () => {
-      const email = L('#email').value.trim();
-      const senha = L('#senha').value;
+    // Ações login
+    $('#btnEntrar').addEventListener('click', async () => {
+      const email = $('#email').value.trim();
+      const senha = $('#senha').value;
       if (!email || !senha) { alert('Informe e-mail e senha.'); return; }
       try { await doLogin(email, senha); }
       catch (e) { alert('Falha ao entrar: ' + (e?.message || e)); }
     });
 
-    L('#linkEsqueci').addEventListener('click', async (ev) => {
+    $('#linkEsqueci').addEventListener('click', async (ev) => {
       ev.preventDefault();
       const email = prompt('Qual seu e-mail?');
       if (!email) return;
@@ -94,50 +97,53 @@
       if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    // Estado de autenticação
+    // Estado de auth
     onUser(async (user) => {
-      const scrLogin = L('#scrLogin');
-      const scrDash  = L('#scrDash');
-      const grid     = L('#dashContainer');
-      const btnOut   = L('#btnLogout');
-      const fab      = L('#fabConfig');
+      const scrLogin = $('#scrLogin');
+      const scrDash  = $('#scrDash');
+      const dashMain = $('#dashContainer');
+      const btnOut   = $('#btnLogout');
+      const fab      = $('#fabConfig');
 
       if (!user) {
-        // volta ao login
         scrLogin.classList.add('active');
-        scrLogin.style.display = 'grid';
+        scrLogin.style.display = 'block';
         scrDash.style.display  = 'none';
         btnOut.style.display   = 'none';
         fab.style.display      = 'none';
         return;
       }
 
-      // monta os 6 tiles
-      grid.innerHTML = '';
-      const mk = (href, svg, titulo)=>{
-        const el = document.createElement('div');
-        el.className = 'tile'; el.dataset.href = href;
-        const icon = document.createElement('div'); icon.className='tile-icon'; icon.innerHTML = svg;
-        const label= document.createElement('div'); label.className='tile-title'; label.textContent = titulo;
-        el.append(icon,label); return el;
-      };
-      grid.append(
-        mk('pedidos.html',   Icons.pedidos,    'Pedidos'),
-        mk('relatorios.html',Icons.relatorios, 'Relatório'),
-        mk('estoque.html',   Icons.estoque,    'Estoque'),
-        mk('despesas.html',  Icons.despesas,   'Despesas'),
-        mk('crm.html',       Icons.crm,        'CRM'),
-        mk('dashboard.html', Icons.dashboard,  'Dashboard'),
-      );
+      // Claims
+      const token = await user.getIdTokenResult(true);
+      const role  = token?.claims?.role ?? 'geral';
 
-      // botão sair (topo-direito)
+      // Monta GRID 2×3 que cabe na tela
+      dashMain.innerHTML = `
+        <div class="grid">
+          ${[
+            { href:'pedidos.html',    icon:Icons.pedidos,    title:'Pedidos'     },
+            { href:'relatorios.html', icon:Icons.relatorios, title:'Relatório'   },
+            { href:'estoque.html',    icon:Icons.estoque,    title:'Estoque'     },
+            { href:'despesas.html',   icon:Icons.despesas,   title:'Despesas'    },
+            { href:'crm.html',        icon:Icons.crm,        title:'CRM'         },
+            { href:'dashboard.html',  icon:Icons.dashboard,  title:'Dashboard'   },
+          ].map(t => `
+            <div class="tile" data-href="${t.href}">
+              <div class="tile-icon">${t.icon}</div>
+              <div class="tile-title">${t.title}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      renderIcons(); // garante stroke/cores corretas
+
+      // Logout pequeno no topo-direito
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB configurações (ícone correto)
-      fab.innerHTML = Icons.gearFilled;
-      const token = await user.getIdTokenResult(true);
-      const role  = token?.claims?.role ?? 'geral';
+      // FAB (apenas master)
+      fab.innerHTML = Icons.gearOutline;
       if (role === 'master'){
         fab.style.display = 'flex';
         fab.onclick = () => window.location.href = 'config.html';
@@ -146,7 +152,7 @@
         fab.onclick = null;
       }
 
-      // mostra dashboard
+      // Mostra dashboard
       scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
       scrDash.style.display  = 'block';
     });
