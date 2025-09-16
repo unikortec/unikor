@@ -1,21 +1,20 @@
-name: Deploy to Firebase Hosting
+name: Deploy to Firebase Hosting (Token)
 
 on:
   push:
-    branches: [ portal ]   # troque para main se quiser
+    branches: [ portal ]   # troque para main se preferir
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repo
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Install Firebase CLI
+      - name: Instalar Firebase CLI
         run: npm i -g firebase-tools
 
-      - name: Deploy Hosting
+      - name: Deploy para Firebase Hosting
         run: firebase deploy --only hosting --project unikorapp
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
