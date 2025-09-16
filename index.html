@@ -14,67 +14,91 @@
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
-  <!-- Estilos -->
+  <!-- Estilos globais (o style.css que já passamos) -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- LOGIN -->
+  <!-- LOGIN (tela toda verde em degradê) -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="login-card">
+    <div class="login-wrap">
       <div class="login-logo">
-        <!-- logo de fundo verde -->
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
 
       <h1 class="login-title">Bem-vindo</h1>
 
-      <label for="email">E-mail</label>
-      <input id="email" type="email" placeholder="E-mail" autocomplete="username"/>
+      <label class="sr-only" for="email">E-mail</label>
+      <input id="email" class="login-input" type="email" placeholder="E-mail" autocomplete="username"/>
 
-      <label for="senha">Senha</label>
-      <input id="senha" type="password" placeholder="Senha" autocomplete="current-password"/>
+      <label class="sr-only" for="senha">Senha</label>
+      <input id="senha" class="login-input" type="password" placeholder="Senha" autocomplete="current-password"/>
 
-      <button id="btnEntrar" class="btn btn--primary">Entrar</button>
-      <a id="linkEsqueci" href="#" class="link-forgot">Esqueci minha senha</a>
+      <button id="btnEntrar" class="btn btn--enter">Entrar</button>
+
+      <div class="login-forgot">
+        <a id="linkEsqueci" href="#" class="link-white">Esqueci minha senha</a>
+      </div>
     </div>
   </section>
 
   <!-- DASHBOARD -->
-  <section id="scrDash" class="screen" style="display:none">
+  <section id="scrDash" class="screen">
+    <!-- Sair (canto superior direito) -->
+    <button id="btnLogout" class="logout" title="Sair">Sair</button>
+
+    <!-- Logo verde central -->
     <header class="dash-header">
-      <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" class="dash-brand">
-      <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
+      <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR" class="dash-logo" loading="lazy">
     </header>
 
-    <main class="dash-main" id="dashContainer"></main>
+    <!-- Grade fixa 2×3 -->
+    <main class="grid" id="dashGrid"></main>
 
-    <!-- engrenagem -->
-    <button id="fabConfig" class="fab" title="Configurações" style="display:none">
-      <!-- ícone vem por JS, mas deixo fallback -->
-      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-        <path fill="none" stroke="currentColor" stroke-width="2"
-          d="M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 4a8.1 8.1 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8 8 0 0 0-1.7-1l-.3-2.6H10.5l-.3 2.6a8 8 0 0 0-1.7 1l-2.4-1-2 3.4L6 11a8.1 8.1 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.3 2.6h4.7l.3-2.6a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z"/>
-      </svg>
-    </button>
+    <!-- FAB (Configurações) -->
+    <button id="fabConfig" class="fab" title="Configurações" aria-label="Configurações"></button>
   </section>
 
   <!-- App -->
   <script type="module">
-    import { renderIcons, injectHelpers } from "./js/ui.js";
     import { Icons } from "./js/icons.js";
     import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
-    // helpers básicos no window (query $, etc.)
-    injectHelpers();
-
-    // Registrar Service Worker
+    /* ---------- Service Worker ---------- */
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .catch(err => console.warn('SW:', err));
     }
 
-    // Ações login
+    /* ---------- Helpers ---------- */
+    if (!window.$) window.$ = (s)=>document.querySelector(s);
+
+    // Catálogo de apps (2×3)
+    const APPS = [
+      { slug: "pedidos",    name: "Pedidos" },
+      { slug: "relatorios", name: "Relatório" },
+      { slug: "estoque",    name: "Estoque" },
+      { slug: "despesas",   name: "Despesas" },
+      { slug: "crm",        name: "CRM" },
+      { slug: "dashboard",  name: "Dashboard" },
+    ];
+
+    // Ícones SVG por slug
+    const ICONS_MAP = {
+      pedidos: Icons.pedidos,
+      relatorios: Icons.relatorios,
+      estoque: Icons.estoque,
+      despesas: Icons.despesas,
+      crm: Icons.crm,
+      dashboard: Icons.dashboard
+    };
+
+    // >>> Modo PASTAS (./app/<slug>/index.html) <<<
+    const USE_FOLDERS = true;
+    const BASE_PATH   = "./app/";
+    const appHref     = (slug) => `${BASE_PATH}${slug}/`;
+
+    /* ---------- Login ---------- */
     $('#btnEntrar').addEventListener('click', async () => {
       const email = $('#email').value.trim();
       const senha = $('#senha').value;
@@ -91,70 +115,43 @@
       catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
     });
 
-    // Navegação por tile
-    document.addEventListener('click',(ev)=>{
+    // Navegação por clique no tile
+    document.addEventListener('click', (ev) => {
       const tile = ev.target.closest('.tile');
       if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    // Estado de auth
+    /* ---------- Estado de Autenticação ---------- */
     onUser(async (user) => {
       const scrLogin = $('#scrLogin');
       const scrDash  = $('#scrDash');
-      const dashMain = $('#dashContainer');
+      const grid     = $('#dashGrid');
       const btnOut   = $('#btnLogout');
       const fab      = $('#fabConfig');
 
       if (!user) {
         scrLogin.classList.add('active');
-        scrLogin.style.display = 'block';
-        scrDash.style.display  = 'none';
-        btnOut.style.display   = 'none';
-        fab.style.display      = 'none';
+        scrDash.classList.remove('active');
         return;
       }
 
-      // Claims
-      const token = await user.getIdTokenResult(true);
-      const role  = token?.claims?.role ?? 'geral';
-
-      // Monta GRID 2×3 que cabe na tela
-      dashMain.innerHTML = `
-        <div class="grid">
-          ${[
-            { href:'pedidos.html',    icon:Icons.pedidos,    title:'Pedidos'     },
-            { href:'relatorios.html', icon:Icons.relatorios, title:'Relatório'   },
-            { href:'estoque.html',    icon:Icons.estoque,    title:'Estoque'     },
-            { href:'despesas.html',   icon:Icons.despesas,   title:'Despesas'    },
-            { href:'crm.html',        icon:Icons.crm,        title:'CRM'         },
-            { href:'dashboard.html',  icon:Icons.dashboard,  title:'Dashboard'   },
-          ].map(t => `
-            <div class="tile" data-href="${t.href}">
-              <div class="tile-icon">${t.icon}</div>
-              <div class="tile-title">${t.title}</div>
-            </div>
-          `).join('')}
+      // Monta os 6 tiles (2×3) apontando para ./app/<slug>/
+      grid.innerHTML = APPS.map(a => `
+        <div class="tile" data-href="${appHref(a.slug)}" aria-label="${a.name}">
+          <div class="tile-icon">${ICONS_MAP[a.slug] || ""}</div>
+          <div class="tile-title">${a.name}</div>
         </div>
-      `;
-      renderIcons(); // garante stroke/cores corretas
+      `).join("");
 
-      // Logout pequeno no topo-direito
-      btnOut.style.display = 'inline-flex';
+      // Sair
       btnOut.onclick = () => doLogout();
 
-      // FAB (apenas master)
+      // FAB (ícone engrenagem oco)
       fab.innerHTML = Icons.gearOutline;
-      if (role === 'master'){
-        fab.style.display = 'flex';
-        fab.onclick = () => window.location.href = 'config.html';
-      } else {
-        fab.style.display = 'none';
-        fab.onclick = null;
-      }
 
       // Mostra dashboard
-      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
-      scrDash.style.display  = 'block';
+      scrLogin.classList.remove('active');
+      scrDash.classList.add('active');
     });
   </script>
 </body>
