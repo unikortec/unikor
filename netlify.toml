@@ -1,7 +1,37 @@
-[build]
-  publish = "."
+# Configuração Netlify para UNIKOR Portal
 
+[build]
+  publish = "."        # raiz do repositório (index.html está aqui)
+  command = ""         # sem build, site é estático
+
+# 🔀 Redirect SPA: todas as rotas caem no index.html
 [[redirects]]
   from = "/*"
   to   = "/index.html"
   status = 200
+
+# ⚡ Headers extras para performance e PWA
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
