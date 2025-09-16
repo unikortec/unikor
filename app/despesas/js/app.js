@@ -13,6 +13,9 @@ const fmtDate = (iso)=>{ const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; 
 const fmtDateName = (iso)=>{ const [y,m,d]=iso.split('-'); return `${d}-${m}-${y}`; }; // DD-MM-AAAA
 const pxToMm = 25.4/96;
 
+// pega o <dialog id="dlg"> de forma explícita (ESM não cria globals por id)
+const dlg = document.getElementById('dlg');
+
 // ===================== Estado =====================
 let CURRENT_USER = null;
 let notas = store.getNotas();
@@ -31,9 +34,6 @@ async function resolveUnikorUser(){
   return null;
 }
 async function getGoogleAccessToken(scope) {
-  // No portal/auth.js você expõe getAccessToken(scope) que:
-  // - se o usuário só tem e-mail/senha, faz link/reauth com GoogleAuthProvider + scope drive.file e retorna access_token
-  // - se já tem Google, apenas revalida e retorna
   if (window.UNIKOR_AUTH?.getAccessToken) return await window.UNIKOR_AUTH.getAccessToken(scope);
   throw new Error('auth.js precisa expor UNIKOR_AUTH.getAccessToken(scope) para usar o Drive.');
 }
@@ -43,18 +43,14 @@ async function registerSW(){
   if (!('serviceWorker' in navigator)) return;
   const reg = await navigator.serviceWorker.register('./sw.js');
 
-  // tenta atualizar agora
   reg.update?.();
 
-  // se já tiver waiting, manda assumir
   if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
 
-  // quando o controlador mudar, recarrega para pegar a versão nova
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     window.location.reload();
   });
 
-  // se aparecer um novo worker, também manda assumir
   reg.addEventListener('updatefound', () => {
     const nw = reg.installing;
     nw?.addEventListener('statechange', () => {
@@ -86,7 +82,6 @@ async function boot(){
   bindEvents();
   render();
 
-  // Inicializa Drive (token pedido sob demanda no auth.js)
   try { await initDrive(getGoogleAccessToken); } catch (e) { console.warn('Drive ainda não pronto:', e.message); }
 }
 
@@ -97,16 +92,15 @@ function bindEvents(){
   $('#filter-cat').onchange = render;
   $('#filter-pay').onchange = render;
 
-  // Import XML NFe 55 (arquivo)
   $('#xml55').onchange = async (ev)=>{
     const f = ev.target.files?.[0]; if(!f) return;
     const xml = await f.text();
     const nota = parseNFe55XML(xml);
-    nota._xml = xml; // mantém original para download/upload
+    nota._xml = xml;
     openEditor(nota);
   };
 
-  // TODO: Scanner NFC-e -> preencher nota + xml via Cloud Function proxy (quando quiser ativar)
+  // TODO: Scanner NFC-e via Cloud Function quando habilitar
 }
 
 function hydrateCats(){
@@ -119,7 +113,7 @@ function hydrateCats(){
 
 function render(){
   const list = $('#list'); list.innerHTML='';
-  const ym = new Date().toISOString().slice(0,7); // mês atual
+  const ym = new Date().toISOString().slice(0,7);
 
   const fcat = $('#filter-cat').value;
   const fpay = $('#filter-pay').value;
@@ -153,7 +147,6 @@ function render(){
     list.appendChild(card);
   }
 
-  // binds por item
   list.querySelectorAll('[data-edit]').forEach(b => b.onclick = ()=> {
     const id = b.getAttribute('data-edit'); const n = notas.find(x=>x.id===id); if(n) openEditor(n);
   });
@@ -172,7 +165,6 @@ function openEditor(pref={}){
   $('#in-cat').value = pref.categoria || categorias[0];
   $('#in-total').value = (pref.total!=null? String(pref.total).replace('.',',') : '');
 
-  // guarda xml/modelo se veio de import
   dlg.showModal();
   dlg.dataset.xml = pref._xml || '';
   dlg.dataset.modelo = pref.origem || '';
@@ -195,14 +187,12 @@ function onSave(){
     notas.push(nota);
   }
 
-  // se veio xml no modal, guarda junto
   if (dlg.dataset.xml) nota._xml = dlg.dataset.xml;
 
   store.setNotas(notas);
   dlg.close();
   render();
 
-  // Upload no Drive (visual único + XML opcional)
   saveArtifactsToDrive(nota).catch(err => console.warn('Drive upload falhou:', err.message));
 }
 
