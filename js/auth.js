@@ -39,27 +39,35 @@ export async function doLogout() {
 // Novos utilitários para PWAs (Despesas, etc.)
 // =======================================================
 
-// Retorna o usuário atual logado no Firebase
+// Retorna (ou aguarda) o usuário atual logado no Firebase
 export async function getCurrentUser() {
-  return auth.currentUser;
+  if (auth.currentUser) return auth.currentUser;
+  // aguarda o primeiro evento do onAuthStateChanged
+  return new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (u) => { unsub(); resolve(u || null); });
+  });
 }
 
 // Obtém access_token Google com escopo extra (ex.: Drive)
 export async function getAccessToken(scope = "https://www.googleapis.com/auth/drive.file") {
-  const user = auth.currentUser;
+  const user = await getCurrentUser();
   if (!user) throw new Error("Nenhum usuário logado");
 
   const provider = new GoogleAuthProvider();
   provider.addScope(scope);
 
+  // 1) Tenta reautenticar (caso já esteja linkado ao Google)
   try {
-    // Tenta vincular conta Google ao usuário atual
-    const result = await linkWithPopup(user, provider);
-    return result.credential.accessToken;
-  } catch (err) {
-    // Se já está vinculado, faz reauth para renovar token
     const result = await reauthenticateWithPopup(user, provider);
-    return result.credential.accessToken;
+    const cred = GoogleAuthProvider.credentialFromResult(result);
+    if (!cred?.accessToken) throw new Error("Sem accessToken no resultado (reauth)");
+    return cred.accessToken;
+  } catch (e) {
+    // 2) Se não estiver linkado ao Google, faz o link
+    const result = await linkWithPopup(user, provider);
+    const cred = GoogleAuthProvider.credentialFromResult(result);
+    if (!cred?.accessToken) throw new Error("Sem accessToken no resultado (link)");
+    return cred.accessToken;
   }
 }
 
