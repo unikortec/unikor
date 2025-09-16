@@ -1,5 +1,5 @@
 /* UNIKOR Portal – Service Worker (v1.0.2) */
-const CACHE = "unikor-portal-v1.0.2.13";
+const CACHE = "unikor-portal-v1.0.2.14";
 
 const CORE = [
   // Shell & PWA
