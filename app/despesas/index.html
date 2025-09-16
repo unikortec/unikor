@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unikor • Despesas</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <style>
+    :root{--bg:#0f172a;--card:#111827;--muted:#334155;--text:#e5e7eb;--primary:#06b6d4;--primary2:#22c55e;--border:#1f2937}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:500 15px/1.4 system-ui,-apple-system,Segoe UI,Roboto}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    header{display:flex;justify-content:space-between;align-items:center}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px}
+    input,select{background:#0b1220;color:var(--text);border:1px solid #223046;border-radius:10px;padding:10px 12px;font:inherit}
+    .btn{cursor:pointer;border:1px solid var(--border);background:#0b1220;color:var(--text);border-radius:12px;padding:10px 14px}
+    .btn.primary{background:linear-gradient(90deg,var(--primary),var(--primary2));color:#061018;font-weight:800;border:0}
+    dialog{border:1px solid var(--border);background:#0b1220;color:var(--text);border-radius:16px;padding:12px;width:min(360px,92vw)}
+    dialog::backdrop{background:#0009}
+    .warn{padding:12px;border:1px dashed #3b82f6;border-radius:12px;background:#0b1220}
+  </style>
+</head>
+<body>
+  <div id="app" style="display:none">
+    <div class="wrap">
+      <header>
+        <div>
+          <h1 style="margin:0">Despesas</h1>
+          <div id="user-pill" style="opacity:.8;font-size:12px"></div>
+        </div>
+        <div class="row">
+          <label class="btn" for="xml55">Importar XML 55</label>
+          <input id="xml55" type="file" accept="text/xml,application/xml" hidden />
+          <button class="btn" id="btn-scan">Ler QRCode NFC-e</button>
+          <button class="btn" id="btn-logout">Sair</button>
+        </div>
+      </header>
+
+      <section class="card" style="margin-top:12px">
+        <div class="row" style="justify-content:space-between;align-items:end">
+          <div>
+            <div style="opacity:.8">Notas do mês</div>
+            <small id="scope-hint" style="opacity:.6"></small>
+          </div>
+          <div class="row">
+            <select id="filter-cat"><option value="">Todas as categorias</option></select>
+            <select id="filter-pay">
+              <option value="">Todas as formas</option>
+              <option>PIX</option><option>Cartão Crédito</option><option>Cartão Débito</option>
+              <option>Dinheiro</option><option>Boleto</option><option>Transferência</option>
+            </select>
+            <button class="btn primary" id="btn-new">+ Nova</button>
+          </div>
+        </div>
+        <div id="list" style="margin-top:10px"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="need-auth" class="wrap" style="display:none;margin-top:30px">
+    <div class="warn">
+      <strong>Você não está autenticado no Unikor.</strong>
+      <div style="margin-top:6px">Entre pelo portal principal e volte para este app.</div>
+      <div style="margin-top:10px"><a class="btn primary" href="../index.html">Ir para o login</a></div>
+    </div>
+  </div>
+
+  <!-- MODAL: Nova/Editar -->
+  <dialog id="dlg">
+    <h3 id="dlg-title" style="margin:0 0 8px">Nova despesa</h3>
+    <div class="row"><input id="in-emp" placeholder="Empresa/Local" style="flex:1" /></div>
+    <div class="row" style="margin-top:6px">
+      <input id="in-date" type="date" />
+      <select id="in-pay">
+        <option>PIX</option><option>Cartão Crédito</option><option>Cartão Débito</option>
+        <option>Dinheiro</option><option>Boleto</option><option>Transferência</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <select id="in-cat" style="flex:1"></select>
+      <input id="in-total" inputmode="decimal" placeholder="Total (R$)" />
+    </div>
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <button class="btn" id="btn-del" style="display:none;border-color:#512">Excluir</button>
+      <div class="row">
+        <button class="btn" onclick="dlg.close()">Cancelar</button>
+        <button class="btn primary" id="btn-save">Salvar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- libs para visual (imagem/PDF) e Google API -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+
+  <!-- módulos Unikor + app -->
+  <script type="module" src="../../js/firebase.js"></script>
+  <script type="module" src="../../js/auth.js"></script>
+  <script type="module" src="../../js/guard.js"></script>
+  <script type="module" src="../../js/ui.js"></script>
+  <script type="module" src="./js/nfe.js"></script>
+  <script type="module" src="./js/store.js"></script>
+  <script type="module" src="./js/drive.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
