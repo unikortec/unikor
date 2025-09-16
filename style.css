@@ -1,161 +1,156 @@
-/* =================== Variáveis base =================== */
+/* ---------- Tema ---------- */
 :root{
-  --brand: #1e7f46;
-  --brand-600: #196d3d;        /* verde escuro do botão */
-  --ink: #0f1b16;
-  --muted: #475569;
-  --line: #cfe7da;
-  --bg: #ffffff;
-  --tile: #ffffff;
+  --brand-500:#1e7f46;   /* verde principal */
+  --brand-600:#1a6d3f;   /* mais escuro (botão) */
+  --white:#ffffff;
+  --ink:#0f1b16;
+  --line:rgba(255,255,255,.55);
 }
 
-/* =================== Reset/Globais =================== */
-*{ box-sizing:border-box }
-html,body{ height:100% }
-body{
-  margin:0;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  color: var(--ink);
-  background: var(--bg);
-}
-.container{ width:min(1100px, 94vw); margin:0 auto; padding:16px }
+/* Reset básico */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+img{max-width:100%;display:block}
 
-/* =================== LOGIN – VISUAL DO MOCK =================== */
+/* ---------- Telas ---------- */
+.screen{min-height:100dvh;display:none}
+.screen.active{display:block}
 
-/* fundo com degradê (mantém sua paleta) */
+/* ---------- LOGIN ---------- */
 .screen--login{
-  min-height: 100dvh;
-  background:
-    radial-gradient(1000px 500px at 20% 110%, rgba(0,0,0,.05), transparent 60%),
-    linear-gradient(160deg, #2aa05c 0%, #1f854c 55%, #177341 100%);
-  display:flex; align-items:center; justify-content:center;
-  padding:0;
+  position:relative;
+  color:var(--white);
+  /* degrade do mock */
+  background:linear-gradient(170deg,#1fb058 0%, #1a8d4a 55%, #16713d 100%);
+}
+.screen--login .container{
+  max-width:420px;
+  margin:0 auto;
+  padding:20px 18px 40px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:16px;
 }
 
-.container--narrow{
-  width: min(92vw, 520px);
-  padding-inline: 16px;
-  display:flex; flex-direction:column; align-items:center;
-  gap: clamp(14px, 2.5vh, 22px);
+/* logo grande (bem maior) */
+.login-logo{
+  margin-top:26px;
 }
-
-/* LOGO bem grande */
-.login-logo{ margin-top: clamp(8px, 5vh, 40px); margin-bottom: clamp(6px, 2.5vh, 16px); }
 .login-logo img{
-  width: clamp(300px, 64vw, 460px);
-  height: auto; display:block;
-  filter: brightness(0) invert(1);      /* o SVG fica branco sobre o verde */
+  width:clamp(200px, 58vw, 320px);   /* ~75% maior que versão anterior */
+  height:auto;
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.18));
 }
 
-/* “Bem-vindo” central */
+/* título central */
 .login-title{
-  text-align:center; color:#fff; font-weight:800; letter-spacing:.2px;
-  line-height:1.1; margin:0;
-  font-size: clamp(28px, 6vw, 48px);
+  margin:6px 0 4px;
+  text-align:center;
+  color:#fff;
+  font-weight:900;
+  letter-spacing:.4px;
+  font-size:clamp(28px, 7.2vw, 40px); /* ~1/4 menor do que antes */
 }
 
-/* Labels/Campos */
-.screen--login label{
-  width:100%; color:rgba(255,255,255,.95);
-  font-weight:700; font-size:15px; margin:12px 0 6px;
-}
-.screen--login input{
-  width:100%; font-size:18px; padding:14px 16px; border-radius:16px; border:0; outline:none;
-  background: rgba(255,255,255,.92); color:#0b3a22;
-  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset;
-}
-.screen--login input::placeholder{ color:#6b7280 }
-
-/* Botão “Entrar” – verde mais escuro + borda branca fina */
-.btn--primary{
-  width:100%; margin-top:14px; padding:14px 18px;
-  font-weight:800; font-size:20px; color:#fff;
-  border-radius:18px; border:1.5px solid rgba(255,255,255,.9);
-  background: var(--brand-600);
-  box-shadow: 0 18px 34px rgba(9,36,22,.35), 0 1px 0 rgba(0,0,0,.15) inset;
-  transition: transform .04s ease, filter .12s ease;
-}
-.btn--primary:hover{ filter: brightness(1.03) }
-.btn--primary:active{ transform: translateY(1px) }
-
-/* Link de recuperação */
-.screen--login .muted{
-  width:100%; text-align:center; margin-top:10px; font-size:15px;
-}
-.screen--login .muted .link{
-  color:#fff; text-decoration:none; font-weight:700; opacity:.95;
-}
-.screen--login .muted .link:hover{ text-decoration:underline }
-
-/* Safe area iOS */
-@supports (padding: max(0px)) {
-  .screen--login { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+/* esconder rótulos visuais, manter para acessibilidade */
+.sr-only{
+  position:absolute !important;
+  width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0;
 }
 
-/* =================== DASHBOARD =================== */
-
-.screen:not(.screen--login){ background:#ffffff; }
-
-.dash-header{
-  display:flex; align-items:center; justify-content:center;
-  padding-top: clamp(10px, 3vh, 24px);
-  padding-bottom: clamp(6px, 1.5vh, 12px);
+/* campos brancos empilhados */
+.input{
+  width:100%;
+  background:#fff;
+  color:#222;
+  border:0;
+  border-radius:14px;
+  padding:14px 16px;
+  font-size:16px;
+  outline:none;
+  box-shadow:0 1px 0 rgba(0,0,0,.05);
 }
-.dash-logo{
-  width: clamp(220px, 42vw, 420px);
-  height:auto; display:block;
+.input::placeholder{ color:#9099a1; }
+
+/* botão entrar — verde escuro + contorno branco fino */
+.btn{
+  width:100%;
+  border-radius:16px;
+  padding:14px 16px;
+  font-weight:800;
+  font-size:20px;
+  cursor:pointer;
 }
+.btn--enter{
+  color:#fff;
+  background:var(--brand-600);
+  border:1.5px solid rgba(255,255,255,.9);  /* contorno branco fino */
+  box-shadow:0 18px 40px rgba(0,0,0,.18), 0 2px 0 rgba(255,255,255,.18) inset;
+}
+.btn--enter:active{ transform:translateY(1px); }
+
+/* link “Esqueci…” em branco e centralizado */
+.login-foot{
+  width:100%;
+  text-align:center;
+  margin-top:6px;
+}
+.login-foot a{
+  color:#fff;
+  text-decoration:underline;
+  font-weight:700;
+}
+
+/* ---------- DASHBOARD ---------- */
+.container--wide{max-width:1100px;margin:0 auto;padding:20px}
+
+.header{
+  display:flex;align-items:center;justify-content:center;
+  margin:8px 0 12px;
+}
+.header img{ width:clamp(180px, 36vw, 360px); height:auto; }
 
 .logout{
-  position: fixed; top: 14px; right: 14px;
-  padding: 8px 14px; border-radius: 999px; border: 0;
-  background: var(--brand); color: #fff; font-weight: 800;
-  box-shadow: 0 10px 22px rgba(23,68,46,.18);
-  cursor: pointer; z-index: 20;
+  position:fixed;top:16px;right:16px;
+  background:var(--brand-600); color:#fff; border:0;
+  padding:10px 14px; border-radius:999px; font-weight:800;
+  box-shadow:0 10px 24px rgba(0,0,0,.18);
 }
-.logout:hover{ filter: brightness(1.05) }
 
-/* grid 2×3 compacta para caber na maioria dos celulares */
+/* grade 2x3 */
 .grid{
-  width: min(1040px, 94vw);
-  margin: 10px auto 30px auto;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: clamp(12px, 2.5vw, 18px);
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:18px;
+  margin-top:8px;
 }
-@media (min-width: 900px){
-  .grid{ grid-template-columns: repeat(3, 1fr); }
-}
-
 .tile{
   background:#fff;
-  border:2px solid var(--brand);
+  border:2px solid var(--brand-500);
   border-radius:22px;
-  min-height: clamp(120px, 22vh, 180px);
-  display:flex; flex-direction:column; justify-content:center; align-items:center;
-  gap: 12px; cursor:pointer;
-  transition: transform .05s ease, box-shadow .12s ease;
+  padding:26px 20px;
+  text-align:center;
+  cursor:pointer;
+  transition:transform .06s ease, box-shadow .12s ease;
 }
-.tile:hover{ transform: translateY(-1px); box-shadow: 0 10px 24px rgba(23,68,46,.10) }
-.tile-icon svg{ width:42px; height:42px; stroke: var(--brand); fill:none; }
-.tile-title{ font-weight:800; font-size: clamp(18px, 2.8vw, 28px); color: var(--brand) }
+.tile:hover{ transform:translateY(-1px); box-shadow:0 8px 20px rgba(0,0,0,.08); }
+.tile-icon svg{ width:44px; height:44px; stroke:var(--brand-500); }
+.tile-title{ margin-top:12px; color:var(--brand-500); font-size:22px; font-weight:900; }
 
-/* FAB Config (engrenagem) */
+/* fab de configurações */
 .fab{
-  position: fixed; right: 18px; bottom: 18px;
-  width: 64px; height: 64px; border-radius: 999px;
-  background: var(--brand); color: #fff;
+  position:fixed; right:18px; bottom:18px;
+  width:64px; height:64px; border-radius:50%;
+  background:var(--brand-600); color:#fff;
   display:none; align-items:center; justify-content:center;
-  box-shadow: 0 18px 38px rgba(23,68,46,.25);
-  cursor: pointer; z-index: 20;
+  box-shadow:0 20px 40px rgba(0,0,0,.18);
 }
-.fab svg{ width: 34px; height: 34px; fill: none; stroke: #fff; stroke-width: 2.2 }
+.fab svg{ width:36px; height:36px; fill:#fff; }
 
-/* Utilidades */
-.btn{ cursor:pointer }
-.screen{ display:none }
-.screen.active{ display:block }
-.container--wide{ width:min(1100px, 94vw); margin:0 auto; }
-
-/* (opcional) suaviza rolagem caso precise */
-html{ scroll-behavior: smooth }
+/* responsividade pequena */
+@media (max-width:360px){
+  .tile-title{ font-size:20px }
+  .tile-icon svg{ width:40px; height:40px }
+}
