@@ -10,104 +10,120 @@
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1e7f46"/>
 
-  <!-- Ícones -->
+  <!-- Ícones do site -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
-  <!-- Estilos globais -->
+  <!-- Estilos -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- LOGIN (mesmo visual que já aprovamos – sem alterações agora) -->
+  <!-- LOGIN -->
   <section id="scrLogin" class="screen screen--login active">
     <div class="login-wrap">
-      <img class="login-logo" src="assets/logo/unikor-logo.svg" alt="UNIKOR" />
+      <!-- LOGO MAIOR -->
+      <div class="login-logo">
+        <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
+      </div>
+
+      <!-- TÍTULO -->
       <h1 class="login-title">Bem-vindo</h1>
 
-      <label for="email" class="login-label sr-only">E-mail</label>
-      <input id="email" type="email" placeholder="E-mail" autocomplete="username" class="login-input"/>
-
-      <label for="senha" class="login-label sr-only">Senha</label>
-      <input id="senha" type="password" placeholder="Senha" autocomplete="current-password" class="login-input"/>
-
-      <button id="btnEntrar" class="btn btn--enter">Entrar</button>
-      <a id="linkEsqueci" class="login-forgot" href="#">Esqueci minha senha</a>
+      <!-- CAMPOS -->
+      <div class="login-form">
+        <input id="email" type="email" placeholder="E-mail" autocomplete="username" inputmode="email"/>
+        <input id="senha" type="password" placeholder="Senha" autocomplete="current-password"/>
+        <button id="btnEntrar" class="btn btn--primary">Entrar</button>
+        <a id="linkEsqueci" href="#" class="forgot-link">Esqueci minha senha</a>
+      </div>
     </div>
-    <div class="login-bg"></div>
   </section>
 
   <!-- DASHBOARD -->
-  <section id="scrDash" class="screen" style="display:none">
+  <section id="scrDash" class="screen screen--dash" style="display:none">
     <header class="dash-header">
-      <div class="dash-brand">
-        <img class="dash-logo" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+      <div class="brand">
+        <img class="brand-logo" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR"/>
+      </div>
+      <div class="welcome">
+        <div id="bemvindoTxt" class="welcome-title">Bem-vindo</div>
       </div>
       <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     </header>
 
-    <div class="dash-welcome" id="dashWelcome">BEM-VINDO</div>
-
-    <main class="grid" id="dashGrid">
-      <!-- tiles por JS -->
+    <main class="dash-main">
+      <div class="grid" id="gridApps">
+        <!-- tiles gerados via JS -->
+      </div>
     </main>
 
-    <button id="fabConfig" class="fab" title="Configurações" style="display:none" aria-label="Configurações">
-      <!-- ícone inline para ter nitidez -->
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true">
-        <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.06 7.06 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.34.5h-3.68a.5.5 0 0 0-.49.41L9.81 3.45c-.58.22-1.12.52-1.63.88l-2.4-.97a.5.5 0 0 0-.6.22L3.26 7.9a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L3.38 13.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.36 1.05.66 1.63.88l.36 2.54c.04.24.25.41.49.41h3.68c.24 0 .45-.17.49-.41l.36-2.54c.58-.22 1.12-.52 1.63-.88l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
-      </svg>
+    <!-- FAB Config (só master) -->
+    <button id="fabConfig" class="fab" title="Configurações" style="display:none">
+      <img src="assets/logo/icon-gear-white.svg" alt="Configurações">
     </button>
   </section>
 
-  <!-- JS -->
+  <!-- App -->
   <script type="module">
-    import { doLogin, doReset, doLogout, onUser, $ } from "./js/auth.js";
-    import { Icons } from "./js/icons.js";
+    import { doLogin, doLogout, doReset, onUser, $ } from "./js/auth.js";
 
-    // LOGIN actions
-    $('#btnEntrar').addEventListener('click', async () => {
-      const email = $('#email').value.trim();
-      const senha = $('#senha').value;
-      if (!email || !senha){ alert('Informe e-mail e senha.'); return; }
-      try { await doLogin(email, senha); }
-      catch (e) {
-        const map = {
-          'auth/invalid-credential': 'E-mail ou senha inválidos.',
-          'auth/user-not-found': 'Usuário não encontrado.',
-          'auth/wrong-password': 'Senha incorreta.',
-          'auth/too-many-requests': 'Muitas tentativas; tente de novo mais tarde.'
-        };
-        alert(map[e?.code] || ('Falha ao entrar: ' + (e?.message || e)));
-        console.log(e);
-      }
-    });
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .catch(err => console.warn('SW:', err));
+    }
 
-    $('#linkEsqueci').addEventListener('click', async (ev) => {
-      ev.preventDefault();
-      const email = prompt('Qual seu e-mail?');
-      if (!email) return;
-      try { await doReset(email); alert('E-mail de redefinição enviado.'); }
-      catch (e) { alert('Não foi possível enviar: ' + (e?.message || e)); }
-    });
+    // ---------- UI helpers ----------
+    const ERRORS_PT = {
+      "auth/invalid-email": "E-mail inválido.",
+      "auth/missing-password": "Informe a senha.",
+      "auth/invalid-credential": "E-mail ou senha inválidos.",
+      "auth/user-not-found": "Usuário não encontrado.",
+      "auth/wrong-password": "Senha incorreta.",
+      "auth/too-many-requests": "Muitas tentativas. Tente novamente em instantes.",
+    };
+    const msgErro = (e)=> ERRORS_PT[e?.code] || (e?.message || "Não foi possível realizar a operação.");
 
-    // navegação por tile
-    document.addEventListener('click', (ev) => {
+    // ---------- Navegação por tile ----------
+    document.addEventListener('click',(ev)=>{
       const tile = ev.target.closest('.tile');
       if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    // Estado de auth
+    // ---------- Login ----------
+    $('#btnEntrar').addEventListener('click', async () => {
+      const email = $('#email').value.trim();
+      const senha = $('#senha').value;
+      if (!email || !senha) { alert('Informe e-mail e senha.'); return; }
+      try {
+        await doLogin(email, senha);
+      } catch (e) {
+        alert('Falha ao entrar: ' + msgErro(e));
+      }
+    });
+    $('#linkEsqueci').addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      const email = prompt('Qual seu e-mail?');
+      if (!email) return;
+      try {
+        await doReset(email);
+        alert('Enviamos um e-mail com as instruções.');
+      } catch (e) {
+        alert('Não foi possível enviar: ' + msgErro(e));
+      }
+    });
+
+    // ---------- Estado de autenticação ----------
     onUser(async (user) => {
       const scrLogin = $('#scrLogin');
       const scrDash  = $('#scrDash');
-      const grid     = $('#dashGrid');
-      const welcome  = $('#dashWelcome');
+      const gridApps = $('#gridApps');
       const btnOut   = $('#btnLogout');
       const fab      = $('#fabConfig');
+      const bemv     = $('#bemvindoTxt');
 
       if (!user) {
-        // mostra login
         scrLogin.classList.add('active');
         scrLogin.style.display = 'block';
         scrDash.style.display  = 'none';
@@ -116,50 +132,49 @@
         return;
       }
 
-      // nome bonito
-      const nick = (user.displayName || user.email?.split('@')[0] || 'Usuário')
-                    .replace(/(^|\s)\S/g, s => s.toUpperCase());
-      welcome.textContent = `BEM-VINDO, ${nick}`;
+      // Claims + nome
+      let role = 'geral';
+      try {
+        const token = await user.getIdTokenResult(true);
+        role = token?.claims?.role ?? 'geral';
+      } catch {}
+      const nomeRaw = user.displayName || (user.email?.split('@')[0] || 'Usuário');
+      const nomeFmt = nomeRaw.charAt(0).toUpperCase() + nomeRaw.slice(1);
+      bemv.textContent = `Bem-vindo, ${nomeFmt}`;
 
-      // monta grid
-      grid.innerHTML = '';
-      const mk = (href, svg, titulo) => {
-        const el = document.createElement('div');
-        el.className = 'tile';
-        el.dataset.href = href;
-        el.innerHTML = `
-          <div class="tile-icon">${svg}</div>
-          <div class="tile-title">${titulo}</div>`;
-        return el;
-      };
+      // Monta grid de apps (para /app/<slug>/)
+      const APPS = [
+        { slug: "pedidos",    name: "Pedidos",     icon: "icon-pedidos.svg" },
+        { slug: "relatorios", name: "Relatório",   icon: "icon-relatorios.svg" },
+        { slug: "estoque",    name: "Estoque",     icon: "icon-estoque.svg" },
+        { slug: "despesas",   name: "Despesas",    icon: "icon-despesas.svg" },
+        { slug: "crm",        name: "CRM",         icon: "icon-crm.svg" },
+        { slug: "dashboard",  name: "Dashboard",   icon: "icon-dashboard.svg" },
+      ];
+      gridApps.innerHTML = APPS.map(a=>`
+        <div class="tile" data-href="app/${a.slug}/">
+          <img class="tile-icon" src="assets/logo/${a.icon}" alt="${a.name}">
+          <div class="tile-title">${a.name}</div>
+        </div>
+      `).join("");
 
-      grid.append(
-        mk('app/pedidos/',    Icons.pedidos,    'Pedidos'),
-        mk('app/relatorios/', Icons.relatorios, 'Relatório'),
-        mk('app/estoque/',    Icons.estoque,    'Estoque'),
-        mk('app/despesas/',   Icons.despesas,   'Despesas'),
-        mk('app/crm/',        Icons.crm,        'CRM'),
-        mk('app/dashboard/',  Icons.dashboard,  'Dashboard'),
-      );
-
-      // exibe dashboard
-      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
-      scrDash.style.display = 'block';
-
-      // botão sair
+      // Botão sair (topo direito)
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB (apenas master)
-      try {
-        const token = await user.getIdTokenResult(true);
-        if ((token?.claims?.role || 'geral') === 'master'){
-          fab.style.display = 'flex';
-          fab.onclick = () => window.location.href = 'config.html';
-        } else {
-          fab.style.display = 'none'; fab.onclick = null;
-        }
-      } catch {}
+      // FAB Config (apenas master)
+      if (role === 'master'){
+        fab.style.display = 'flex';
+        fab.onclick = () => window.location.href = 'app/config/';
+      } else {
+        fab.style.display = 'none';
+        fab.onclick = null;
+      }
+
+      // Exibe dashboard
+      scrLogin.classList.remove('active');
+      scrLogin.style.display = 'none';
+      scrDash.style.display  = 'block';
     });
   </script>
 </body>
