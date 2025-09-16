@@ -42,9 +42,9 @@ body{ margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,
 
 .login-title{
   color:#fff;
-  text-align:left;
+  text-align:center;
   font-weight: 900;
-  font-size: clamp(32px, 7.2vw, 48px); /* ~25% menor que mock grande */
+  font-size: clamp(28px, 7.2vw, 42px); /* ~25% menor que mock grande */
   margin: 8px 0 4px;
   letter-spacing: .3px;
   text-shadow: 0 .5px 0 rgba(0,0,0,.08);
