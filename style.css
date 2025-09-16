@@ -1,108 +1,149 @@
 :root{
-  --brand:#1e7f46;
-  --brand-600:#16663a;
-  --ink:#0e1b12;
-  --line:#cfe7da;
-  --tile:#ffffff;
-  --shadow:0 12px 32px rgba(0,0,0,.10);
+  --brand: #1e7f46;
+  --brand-600:#1a703e;
+  --bg:#1e7f46;
+  --ink:#ffffff;
+  --line:#ffffff;
+  --muted:#e9f6ef;
+  --shadow: 0 18px 40px rgba(0,0,0,.25);
 }
 
-/* reset mínimo */
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0; font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif; color:var(--ink);}
+body{
+  margin:0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:var(--ink);
+  background: linear-gradient(180deg, #1e7f46 0%, #176b3b 100%);
+}
 
-/* ------- LOGIN ------- */
-.screen--login{
-  min-height:100svh;
-  background:linear-gradient(180deg,#1e7f46 0%, #1a703e 100%);
-  display:flex; align-items:center; justify-content:center;
-  padding:20px;
+/* ---------- LOGIN ---------- */
+.screen{display:none}
+.screen.active{display:block}
+.screen--login{min-height:100dvh; display:grid; place-items:center; padding:24px}
+
+.container--login{
+  width:min(92vw, 760px);
+  background: transparent;          /* sem cartão branco */
+  box-shadow:none;
+  padding: min(5vh,36px) 18px 24px;
+  border-radius: 24px;
 }
-.card{
-  width:min(720px,100%);
-  background:#fff; border-radius:22px; padding:28px;
-  box-shadow:var(--shadow);
+
+.login-logo img{
+  width: clamp(120px, 22vw, 220px);
+  height:auto;
+  display:block;
+  margin: 0 auto 8px;
 }
-.login-logo{ display:flex; justify-content:center; margin-bottom:14px; }
-.login-logo img{ width:140px; height:auto; }
 
 .login-title{
-  text-align:center; color:var(--brand);
-  font-size:clamp(28px,4.2vw,44px); margin:8px 0 18px;
-  font-weight:900; letter-spacing:.3px;
+  text-align:center;
+  font-weight: 900;
+  letter-spacing:.4px;
+  font-size: clamp(32px, 6.5vw, 64px);
+  margin: 6px 0 20px;
+  color:#fff;
 }
 
-label{ display:block; font-weight:800; margin:12px 0 6px; color:var(--brand); }
+label{
+  font-weight:800;
+  color:#fff;
+  display:block;
+  margin: 14px 0 8px;
+}
+
 input{
-  width:100%; padding:14px 16px;
-  background:#eaf3ef; border:1.5px solid #e5efe9; border-radius:14px;
-  font-size:16px; outline:none;
+  width:100%;
+  color:#fff;
+  background: rgba(255,255,255,.12);
+  border: 1.6px solid rgba(255,255,255,.45);
+  border-radius: 16px;
+  padding: 14px 16px;
+  outline: none;
 }
-input::placeholder{ color:#7aa892; opacity:.95; }
+input::placeholder{ color:#fff; opacity:.95 }
+
 .btn{
-  width:100%; margin-top:18px; padding:14px 18px; border-radius:16px;
-  font-weight:900; font-size:18px; cursor:pointer; border:0;
-  transition:.15s ease-in-out;
+  width:100%;
+  border:0;
+  border-radius:16px;
+  padding: 16px;
+  margin-top: 16px;
+  font-weight:900;
+  font-size: clamp(16px, 2.6vw, 20px);
+  cursor:pointer;
+  box-shadow: var(--shadow);
 }
-.btn--primary{ background:var(--brand); color:#fff; box-shadow:0 18px 40px rgba(20,86,52,.22);}
-.btn--primary:hover{ background:var(--brand-600); transform:translateY(-1px);}
+.btn--primary{ background: var(--brand-600); color:#fff; }
+.btn--primary:hover{ filter: brightness(1.05); }
 
-.muted{ text-align:center; margin-top:12px; }
-.muted .link{ color:#fff; font-weight:800; text-decoration:none; }
+.muted{ text-align:center; margin-top: 10px; }
+.link{ color:#fff; font-weight:700; text-decoration: underline; }
 
-/* ------- DASHBOARD ------- */
-#scrDash{ min-height:100svh; background:#fff; padding:18px 18px 96px; }
-
-.dash-header{
-  display:flex; align-items:center; justify-content:center;
-  margin:6px 0 18px;
+/* ---------- HEADER ---------- */
+.app-header{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  margin: 14px 0 8px;
 }
-.dash-header img{ height:68px; width:auto; }
-
-.logout{
-  position:fixed; top:14px; right:14px;
-  background:var(--brand); color:#fff; border:0; cursor:pointer;
-  padding:8px 14px; border-radius:999px; font-weight:900; font-size:14px;
-  box-shadow:0 8px 22px rgba(20,86,52,.22);
+.wordmark{
+  width: clamp(160px, 42vw, 420px);
+  height:auto;
+  display:block;
 }
 
-/* grade 2x3 que ocupa a viewport sem rolagem */
+/* ---------- DASH GRID ---------- */
 .grid{
-  display:grid; gap:18px;
-  grid-template-columns:repeat(2, 1fr);
-  /* altura total menos header e paddings ->  calc aproxima */
-  height:calc(100svh - 155px);
-  grid-auto-rows:1fr;
+  width:min(1100px, 92vw);
+  margin: 4px auto 24px;
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 .tile{
-  background:var(--tile);
-  border:3px solid var(--brand);
-  border-radius:22px;
+  background: transparent;
+  border: 3.5px solid var(--line);
+  border-radius: 26px;
+  min-height: clamp(104px, 22vh, 150px); /* cabe os 6 no viewport de celular */
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  gap:18px; padding:12px;
-  transition:.15s ease; cursor:pointer;
+  gap: 12px;
+  color:#fff;
 }
-.tile:hover{ transform:translateY(-2px); box-shadow:0 18px 44px rgba(10,64,39,.08); }
-.tile-icon svg{ width:58px; height:58px; stroke:var(--brand); }
-.tile-title{ font-weight:900; font-size:clamp(22px,2.8vw,30px); color:var(--brand); }
+.tile-icon svg{ width: 42px; height: 42px; stroke:#fff; }
+.tile-title{ font-weight:900; font-size: clamp(20px, 4.2vw, 32px); }
 
-/* FAB engrenagem */
+/* ---------- TOP RIGHT "Sair" ---------- */
+.logout{
+  position: fixed;
+  top: 14px; right: 14px;
+  background: var(--brand-600);
+  color:#fff; border:0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 900;
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+
+/* ---------- FAB CONFIG ---------- */
 .fab{
-  position:fixed; right:16px; bottom:16px;
-  width:72px; height:72px; border-radius:999px;
-  background:var(--brand); color:#fff;
-  display:none; align-items:center; justify-content:center;
-  box-shadow:0 18px 44px rgba(10,64,39,.25);
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 64px; height: 64px;
+  border: 0; border-radius: 999px;
+  background: var(--brand-600);
+  color:#fff;
+  display: none; align-items:center; justify-content:center;
+  box-shadow: var(--shadow);
 }
-.fab svg{ width:36px; height:36px; fill:#fff; stroke:none; }
+.fab svg{ width: 34px; height: 34px; fill: currentColor; stroke: none; }
 
-/* responsivo: telas estreitas */
-@media (max-width:520px){
-  .card{ padding:22px }
-  .dash-header img{ height:56px }
-  .tile-icon svg{ width:46px; height:46px }
-  .tile-title{ font-size:20px }
-  /* comprime o grid para manter 2x3 na viewport */
-  .grid{ height:calc(100svh - 140px); gap:14px }
+/* ---------- Responsividade pequena ---------- */
+@media (max-width: 390px){
+  .tile-icon svg{ width: 36px; height: 36px; }
+  .tile-title{ font-size: 18px; }
 }
