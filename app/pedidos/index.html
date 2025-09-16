@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>UNIKOR • Pedidos</title>
+  <link rel="stylesheet" href="../../style.css">
+  <style>
+    .mod-wrap{max-width:1000px;margin:0 auto;padding:18px}
+    .mod-top{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+    .mod-top img{width:40px;height:40px}
+    .mod-title{font-size:28px;font-weight:900;color:#1e7f46}
+    .back{margin-left:auto;border:2px solid #1e7f46;background:#fff;color:#1e7f46;padding:8px 14px;border-radius:12px;font-weight:800}
+    .card{border:2px solid #1e7f46;border-radius:18px;padding:16px}
+  </style>
+</head>
+<body>
+  <div class="mod-wrap">
+    <div class="mod-top">
+      <img src="../../assets/logo/icon-pedidos.svg" alt="Pedidos">
+      <div class="mod-title">Pedidos</div>
+      <button class="back" onclick="location.href='../../'">Voltar</button>
+    </div>
+    <div class="card">
+      Conteúdo de <b>Pedidos</b> vai aqui.
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth } from "../../js/guard.js";
+    requireAuth({ onReady(){ /* carregue dados aqui */ }});
+  </script>
+</body>
+</html>
