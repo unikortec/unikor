@@ -38,7 +38,7 @@ img{max-width:100%;display:block}
   margin-top:26px;
 }
 .login-logo img{
-  width:clamp(200px, 58vw, 320px);   /* ~75% maior que versão anterior */
+  width:clamp(220px, 64vw, 360px);   /* ~75% maior que versão anterior */
   height:auto;
   filter:drop-shadow(0 6px 16px rgba(0,0,0,.18));
 }
