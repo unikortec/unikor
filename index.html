@@ -14,18 +14,17 @@
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
 
-  <!-- CSS -->
+  <!-- CSS global -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- LOGIN -->
+  <!-- LOGIN (100% verde) -->
   <section id="scrLogin" class="screen screen--login active">
-    <div class="card">
+    <div class="container container--login">
       <div class="login-logo">
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
-
       <h1 class="login-title">Bem-vindo</h1>
 
       <label for="email">E-mail</label>
@@ -42,24 +41,26 @@
   </section>
 
   <!-- DASHBOARD -->
-  <section id="scrDash" style="display:none">
-    <div class="dash-header">
-      <!-- logo verde grande -->
-      <img src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
-    </div>
+  <section id="scrDash" class="screen" style="display:none">
+    <!-- header com logo central -->
+    <header class="app-header">
+      <img class="wordmark" src="assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+    </header>
 
+    <!-- grid 2x3 -->
+    <main id="dashContainer" class="grid"></main>
+
+    <!-- sair pequeno no topo direito -->
     <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
 
-    <div class="grid" id="dashGrid"></div>
-
-    <div id="fabConfig" class="fab" title="Configurações" style="display:none"></div>
+    <!-- engrenagem -->
+    <button id="fabConfig" class="fab" title="Configurações" style="display:none"></button>
   </section>
 
+  <!-- App -->
   <script type="module">
-    import { doLogin, doLogout, doReset, onUser, $ as $q } from "./js/auth.js";
     import { Icons } from "./js/icons.js";
-
-    const $ = (sel)=> document.querySelector(sel);
+    import { $, doLogin, doLogout, doReset, onUser } from "./js/auth.js";
 
     // Service Worker
     if ('serviceWorker' in navigator) {
@@ -67,16 +68,19 @@
         .catch(err => console.warn('SW:', err));
     }
 
-    // Login actions
-    $('#btnEntrar').addEventListener('click', async () => {
-      const email = $('#email').value.trim();
-      const senha = $('#senha').value;
+    // Helpers
+    const L = (sel)=>document.querySelector(sel);
+
+    // Ações do login
+    L('#btnEntrar').addEventListener('click', async () => {
+      const email = L('#email').value.trim();
+      const senha = L('#senha').value;
       if (!email || !senha) { alert('Informe e-mail e senha.'); return; }
       try { await doLogin(email, senha); }
       catch (e) { alert('Falha ao entrar: ' + (e?.message || e)); }
     });
 
-    $('#linkEsqueci').addEventListener('click', async (ev) => {
+    L('#linkEsqueci').addEventListener('click', async (ev) => {
       ev.preventDefault();
       const email = prompt('Qual seu e-mail?');
       if (!email) return;
@@ -90,58 +94,50 @@
       if (tile){ window.location.href = tile.dataset.href; }
     });
 
-    function buildGrid(){
-      const grid = $('#dashGrid');
-      grid.innerHTML = '';
-      const mk = (href, svg, titulo)=>{
-        const el = document.createElement('div');
-        el.className = 'tile'; el.dataset.href = href;
-        const icon = document.createElement('div'); icon.className="tile-icon"; icon.innerHTML = svg;
-        const label = document.createElement('div'); label.className="tile-title"; label.textContent = titulo;
-        el.append(icon, label);
-        return el;
-      };
-      grid.append(
-        mk('pedidos.html',    Icons.pedidos,    'Pedidos'),
-        mk('relatorios.html', Icons.relatorios, 'Relatório'),
-        mk('estoque.html',    Icons.estoque,    'Estoque'),
-        mk('despesas.html',   Icons.despesas,   'Despesas'),
-        mk('crm.html',        Icons.crm,        'CRM'),
-        mk('dashboard.html',  Icons.dashboard,  'Dashboard'),
-      );
-    }
-
     // Estado de autenticação
     onUser(async (user) => {
-      const scrLogin = $('#scrLogin');
-      const scrDash  = $('#scrDash');
-      const btnOut   = $('#btnLogout');
-      const fab      = $('#fabConfig');
+      const scrLogin = L('#scrLogin');
+      const scrDash  = L('#scrDash');
+      const grid     = L('#dashContainer');
+      const btnOut   = L('#btnLogout');
+      const fab      = L('#fabConfig');
 
       if (!user) {
-        // volta para login
-        scrLogin.style.display = 'flex';
+        // volta ao login
+        scrLogin.classList.add('active');
+        scrLogin.style.display = 'grid';
         scrDash.style.display  = 'none';
         btnOut.style.display   = 'none';
         fab.style.display      = 'none';
         return;
       }
 
-      // claims (papel)
-      let role = 'geral';
-      try {
-        const token = await user.getIdTokenResult(true);
-        role = token?.claims?.role ?? 'geral';
-      } catch {}
+      // monta os 6 tiles
+      grid.innerHTML = '';
+      const mk = (href, svg, titulo)=>{
+        const el = document.createElement('div');
+        el.className = 'tile'; el.dataset.href = href;
+        const icon = document.createElement('div'); icon.className='tile-icon'; icon.innerHTML = svg;
+        const label= document.createElement('div'); label.className='tile-title'; label.textContent = titulo;
+        el.append(icon,label); return el;
+      };
+      grid.append(
+        mk('pedidos.html',   Icons.pedidos,    'Pedidos'),
+        mk('relatorios.html',Icons.relatorios, 'Relatório'),
+        mk('estoque.html',   Icons.estoque,    'Estoque'),
+        mk('despesas.html',  Icons.despesas,   'Despesas'),
+        mk('crm.html',       Icons.crm,        'CRM'),
+        mk('dashboard.html', Icons.dashboard,  'Dashboard'),
+      );
 
-      buildGrid();
-
-      // botão sair (pequeno topo-direito)
+      // botão sair (topo-direito)
       btnOut.style.display = 'inline-flex';
       btnOut.onclick = () => doLogout();
 
-      // FAB engrenagem (somente master)
-      fab.innerHTML = Icons.gearFilled;   // usa o que já existe no seu icons.js
+      // FAB configurações (ícone correto)
+      fab.innerHTML = Icons.gearFilled;
+      const token = await user.getIdTokenResult(true);
+      const role  = token?.claims?.role ?? 'geral';
       if (role === 'master'){
         fab.style.display = 'flex';
         fab.onclick = () => window.location.href = 'config.html';
@@ -151,7 +147,7 @@
       }
 
       // mostra dashboard
-      scrLogin.style.display = 'none';
+      scrLogin.classList.remove('active'); scrLogin.style.display = 'none';
       scrDash.style.display  = 'block';
     });
   </script>
