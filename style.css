@@ -35,9 +35,9 @@ body{ margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,
   margin-top: 8px;
 }
 .login-logo img{
-  width: 240px;                 /* ~50% maior que antes */
+  width: clamp(220px, 48vw, 315px); /* 75% maior (~315px em telas grandes) */
   height: auto;
-  filter: brightness(0) invert(1);   /* deixa o svg branco sobre o verde */
+  filter: brightness(0) invert(1);  /* mantém branco sobre fundo verde */
 }
 
 .login-title{
