@@ -1,89 +1,165 @@
+/* --------- RESET BÁSICO --------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+
+/* Cores */
 :root{
   --brand:#1e7f46;
-  --brand-600:#186a3b;
+  --brand-600:#17693a;
+  --brand-700:#135830;
+  --white:#ffffff;
+  --ink:#123321;
+  --muted:#587466;
   --line:#cfe7da;
-  --ink:#0f1b16;
-  --muted:#475569;
-  --bg:#ffffff;
 }
 
-/* resets */
-*{box-sizing:border-box}
-html,body{height:100%}
-body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+/* --------- TELAS --------- */
+.screen{ display:none; min-height:100dvh; }
+.screen.active{ display:block; }
 
-.screen{display:none;min-height:100dvh}
-.screen.active{display:block}
-
-/* ---------- LOGIN ---------- */
-.screen--login{position:relative;overflow:hidden;color:#fff}
-.login-bg{
-  position:absolute;inset:0;
-  background:linear-gradient(160deg,#1e7f46 0%, #259a58 45%, #1b7b45 100%);
-  z-index:0;
+/* --------- LOGIN --------- */
+.screen--login{
+  /* gradiente verde */
+  background: linear-gradient(165deg, #2aa050 0%, #1e7f46 50%, #186c39 100%);
+  color: var(--white);
+  display: grid;
+  place-items: center;
+  padding: 24px;
 }
+
 .login-wrap{
-  position:relative;z-index:1;
-  max-width:480px;margin:0 auto;padding:24px 20px 32px;
+  width: 100%;
+  max-width: 440px;
 }
-.login-logo{display:block;margin:6vh auto 1.4vh; width:min(76vw, 290px)}
-.login-title{margin:0 0 16px; font-size: clamp(28px, 6.2vw, 46px); font-weight:900; text-align:left}
-.login-input{
-  width:100%;margin:10px 0;padding:14px 16px;border-radius:14px;border:0;
-  color:#0a0a0a;background:#e9f1ff;
-}
-.btn{display:block;width:100%;cursor:pointer;border-radius:14px;padding:14px 16px;font-weight:900}
-.btn--enter{
-  color:#fff;background:var(--brand-600);border:1.5px solid #fff;
-  box-shadow:0 10px 26px rgba(0,0,0,.22);
-}
-.login-forgot{display:block;margin-top:14px;text-align:center;color:#fff;text-decoration:none;font-weight:700}
-.login-forgot:hover{text-decoration:underline}
-.sr-only{position:absolute !important; height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}
 
-/* ---------- DASHBOARD ---------- */
+/* logo bem grande (≈ 75% maior que anterior) */
+.login-logo{
+  display: flex; justify-content: center; margin: 16px 0 6px;
+}
+.login-logo img{
+  width: clamp(160px, 65vw, 260px);
+  height: auto;
+  display:block;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,.18));
+}
+
+.login-title{
+  text-align: center;
+  margin: 0 0 18px;
+  font-size: clamp(28px, 6.6vw, 48px); /* 1/4 menor que a proposta inicial */
+  font-weight: 900;
+  letter-spacing: .4px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+.login-form{
+  display: grid; gap: 12px;
+}
+.login-form input{
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 0;
+  background: rgba(255,255,255,.12);
+  color: var(--white);
+  outline: 2px solid rgba(255,255,255,.22);
+  backdrop-filter: blur(2px);
+  font-size: 16px;
+}
+.login-form input::placeholder{ color: rgba(255,255,255,.92); }
+
+/* botão entrar: verde mais escuro + contorno branco fino */
+.btn{
+  appearance: none; border: 0; cursor: pointer;
+  padding: 14px 18px; border-radius: 18px;
+  font-weight: 900; font-size: 18px;
+}
+.btn--primary{
+  background: var(--brand-700);
+  color: var(--white);
+  border: 2px solid rgba(255,255,255,.9);       /* contorno branco fino */
+  box-shadow: 0 14px 26px rgba(0,0,0,.22), 0 1px 0 rgba(255,255,255,.15) inset;
+}
+.btn--primary:active{ transform: translateY(1px); }
+
+.forgot-link{
+  text-align:center; display:block; margin-top:4px;
+  color: var(--white); text-decoration: none; font-weight: 700;
+}
+.forgot-link:hover{ text-decoration: underline; }
+
+/* --------- DASHBOARD --------- */
+.screen--dash{
+  background: #fff;
+  color: #14402b;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
 .dash-header{
-  display:flex;align-items:flex-start;justify-content:center;position:relative;
-  padding:18px 18px 10px;
+  position: relative;
+  padding: 24px 18px 6px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
 }
-.dash-logo{
-  /* 75% maior: aumentei base e limitei por viewport */
-  width:min(76vw, 420px); height:auto; display:block;
-  margin:2px auto 0;
+.brand{ display:flex; align-items:center; }
+.brand-logo{ width: clamp(180px, 42vw, 320px); height:auto; display:block; }
+
+.welcome{ align-self: end; }
+.welcome-title{
+  font-size: clamp(16px, 3.8vw, 22px);
+  font-weight: 800;
+  color: #1c6a3b;
 }
+
+/* botão sair pequeno topo direito */
 .logout{
-  position:absolute;right:14px;top:12px;border:0;border-radius:999px;
-  background:var(--brand);color:#fff;padding:10px 18px;font-weight:800;
-  box-shadow:0 8px 22px rgba(0,0,0,.18);cursor:pointer
-}
-.dash-welcome{
-  max-width:920px;margin:0 auto 12px;padding:0 18px;
-  font-weight:900; color:var(--brand); font-size:clamp(18px,4.3vw,26px);
-  text-transform:uppercase; letter-spacing:.5px;
+  justify-self: end;
+  background: #1e7f46; color:#fff; border:0;
+  padding: 10px 16px; border-radius: 999px; font-weight:800;
+  box-shadow: 0 10px 22px rgba(30,127,70,.22);
 }
 
-/* grid centralizado e simétrico */
+/* área principal */
+.dash-main{ padding: 8px 14px 28px; }
+
+/* grid centralizado com margens iguais */
 .grid{
-  max-width:980px; margin:8px auto 70px; padding:0 18px;
-  display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px;
+  margin: 10px auto 40px;
+  width: min(1024px, 92%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 20px;
 }
-@media (min-width: 960px){
-  .grid{ grid-template-columns:repeat(3, minmax(0, 1fr)); }
+@media (max-width: 700px){
+  .grid{ grid-template-columns: 1fr; width: min(560px, 90%); }
 }
 
+/* tile */
 .tile{
-  background:#fff;border:3px solid var(--brand); border-radius:22px;
-  padding:26px 10px; display:flex; flex-direction:column; align-items:center; gap:12px;
-  cursor:pointer; transition:transform .05s ease-out, box-shadow .12s ease-out;
+  border: 2px solid #1e7f46;
+  border-radius: 28px;
+  padding: 28px 20px;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform .05s ease-out, box-shadow .12s ease-out;
+  background: #fff;
 }
-.tile:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(23,68,46,.10) }
-.tile-icon svg{ width:56px; height:56px; stroke:var(--brand); fill:none; stroke-width:2.2 }
-.tile-title{ font-weight:900; font-size:clamp(18px, 4.2vw, 28px); color:var(--brand) }
+.tile:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(23,68,46,.08); }
+.tile-icon{ width: 48px; height: 48px; display:block; }
+.tile-title{ font-weight:900; font-size: clamp(18px, 4.6vw, 28px); color:#1e7f46; }
 
-/* FAB */
+/* FAB engrenagem (ícone branco) */
 .fab{
-  position:fixed; right:18px; bottom:18px; width:66px; height:66px; border-radius:999px;
-  display:flex; align-items:center; justify-content:center;
-  background:var(--brand); color:#fff; box-shadow:0 18px 36px rgba(0,0,0,.2);
-  border:0; cursor:pointer;
+  position: fixed; right: 18px; bottom: 18px;
+  width: 66px; height: 66px; border-radius: 999px;
+  background: #1e7f46; border:0;
+  display: none; align-items:center; justify-content: center;
+  box-shadow: 0 20px 36px rgba(23,68,46,.25);
 }
+.fab img{ width: 28px; height: 28px; display:block; filter: drop-shadow(0 1px 0 rgba(0,0,0,.2)); }
