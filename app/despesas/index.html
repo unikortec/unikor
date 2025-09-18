@@ -1,60 +1,234 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Despesas • Unikor</title>
-  <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#1e7f46">
-  <link rel="icon" href="/assets/logo/favicon.ico">
-  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
-  <link rel="stylesheet" href="css/style.css">
-  <!-- Leitor QR (CDN leve) -->
-  <script src="https://unpkg.com/html5-qrcode" defer></script>
-</head>
-<body>
-  <header class="topbar">
-    <img src="/assets/logo/unikor-logo.png" class="logo" alt="UNIKOR">
-    <h1>Despesas</h1>
-  </header>
+/**
+ * Cloud Functions – ingestão de despesas por NFC-e (QR) e NFe 55 (XML).
+ * - Salva documento em users/{uid}/expenses/{docId}
+ * - (Opcional) Envia HTML/XML para o Google Drive e guarda links.
+ *
+ * Pré-requisitos:
+ * - Ativar Drive API no projeto
+ * - Compartilhar a pasta alvo no Drive com a Service Account
+ * - Definir env var: DRIVE_PARENT=<folderId>  (opcional; se vazio, não sobe arquivo)
+ *   firebase functions:config:set app.drive_parent="1AbC..."   (ou usar process.env se em 2nd gen)
+ */
 
-  <main class="wrap">
-    <section class="card">
-      <h2>Nova despesa</h2>
+const functions = require("firebase-functions");
+const admin     = require("firebase-admin");
+const fetch     = require("node-fetch");
+const cheerio   = require("cheerio");
+const { parseStringPromise } = require("xml2js");
+const { google } = require("googleapis");
 
-      <label class="row">
-        <span>Categoria</span>
-        <select id="categoria">
-          <option>ALIMENTAÇÃO</option>
-          <option>COMBUSTÍVEL</option>
-          <option>MERCADORIA</option>
-          <option>SERVIÇOS</option>
-          <option>OUTROS</option>
-        </select>
-      </label>
+admin.initializeApp();
 
-      <div class="grid2">
-        <button id="btnScan" class="btn">Ler QR NFC-e</button>
-        <label class="file lbl btn">
-          XML NFe 55
-          <input id="xml55" type="file" accept=".xml" hidden>
-        </label>
-      </div>
+const db = admin.firestore();
+const DRIVE_PARENT = process.env.DRIVE_PARENT || (functions.config().app?.drive_parent || "");
 
-      <div id="scanArea" class="scan-area" hidden>
-        <div id="qrReader" class="qr"></div>
-        <button id="btnFechar" class="btn outline">Fechar</button>
-      </div>
+// util
+const yyyymm = (d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 
-      <div id="preview" class="preview"></div>
+/* ===== Google Drive (opcional) ===== */
+function streamFromBuffer(buf){
+  const { Readable } = require("stream");
+  const s = new Readable();
+  s.push(buf);
+  s.push(null);
+  return s;
+}
 
-      <div class="actions">
-        <button id="btnSalvar" class="btn primary">Salvar</button>
-      </div>
-    </section>
-  </main>
+async function driveUpload(name, mime, dataBuffer){
+  if (!DRIVE_PARENT) return null; // desligado se não configurado
+  const auth = await google.auth.getClient({ scopes: ["https://www.googleapis.com/auth/drive.file"] });
+  const drive = google.drive({ version: "v3", auth });
 
-  <!-- Firebase App só para pegar UID (usa o portal/js/firebase.js se já existir) -->
-  <script type="module" src="js/app.js"></script>
-</body>
-</html>
+  const res = await drive.files.create({
+    requestBody: { name, parents: [DRIVE_PARENT] },
+    media: { mimeType: mime, body: streamFromBuffer(dataBuffer) },
+    fields: "id, webViewLink, webContentLink"
+  });
+  return res.data;
+}
+
+/* ===== Parse NFC-e (HTML) ===== */
+async function fetchNfceHtml(qrUrl){
+  const r = await fetch(qrUrl, { redirect: "follow" });
+  if (!r.ok) throw new Error(`NFC-e fetch ${r.status}`);
+  return await r.text();
+}
+
+function parseNfceFromHtml(html, accessKey, category, uid, userName){
+  const $ = cheerio.load(html);
+  // Páginas variam entre estados; os seletores abaixo cobrem SVRS e variações comuns.
+  // Fallbacks simples se algo não for encontrado.
+  const emitter = {
+    name: ($("td:contains('Emitente'), td:contains('Razão Social')").next().text().trim()) ||
+          ($("td:contains('Emitente')").parent().next().find("td").first().text().trim()) ||
+          null,
+    cnpj: ($("td:contains('CNPJ')").next().text().replace(/\D/g,'').slice(0,14)) || null,
+    address: ($("td:contains('Endereço')").next().text().trim()) || null
+  };
+
+  // data/hora
+  const dateStr = ($("td:contains('Emissão'), td:contains('Data de Emissão')").next().text().trim()) || "";
+  const date = dateStr ? new Date(dateStr) : new Date();
+
+  // pagamento (não padronizado; tentativas)
+  let pgMethod = ($("td:contains('Forma de Pagamento')").next().text().trim()) || null;
+  const totalStr = ($("td:contains('Valor a Pagar'), td:contains('Valor Total')").next().text().trim()) || "";
+  const amount = parseFloat((totalStr.match(/[\d.,]+/)||["0"]).shift().replace(/\./g,'').replace(',','.')) || 0;
+
+  // itens — muitas UIs têm tabelas com "Descrição / Qtde / UN / V. Unit / V. Total"
+  const items = [];
+  $("table tr").each((_, tr)=>{
+    const tds = $(tr).find("td");
+    if (tds.length >= 4) {
+      const desc = $(tds[0]).text().trim();
+      const qty  = parseFloat($(tds[1]).text().replace(',','.')) || null;
+      const unit = ($(tds[2]).text().trim() || null);
+      const uval = parseFloat($(tds[3]).text().replace(/\./g,'').replace(',','.')) || null;
+      // tenta pegar total
+      const tval = tds[4] ? parseFloat($(tds[4]).text().replace(/\./g,'').replace(',','.')) : null;
+      // heurística: aceita linhas com descrição e pelo menos qty ou price
+      if (desc && (qty || uval || tval)) {
+        const lineTotal = tval ?? (qty && uval ? qty*uval : null);
+        items.push({
+          description: desc, qty, unit, unitPrice: uval ?? null,
+          lineTotal: lineTotal ?? null
+        });
+      }
+    }
+  });
+
+  const doc = {
+    type: "NFCe",
+    model: 65,
+    category,
+    accessKey,
+    emitter,
+    payment: { method: pgMethod, amount },
+    date: admin.firestore.Timestamp.fromDate(date),
+    totals: { items: items.length, amount },
+    items,
+    sources: { qrUrl: true },
+    status: "captured",
+    created_by: uid,
+    created_by_name: userName || null,
+    created_at: admin.firestore.FieldValue.serverTimestamp()
+  };
+  return doc;
+}
+
+/* ===== Parse NFe 55 (XML) ===== */
+async function parseNfe55Xml(xml, category, uid, userName, accessKeyGuess){
+  const j = await parseStringPromise(xml, { explicitArray:false, ignoreAttrs:false });
+  const nfe = j?.nfeProc?.NFe || j?.NFe;
+  const inf = nfe?.infNFe;
+  const ide = inf?.ide || {};
+  const emit= inf?.emit || {};
+  const det = Array.isArray(inf?.det) ? inf.det : (inf?.det ? [inf.det] : []);
+
+  const accessKey = accessKeyGuess || (inf?.["$"]?.Id || "").replace(/^NFe/,'');
+  const date = new Date(ide?.dhEmi || ide?.dEmi || Date.now());
+
+  const items = det.map(d=>{
+    const prod = d?.prod || {};
+    const imposto = d?.imposto || {};
+    const qCom = parseFloat(prod.qCom?.replace(',','.')) || null;
+    const vUn  = parseFloat((prod.vUnCom||"").replace(',','.')) || null;
+    const vTot = parseFloat((prod.vProd || "").replace(',','.')) || (qCom && vUn ? qCom*vUn : null);
+    return {
+      description: prod.xProd || null,
+      qty: qCom,
+      unit: prod.uCom || null,
+      unitPrice: vUn,
+      lineTotal: vTot
+    };
+  });
+
+  const amount = items.reduce((s,i)=>s+(i.lineTotal||0),0);
+
+  const doc = {
+    type: "NFe",
+    model: 55,
+    category,
+    accessKey,
+    emitter: {
+      name: emit.xNome || null,
+      cnpj: (emit.CNPJ || "").replace(/\D/g,'') || null,
+      address: [
+        emit.enderEmit?.xLgr, emit.enderEmit?.nro, emit.enderEmit?.xBairro,
+        emit.enderEmit?.xMun, emit.enderEmit?.UF
+      ].filter(Boolean).join(", ") || null
+    },
+    payment: { method: null, amount },
+    date: admin.firestore.Timestamp.fromDate(date),
+    totals: { items: items.length, amount },
+    items,
+    sources: { xml: true },
+    status: "captured",
+    created_by: uid,
+    created_by_name: userName || null,
+    created_at: admin.firestore.FieldValue.serverTimestamp()
+  };
+  return doc;
+}
+
+/* ====== HTTP FUNCTIONS ====== */
+exports.ingestNfceByQr = functions
+  .region("southamerica-east1")
+  .https.onRequest(async (req, res)=>{
+    try{
+      if (req.method !== "POST") return res.status(405).send("POST only");
+      const { uid, userName, category, qrUrl, accessKey } = req.body || {};
+      if (!uid || !qrUrl || !accessKey) return res.status(400).json({ error: "uid/qrUrl/accessKey required" });
+
+      const html = await fetchNfceHtml(qrUrl);
+      const doc  = parseNfceFromHtml(html, accessKey, (category||"GERAL").toUpperCase(), uid, userName);
+
+      // (opcional) upload do HTML no Drive
+      try{
+        const up = await driveUpload(`${accessKey}.html`, "text/html", Buffer.from(html,"utf8"));
+        if (up?.id) {
+          doc.sources.driveFileId  = up.id;
+          doc.sources.driveWebView = up.webViewLink;
+        }
+      }catch(e){ console.warn("Drive upload NFC-e falhou:", e.message); }
+
+      const ref = db.collection("users").doc(uid).collection("expenses").doc(accessKey);
+      await ref.set(doc, { merge: true });
+
+      return res.json({ ok: true, docId: ref.id, doc });
+    }catch(e){
+      console.error(e);
+      return res.status(500).json({ error: e.message||String(e) });
+    }
+  });
+
+exports.ingestNfe55Xml = functions
+  .region("southamerica-east1")
+  .https.onRequest(async (req, res)=>{
+    try{
+      if (req.method !== "POST") return res.status(405).send("POST only");
+      const { uid, userName, category, accessKey, xmlBase64 } = req.body || {};
+      if (!uid || !xmlBase64) return res.status(400).json({ error: "uid/xmlBase64 required" });
+
+      const xml = Buffer.from(xmlBase64, "base64").toString("utf8");
+      const doc = await parseNfe55Xml(xml, (category||"GERAL").toUpperCase(), uid, userName, accessKey);
+
+      // (opcional) upload do XML no Drive
+      try{
+        const up = await driveUpload(`${doc.accessKey||"nfe"}.xml`, "application/xml", Buffer.from(xml,"utf8"));
+        if (up?.id) {
+          doc.sources.driveFileId  = up.id;
+          doc.sources.driveWebView = up.webViewLink;
+        }
+      }catch(e){ console.warn("Drive upload NFe55 falhou:", e.message); }
+
+      const id = doc.accessKey || db.collection("_tmp").doc().id;
+      const ref = db.collection("users").doc(uid).collection("expenses").doc(id);
+      await ref.set(doc, { merge: true });
+
+      return res.json({ ok: true, docId: ref.id, doc });
+    }catch(e){
+      console.error(e);
+      return res.status(500).json({ error: e.message||String(e) });
+    }
+  });
