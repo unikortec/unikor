@@ -1,140 +1,146 @@
-// ENTRADA única: app.js
-import { parseNFCe, shortKey, fileToBase64 } from './nfce.js';
+// usa o app/auth central do portal (NÃO reinicializa Firebase)
+import { app, auth } from "../../js/firebase.js";
+import {
+  onAuthStateChanged,
+  signInAnonymously
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
-// ---- Firebase Auth (usa a instância do portal se existir) ----
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+/* ====== CONFIG ====== */
+// endpoint das Cloud Functions (pode sobrescrever em window.FUNCTIONS_BASE)
+const FUNCTIONS_BASE =
+  window.FUNCTIONS_BASE || "https://southamerica-east1-unikorapp.cloudfunctions.net";
 
-// Se você já tem window.UNIKOR_APP (portal/js/firebase.js), reaproveite:
-const CONFIG = window.UNIKOR_FIREBASE_CONFIG || {
-  apiKey: "AIzaSyC12s4PvUWtNxOlShPc7sXlzq4XWqlVo2w",
-  authDomain: "unikorapp.firebaseapp.com",
-  projectId: "unikorapp",
-  storageBucket: "unikorapp.appspot.com",
-  messagingSenderId: "329806123621",
-  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c"
-};
-const app = initializeApp(CONFIG);
-const auth = getAuth(app);
-
-// ---- DOM helpers ----
-const $ = (s)=>document.querySelector(s);
-const categoriaSel = $('#categoria');
-const btnScan = $('#btnScan');
-const btnFechar = $('#btnFechar');
-const btnSalvar = $('#btnSalvar');
-const xmlInput = $('#xml55');
-const scanArea = $('#scanArea');
-const preview = $('#preview');
-
+/* ====== STATE DE LOGIN ====== */
 let UID = null;
-let draft = null;     // último documento retornado pela function
-let lastFnEndpoint = {
-  nfce: 'https://southamerica-east1-unikorapp.cloudfunctions.net/ingestNfceByQr',
-  nfe55:'https://southamerica-east1-unikorapp.cloudfunctions.net/ingestNfe55Xml'
-};
+let UNAME = null;
 
-// ---- Auth flow ----
 onAuthStateChanged(auth, async (user)=>{
-  if (user){ UID = user.uid; return; }
+  if (user){
+    UID   = user.uid;
+    UNAME = user.displayName || user.email || "Usuário";
+    return;
+  }
+  // fallback anônimo (só para dev; em prod vamos exigir login)
   await signInAnonymously(auth);
 });
 
-// ---- QR scanner (html5-qrcode) ----
-let scanner = null;
-btnScan.onclick = async ()=>{
-  scanArea.hidden = false;
-  if (!scanner){
-    // @ts-ignore
-    scanner = new Html5Qrcode("qrReader");
-  }
+/* ====== HELPERS ====== */
+// extrai a chave de acesso da URL de QRCode de NFC-e (modelo 65)
+function extractAccessKeyFromQrUrl(url){
   try{
-    await scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 260 },
-      async (decodedText)=>{
-        await handleQr(decodedText);
-        await stopScanner();
-      }
-    );
+    const u = new URL(url);
+    // padrão SVRS/SEFAZ: p=<chave>|<...>
+    const p = u.searchParams.get("p");
+    if (p && /^\d{44}/.test(p)) return p.slice(0,44);
+    // fallback: tenta varrer
+    const m = decodeURIComponent(u.search).match(/(\d{44})/);
+    return m ? m[1] : "";
+  }catch{ return ""; }
+}
+
+// “slug” curto da chave (final)
+function shortKey(ch){ return ch ? ch.slice(-6) : ""; }
+
+// converte File para base64
+function fileToBase64(file){
+  return new Promise((res, rej)=>{
+    const r = new FileReader();
+    r.onload = ()=>res(String(r.result).split(",")[1] || "");
+    r.onerror= rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// UI helpers
+const $ = (s)=>document.querySelector(s);
+
+/* ====== BIND DA TELA ====== */
+// Inputs esperados na tela:
+//  #inpQr   (texto ou hidden)  – colar/ler URL do QR da NFC-e
+//  #inpCat  (categoria)        – ex.: "ALIMENTAÇÃO"
+//  #btnQrIngest               – processa NFC-e (URL)
+//  #inpXml (file)             – upload XML NFe 55
+//  #btnXmlIngest              – processa NFe 55
+//  Campos informativos: #outMsg
+
+const out = (msg)=>{
+  const el = $("#outMsg");
+  if (el) el.textContent = msg;
+  console.log(msg);
+};
+
+/* ====== NFC-e (modelo 65) via QR URL ====== */
+$("#btnQrIngest")?.addEventListener("click", async ()=>{
+  try{
+    const qrUrl   = ($("#inpQr")?.value || "").trim();
+    const category= ($("#inpCat")?.value || "").trim().toUpperCase() || "GERAL";
+    if (!qrUrl) { alert("Cole a URL do QRCode (NFC-e)."); return; }
+    if (!UID)   { alert("Aguarde autenticação..."); return; }
+
+    const accessKey = extractAccessKeyFromQrUrl(qrUrl);
+    if (!/^\d{44}$/.test(accessKey)) {
+      alert("Não consegui extrair a chave de acesso (44 dígitos) desta URL.");
+      return;
+    }
+
+    out("Processando NFC-e…");
+
+    const resp = await fetch(`${FUNCTIONS_BASE}/ingestNfceByQr`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({
+        uid: UID,
+        userName: UNAME,
+        category,
+        qrUrl,
+        accessKey
+      })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    out(`NFC-e salva: ${data.docId} (R$ ${data?.doc?.totals?.amount ?? "0"})`);
+    alert(`Salvo: ${shortKey(accessKey)} em ${category}`);
   }catch(e){
-    alert('Não foi possível iniciar a câmera.');
+    console.error(e);
+    alert("Falha ao processar NFC-e.");
+    out("Erro NFC-e.");
   }
-};
-btnFechar.onclick = stopScanner;
-async function stopScanner(){
-  if (scanner){ try{ await scanner.stop(); }catch{} }
-  scanArea.hidden = true;
-}
+});
 
-// ---- XML 55 upload ----
-xmlInput.onchange = async (ev)=>{
-  const file = ev.target.files?.[0]; if (!file) return;
-  if (!UID){ alert('Aguarde autenticação.'); return; }
-  const category = categoriaSel.value || 'OUTROS';
-  const b64 = await fileToBase64(file);
+/* ====== NFe (modelo 55) via XML ====== */
+$("#btnXmlIngest")?.addEventListener("click", async ()=>{
+  try{
+    const f = $("#inpXml")?.files?.[0];
+    const category= ($("#inpCat")?.value || "").trim().toUpperCase() || "GERAL";
+    if (!f)   { alert("Selecione o XML da NFe (modelo 55)."); return; }
+    if (!UID) { alert("Aguarde autenticação..."); return; }
 
-  const accessKeyGuess = (file.name.match(/\d{44}/)?.[0]) || prompt('Chave de acesso (44 dígitos):') || '';
-  if (accessKeyGuess.length !== 44){ alert('Chave inválida.'); return; }
+    // tentativa simples de achar chave na primeira leitura do arquivo (nome/conteúdo)
+    let accessKeyGuess = (f.name.match(/\d{44}/) || [])[0] || "";
+    const xmlBase64 = await fileToBase64(f);
 
-  const r = await fetch(lastFnEndpoint.nfe55, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      uid: UID,
-      category,
-      accessKey: accessKeyGuess,
-      xmlBase64: b64
-    })
-  });
-  if(!r.ok){ alert('Falha ao importar XML 55'); return; }
-  const js = await r.json();
-  draft = js.doc;
-  showPreview(js.doc);
-};
+    out("Processando NFe 55…");
 
-// ---- QR handler ----
-async function handleQr(text){
-  const parsed = parseNFCe(text);
-  if (!parsed){ alert('QR NFC-e inválido.'); return; }
-  if (!UID){ alert('Aguarde autenticação.'); return; }
-  const category = categoriaSel.value || 'OUTROS';
+    const resp = await fetch(`${FUNCTIONS_BASE}/ingestNfe55Xml`, {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({
+        uid: UID,
+        userName: UNAME,
+        category,
+        accessKey: accessKeyGuess || null,
+        xmlBase64
+      })
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
 
-  const r = await fetch(lastFnEndpoint.nfce, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      uid: UID,
-      category,
-      qrUrl: parsed.raw,
-      accessKey: parsed.accessKey
-    })
-  });
-  if(!r.ok){ alert('Falha ao importar NFC-e'); return; }
-  const js = await r.json();
-  draft = js.doc;
-  showPreview(js.doc);
-}
-
-function showPreview(doc){
-  const lines = [];
-  lines.push(`Modelo: ${doc.model}  •  Chave: ${shortKey(doc.accessKey)}`);
-  if (doc.emitter?.name) lines.push(`Emitente: ${doc.emitter.name}`);
-  if (doc.emitter?.cnpj) lines.push(`CNPJ: ${doc.emitter.cnpj}`);
-  if (doc.date) lines.push(`Data: ${doc.date}`);
-  if (doc.payment?.amount) lines.push(`Total: R$ ${Number(doc.payment.amount).toFixed(2)}`);
-  lines.push('');
-  lines.push('Itens:');
-  for(const it of (doc.items||[])){
-    lines.push(`- ${it.description}  •  ${it.qty} ${it.unit} × ${it.unitPrice?.toFixed?.(2) ?? it.unitPrice} = ${Number(it.lineTotal||0).toFixed(2)}`);
+    out(`NFe-55 salva: ${data.docId} (R$ ${data?.doc?.totals?.amount ?? "0"})`);
+    alert(`Salvo: ${shortKey(accessKeyGuess || data?.doc?.accessKey)} em ${category}`);
+  }catch(e){
+    console.error(e);
+    alert("Falha ao processar NFe 55.");
+    out("Erro NFe 55.");
   }
-  preview.textContent = lines.join('\n');
-}
-
-// ---- Salvar/ajustar (update do doc criado pela function) ----
-// Aqui, como a function já grava, o "Salvar" fica para ajustes futuros.
-// Você pode estender para editar/atualizar campos do draft no Firestore via REST/SDK.
-btnSalvar.onclick = ()=>{
-  if (!draft){ alert('Importe uma NFC-e (QR) ou XML 55 primeiro.'); return; }
-  alert('Dados importados e salvos. Se quiser, implemento a tela de edição para atualizar o Firestore.');
-};
+});
