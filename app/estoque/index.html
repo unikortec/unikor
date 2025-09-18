@@ -3,26 +3,29 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-
+  <base href="./">
   <title>Estoque V1.0.1</title>
 
   <!-- PWA -->
-  <link rel="manifest" href="/app/estoque/manifest.json">
-  <meta name="theme-color" content="#1e7f46"/>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e7f46">
+  <meta name="apple-mobile-web-app-title" content="Estoque">
 
-  <!-- Ícones/Logo -->
-  <link rel="icon" type="image/svg+xml" href="/assets/logo/unikor-logo.svg">
-  <link rel="icon" type="image/png" href="/assets/logo/unikor-logo.png">
+  <!-- Ícones globais do portal (não duplicar dentro do app) -->
+  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/logo/android-chrome-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/assets/logo/android-chrome-512x512.png">
+  <link rel="icon" href="/assets/logo/favicon.ico">
 
-  <!-- Estilos -->
-  <link rel="stylesheet" href="/app/estoque/css/style.css">
+  <!-- Estilos do app -->
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <header>
-    <h1>Estoque V1.0.1</h1>
+  <header class="hdr">
+    <h1 class="ttl">Estoque V1.0.1</h1>
     <div class="spacer"></div>
     <div class="toolbar">
-      <div class="search">🔎 <input id="busca" type="text" placeholder="Pesquisar produto..." /></div>
+      <div class="search">🔎 <input id="busca" type="text" placeholder="Pesquisar produto..."/></div>
       <button class="btn" id="btnLimpar">Limpar</button>
       <button class="btn" id="btnExportar">Gerar PDF</button>
       <button class="btn" id="btnPosicao">Posição (R$)</button>
@@ -31,20 +34,13 @@
     </div>
   </header>
 
-  <div class="wrap" id="app"></div>
+  <main class="wrap" id="app"></main>
 
-  <!-- Libs -->
+  <!-- libs -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- App (módulo raiz) -->
-  <script type="module" src="/app/estoque/js/main.js"></script>
-
-  <!-- SW com escopo do módulo (fallback se main ainda não registrou) -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/app/estoque/sw.js', { scope: '/app/estoque/' }).catch(()=>{});
-    }
-  </script>
+  <!-- App (ESM) -->
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
