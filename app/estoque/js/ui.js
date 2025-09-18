@@ -1,26 +1,53 @@
-import { $, fmt3 } from "./constants.js";
-import { FAMILIAS, PADROES, ensureCatalogEntry, ensureSessaoEntry, getSessao, setSessaoKg, editBothKg, clearItem, deleteIfCustom, resumoTexto } from "./catalog.js";
+import { $, fmt3, round3, dtLabel } from "./constants.js";
+import {
+  FAMILIAS, PADROES,
+  ensureCatalogEntry, ensureSessaoEntry,
+  getSessao, setSessaoKg, editBothKg, clearItem,
+  deleteIfCustom, resumoTexto
+} from "./catalog.js";
 import { gerarModeloConfigXLSX, importarConfigXLS } from "./prices.js";
-import { catalogo, ultimo, clearSession } from "./store.js";
+import { catalogo, ultimo, setUltimo } from "./store.js";
 import { fbFetchAllInventory } from "./firebase.js";
 
 let termoBusca = '';
 
+/* ===== Boot inicial: carrega "Última:" do Firestore se não houver local ===== */
 export async function bootFromFirestoreIfNeeded(){
   try{
     if(!ultimo){
       const docs = await fbFetchAllInventory();
-      // nota: apenas para popular "ultimo" quando inexistente; mantive simplificado (igual ao seu fluxo)
-      // … se quiser, posso reimplementar aqui depois.
+      const snapData = {};
+      for(const d of docs){
+        const fam = String(d.family||"").toUpperCase();
+        const prod= String(d.product||"").toUpperCase();
+        if(!fam || !prod) continue;
+        ensureCatalogEntry(fam, prod);
+        const rk = round3(+d.resfriado_kg||0);
+        const ck = round3(+d.congelado_kg||0);
+        if(rk>0 || ck>0){
+          (snapData[fam] ??= {})[prod] = { RESFRIADO_KG:rk, CONGELADO_KG:ck, SUM_KG:round3(rk+ck) };
+        }
+      }
+      if(Object.keys(snapData).length){
+        setUltimo({ dateISO:new Date().toISOString(), dateLabel:dtLabel(new Date()), data:snapData });
+      }
     }
   }catch(e){ console.warn('Falha boot Firestore:', e); }
 }
 
+/* ===== Montagem dos listeners de topo ===== */
 export function mountUI(){
-  $('#busca').addEventListener('input', (e)=>{ termoBusca = (e.target.value||'').trim().toUpperCase(); render(); });
+  $('#busca').addEventListener('input', (e)=>{
+    termoBusca = (e.target.value||'').trim().toUpperCase();
+    render();
+  });
 
-  // upload/modelo
-  const inputUpload=document.createElement('input'); inputUpload.type='file'; inputUpload.accept='.xlsx,.xls'; inputUpload.style.display='none'; document.body.appendChild(inputUpload);
+  // Upload/Modelo preços + mínimos
+  const inputUpload=document.createElement('input');
+  inputUpload.type='file'; inputUpload.accept='.xlsx,.xls';
+  inputUpload.style.display='none';
+  document.body.appendChild(inputUpload);
+
   $('#btnPrecoUpload').onclick=async ()=>{
     const querModelo = confirm('OK para baixar o modelo de preços e mínimos.\nCancelar para enviar uma planilha.');
     if(querModelo){
@@ -41,6 +68,7 @@ export function mountUI(){
   };
 }
 
+/* ===== Render principal ===== */
 export function render(){
   const app=$('#app'); app.innerHTML='';
   FAMILIAS.forEach((fam,idx)=>{
@@ -49,7 +77,9 @@ export function render(){
     const title=document.createElement('div'); title.className='fam-title'; title.textContent=fam.nome;
 
     const itensFamilia = Object.keys(catalogo[fam.nome]||{});
-    const preenchidos = itensFamilia.filter(p=>{ const v = getSessao(fam.nome,p); return (v.RESFRIADO_KG>0 || v.CONGELADO_KG>0); }).length;
+    const preenchidos = itensFamilia
+      .filter(p=>{ const v = getSessao(fam.nome,p); return (v.RESFRIADO_KG>0 || v.CONGELADO_KG>0); }).length;
+
     const meta=document.createElement('div'); meta.className='fam-meta';
     meta.textContent = `${preenchidos}/${itensFamilia.length} item(ns) preenchidos`;
 
@@ -66,6 +96,7 @@ export function render(){
   });
 }
 
+/* ===== Linha de produto ===== */
 function linhaProduto(fam,prod){
   ensureCatalogEntry(fam,prod);
   if(termoBusca && !String(prod).toUpperCase().includes(termoBusca)) return null;
@@ -76,15 +107,18 @@ function linhaProduto(fam,prod){
   nome.innerHTML = `<strong>${prod}:</strong>`;
 
   const last=document.createElement('div'); last.className='last';
-  last.textContent = 'Última: —'; // simplificado aqui (podemos reusar seu "ultimo" depois)
+  const prev = (ultimo?.data?.[fam]?.[prod]);
+  last.textContent = prev
+    ? `Última: RESF ${fmt3(prev.RESFRIADO_KG||0)} kg | CONG ${fmt3(prev.CONGELADO_KG||0)} kg`
+    : 'Última: —';
 
   // chips
   const chips=document.createElement('div'); chips.className='chips';
   const cR=document.createElement('div'); cR.className='chip active'; cR.textContent='RESFRIADO';
   const cC=document.createElement('div'); cC.className='chip';          cC.textContent='CONGELADO';
   let tipo='RESFRIADO';
-  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')}
-  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')}
+  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')};
+  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')};
   chips.append(cR,cC);
 
   // qty
@@ -110,7 +144,7 @@ function linhaProduto(fam,prod){
   btnAdd.onclick=()=>{
     const valStr=(inp.value||'').replace(',','.');
     if(valStr===''){ alert('Informe KG.'); return; }
-    let v = parseFloat(valStr);
+    const v = parseFloat(valStr);
     if(isNaN(v) || v<0){ alert('KG inválido.'); return; }
     setSessaoKg(fam,prod,tipo,v);
     numbers.textContent = resumoTexto(fam,prod);
@@ -147,6 +181,7 @@ function linhaProduto(fam,prod){
   return wrap;
 }
 
+/* ===== Bloco: novo produto custom da família ===== */
 function blocoNovaLinhaProduto(fam){
   const wrap=document.createElement('div'); wrap.className='row';
   const nomeInp=document.createElement('input'); nomeInp.placeholder='Novo produto (CAIXA ALTA)'; nomeInp.style.textTransform='uppercase';
@@ -155,8 +190,8 @@ function blocoNovaLinhaProduto(fam){
   const cR=document.createElement('div'); cR.className='chip active'; cR.textContent='RESFRIADO';
   const cC=document.createElement('div'); cC.className='chip';          cC.textContent='CONGELADO';
   let tipo='RESFRIADO';
-  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')}
-  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')}
+  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')};
+  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')};
   chips.append(cR,cC);
 
   const qty=document.createElement('div'); qty.className='qty';
@@ -171,7 +206,7 @@ function blocoNovaLinhaProduto(fam){
     if(!prod){ alert('Digite o nome do produto.'); return; }
     const valStr=(inp.value||'').replace(',','.');
     if(valStr===''){ alert('Informe KG.'); return; }
-    let v=parseFloat(valStr); if(isNaN(v)||v<0){ alert('KG inválido.'); return; }
+    const v=parseFloat(valStr); if(isNaN(v)||v<0){ alert('KG inválido.'); return; }
 
     ensureCatalogEntry(fam,prod);
     ensureSessaoEntry(fam,prod);
@@ -182,7 +217,7 @@ function blocoNovaLinhaProduto(fam){
     res.textContent = `${prod}: Resfriado ${fmt3(cur.RESFRIADO_KG)} kg | Congelado ${fmt3(cur.CONGELADO_KG)} kg`;
     nomeInp.value=''; inp.value='';
 
-    // injeta linha real acima do bloco
+    // injeta linha "oficial" acima do bloco
     wrap.parentElement.insertBefore(linhaProduto(fam,prod), wrap);
   };
 
