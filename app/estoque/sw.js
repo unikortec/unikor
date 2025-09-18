@@ -6,7 +6,7 @@
 // - Demais same-origin: network, fallback cache
 // - Força atualização via postMessage {type:'SKIP_WAITING'}
 
-const APP_VERSION  = '1.0.1';
+const APP_VERSION  = '1.0.2';
 const CACHE_TAG    = 'estoque';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
