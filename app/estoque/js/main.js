@@ -1,10 +1,11 @@
 import { $, dtFile } from "./constants.js";
 import { bootFromFirestoreIfNeeded, mountUI, render } from "./ui.js";
-import { snapshotNow } from "./pdf.js";
-import { pdfEstoqueBlob, pdfPosicaoBlob } from "./pdf.js";
+import { snapshotNow, pdfEstoqueBlob, pdfPosicaoBlob } from "./pdf.js";
 import { clearSession } from "./store.js";
-import { fbBatchUpsertSnapshot } from "./firebase.js";
+import { fbBatchUpsertSnapshot, ensureAuth } from "./firebase.js";
 
+// login anônimo e boot (restaura "Última:" se houver dados)
+await ensureAuth();
 await bootFromFirestoreIfNeeded();
 mountUI();
 render();
@@ -49,7 +50,7 @@ $('#btnLimpar').onclick = ()=>{
 
 /* ===== Persistência: salvar snapshot local + Firestore ===== */
 async function salvarSnapshotComoUltimoEEnviar(){
-  const snap = snapshotNow();
+  const snap = snapshotNow(); // monta a partir da SESSÃO
   localStorage.setItem("estoque_v3_last_report", JSON.stringify(snap));
   try{ await fbBatchUpsertSnapshot(snap.data); }catch(e){ console.warn('Falha ao enviar snapshot:', e); }
 }
