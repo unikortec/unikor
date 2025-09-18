@@ -1,37 +1,27 @@
-// Service Worker — UNIKOR ESTOQUE
-const APP_VERSION  = '3.2.0-unikor';
-const CACHE_TAG    = 'unikor-estoque';
+// SW Estoque — V1.0.1
+const APP_VERSION  = '1.0.1';
+const CACHE_TAG    = 'estoque';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
-const OFFLINE_URL  = './index.html';
+const ROOT         = '/app/estoque/';
+const OFFLINE_URL  = ROOT + 'index.html';
 
 const ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './css/style.css',
-  './js/main.js',
-  './js/constants.js',
-  './js/store.js',
-  './js/catalog.js',
-  './js/prices.js',
-  './js/pdf.js',
-  './js/firebase.js',
-  './js/ui.js',
-
-  // Ícones
-  './favicon.svg',
-  './favicon.ico',
-  './favicon-96x96.png',
-  './apple-touch-icon.png',
-  './icon-192.png',
-  './icon-512.png'
+  ROOT,
+  ROOT + 'index.html',
+  ROOT + 'manifest.json',
+  ROOT + 'css/style.css',
+  ROOT + 'js/main.js',
+  ROOT + 'js/ui.js',
+  ROOT + 'js/constants.js',
+  ROOT + 'js/catalog.js',
+  ROOT + 'js/pdf.js',
+  ROOT + 'js/prices.js',
+  ROOT + 'js/store.js',
+  ROOT + 'js/firebase.js',
+  '/assets/logo/unikor-logo.svg',
+  '/assets/logo/unikor-logo.png'
 ];
-
-async function putInCache(cacheName, req, res){ try{ const c=await caches.open(cacheName); await c.put(req,res);}catch(_){} }
-async function limitCache(cacheName, max=180){
-  try{ const c=await caches.open(cacheName); const keys=await c.keys(); while(keys.length>max){ await c.delete(keys.shift()); } }catch(_){}
-}
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
@@ -48,10 +38,12 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     if ('navigationPreload' in self.registration) {
-      try { await self.registration.navigationPreload.enable(); } catch (_e) {}
+      try { await self.registration.navigationPreload.enable(); } catch {}
     }
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k.startsWith(`${CACHE_TAG}-`) && ![STATIC_CACHE, DYN_CACHE].includes(k)).map(k => caches.delete(k)));
+    await Promise.all(
+      keys.filter(k => k.startsWith(`${CACHE_TAG}-`) && ![STATIC_CACHE, DYN_CACHE].includes(k)).map(k => caches.delete(k))
+    );
     await self.clients.claim();
   })());
 });
@@ -63,52 +55,41 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
 
-  if (request.mode === 'navigate') {
+  // Navegações do sub-app → network-first com fallback
+  if (request.mode === 'navigate' && url.pathname.startsWith(ROOT)) {
     event.respondWith((async () => {
-      try{
+      try {
         const preload = 'preloadResponse' in event ? await event.preloadResponse : null;
-        if (preload) { putInCache(STATIC_CACHE, './', preload.clone()); return preload; }
+        if (preload) return preload;
         const net = await fetch(request);
-        putInCache(STATIC_CACHE, './', net.clone());
+        const c = await caches.open(STATIC_CACHE); c.put(ROOT, net.clone());
         return net;
-      }catch(_){
-        return (await caches.match('./')) || (await caches.match(OFFLINE_URL));
+      } catch {
+        return (await caches.match(ROOT)) || (await caches.match(OFFLINE_URL));
       }
     })());
     return;
   }
 
-  if (sameOrigin) {
-    const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./','/')));
-    if (isPrecached) {
-      event.respondWith((async ()=>{
-        const cached = await caches.match(request, { ignoreSearch: true });
-        if (cached) return cached;
-        const net = await fetch(request);
-        putInCache(STATIC_CACHE, request, net.clone());
-        return net;
-      })());
-      return;
-    }
-  }
-
-  const isCDN = /(^|\.)(?:gstatic|googleapis|jsdelivr|unpkg|cloudflare|cdnjs)\.com$/i.test(url.hostname);
-  if (!sameOrigin || isCDN) {
-    event.respondWith((async ()=>{
-      const cached = await caches.match(request);
-      const fetchPromise = fetch(request).then(res=>{ putInCache(DYN_CACHE, request, res.clone()); limitCache(DYN_CACHE); return res; }).catch(()=>null);
-      return cached || (await fetchPromise) || new Response('', { status: 504, statusText: 'Gateway Timeout' });
+  // Estáticos precacheados do sub-app → cache-first
+  if (sameOrigin && ASSETS.some(p => url.pathname === p)) {
+    event.respondWith((async () => {
+      const hit = await caches.match(request, { ignoreSearch: true });
+      if (hit) return hit;
+      const net = await fetch(request);
+      const c = await caches.open(STATIC_CACHE); c.put(request, net.clone());
+      return net;
     })());
     return;
   }
 
-  event.respondWith((async ()=>{
-    try{
+  // Demais → network, fallback cache
+  event.respondWith((async () => {
+    try {
       const net = await fetch(request);
-      putInCache(DYN_CACHE, request, net.clone());
-      limitCache(DYN_CACHE);
+      const c = await caches.open(DYN_CACHE); c.put(request, net.clone());
       return net;
-    }catch(_){
+    } catch {
       const cached = await caches.match(request, { ignoreSearch: true });
       return cached || new Response('', { status: 504, statusText: 'Gateway Timeout' });
     }
