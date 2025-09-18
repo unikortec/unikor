@@ -126,16 +126,21 @@ html, body { height: 100%; margin: 0; }
 /* área principal */
 .dash-main{ padding: 8px 14px 28px; }
 
-/* grid centralizado com margens iguais */
+/* ====== GRID DA HOME (ajustada) ====== */
 .grid{
   margin: 10px auto 40px;
-  width: min(1024px, 92%);
+  width: min(1024px, 94%);
   display: grid;
-  grid-template-columns: repeat(2, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: 1fr;            /* base: 1 coluna */
+  gap: 18px;
 }
-@media (max-width: 700px){
-  .grid{ grid-template-columns: 1fr; width: min(560px, 90%); }
+/* 2 colunas em celulares médios+ (ex. iPhone) */
+@media (min-width: 380px){
+  .grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* 3 colunas em tablet/desktop */
+@media (min-width: 900px){
+  .grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* tile */
@@ -151,7 +156,7 @@ html, body { height: 100%; margin: 0; }
   background: #fff;
 }
 .tile:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(23,68,46,.08); }
-.tile-icon{ width: 48px; height: 48px; display:block; }
+.tile-icon{ width: 48px; height: 48px; display:block; } /* aumente para 64px se quiser maior */
 .tile-title{ font-weight:900; font-size: clamp(18px, 4.6vw, 28px); color:#1e7f46; }
 
 /* FAB engrenagem (ícone branco) */
