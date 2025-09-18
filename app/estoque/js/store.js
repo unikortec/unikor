@@ -9,7 +9,8 @@ export let catalogo = loadJSON(STORAGE_KEY, {});   // { [FAM]: { [PROD]: {RESFRI
 export let sessao   = loadJSON(SESSION_KEY,  {});  // { [FAM]: { [PROD]: {RESFRIADO_KG, CONGELADO_KG} } }
 export const ultimo = { value: loadJSON(LAST_REPORT_KEY, null) }; // snapshot anterior (quando existir)
 
-export let priceDB  = loadJSON(PRICE_DB_KEY, {});  // { [ID]: { price_kg, min_kg, updated_at } }
+// Preços: { [ID]: { price_kg, min_kg, updated_at } }
+export let priceDB  = loadJSON(PRICE_DB_KEY, {});
 const priceId = (f,p)=>`${f}__${p}`.toUpperCase().replace(/\s+/g,' ').trim();
 
 // ---------- Getters/Setters de preços ----------
@@ -39,7 +40,12 @@ export function clearSession(){
   sessao = {};
   saveJSON(SESSION_KEY, sessao);
 }
+
+// Salva ambos os estados (catálogo + sessão)
 export function syncSave(){
   saveJSON(STORAGE_KEY, catalogo);
   saveJSON(SESSION_KEY, sessao);
 }
+
+// Alias para compatibilidade com versões do catalog.js que importam `persist`
+export { syncSave as persist };
