@@ -3,62 +3,58 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <base href="./">
   <title>Despesas • Unikor</title>
-
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1e7f46">
-
-  <!-- Ícones (usando os globais do portal) -->
-  <link rel="icon" type="image/png" sizes="192x192" href="/assets/logo/android-chrome-192x192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="/assets/logo/android-chrome-512x512.png">
-  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
   <link rel="icon" href="/assets/logo/favicon.ico">
-
+  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Leitor QR (CDN leve) -->
+  <script src="https://unpkg.com/html5-qrcode" defer></script>
 </head>
 <body>
-  <header class="hdr">
-    <h1 class="ttl">Despesas V1.0.1</h1>
-    <div class="spacer"></div>
-    <div class="toolbar">
-      <button id="btnScan" class="btn">Ler QR</button>
-      <button id="btnSync" class="btn">Sincronizar</button>
-    </div>
+  <header class="topbar">
+    <img src="/assets/logo/unikor-logo.png" class="logo" alt="UNIKOR">
+    <h1>Despesas</h1>
   </header>
 
   <main class="wrap">
     <section class="card">
-      <div class="card-head">Lançamentos</div>
-      <div class="card-body">
-        <ul id="lista" class="list"></ul>
+      <h2>Nova despesa</h2>
+
+      <label class="row">
+        <span>Categoria</span>
+        <select id="categoria">
+          <option>ALIMENTAÇÃO</option>
+          <option>COMBUSTÍVEL</option>
+          <option>MERCADORIA</option>
+          <option>SERVIÇOS</option>
+          <option>OUTROS</option>
+        </select>
+      </label>
+
+      <div class="grid2">
+        <button id="btnScan" class="btn">Ler QR NFC-e</button>
+        <label class="file lbl btn">
+          XML NFe 55
+          <input id="xml55" type="file" accept=".xml" hidden>
+        </label>
+      </div>
+
+      <div id="scanArea" class="scan-area" hidden>
+        <div id="qrReader" class="qr"></div>
+        <button id="btnFechar" class="btn outline">Fechar</button>
+      </div>
+
+      <div id="preview" class="preview"></div>
+
+      <div class="actions">
+        <button id="btnSalvar" class="btn primary">Salvar</button>
       </div>
     </section>
   </main>
 
-  <!-- Overlay do scanner -->
-  <div id="scanOverlay" class="scan-overlay" hidden>
-    <div class="scan-box">
-      <video id="scanVideo" autoplay playsinline></video>
-      <div class="scan-actions">
-        <button id="scanClose" class="btn">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Lib ZXing (QR) -->
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0"></script>
-
-  <!-- App entry (renomeado para app.js) -->
+  <!-- Firebase App só para pegar UID (usa o portal/js/firebase.js se já existir) -->
   <script type="module" src="js/app.js"></script>
-
-  <!-- Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('SW:', err));
-    }
-  </script>
 </body>
 </html>
