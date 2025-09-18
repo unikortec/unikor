@@ -1,34 +1,117 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>UNIKOR • Pedidos</title>
-  <link rel="stylesheet" href="../../style.css">
-  <style>
-    .mod-wrap{max-width:1000px;margin:0 auto;padding:18px}
-    .mod-top{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-    .mod-top img{width:40px;height:40px}
-    .mod-title{font-size:28px;font-weight:900;color:#1e7f46}
-    .back{margin-left:auto;border:2px solid #1e7f46;background:#fff;color:#1e7f46;padding:8px 14px;border-radius:12px;font-weight:800}
-    .card{border:2px solid #1e7f46;border-radius:18px;padding:16px}
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#1e7f46" />
+  <title>Pedidos — UNIKOR V1.0.1</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <!-- SheetJS e jsPDF só se usados aqui (PDF local) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <div class="mod-wrap">
-    <div class="mod-top">
-      <img src="../../assets/logo/icon-pedidos.svg" alt="Pedidos">
-      <div class="mod-title">Pedidos</div>
-      <button class="back" onclick="location.href='../../'">Voltar</button>
-    </div>
-    <div class="card">
-      Conteúdo de <b>Pedidos</b> vai aqui.
-    </div>
-  </div>
+  <header class="topbar">
+    <img src="./img/logo-unikor-white.svg" alt="UNIKOR" height="24" />
+    <div class="grow"></div>
+    <a class="link" href="../relatorios/">Relatórios</a>
+  </header>
 
-  <script type="module">
-    import { requireAuth } from "../../js/guard.js";
-    requireAuth({ onReady(){ /* carregue dados aqui */ }});
+  <main class="container">
+    <h1>Pedido</h1>
+
+    <!-- Campos essenciais (exemplo simplificado) -->
+    <section class="card grid grid-2">
+      <div>
+        <label>Cliente</label>
+        <input id="cCliente" placeholder="Nome do cliente" />
+      </div>
+      <div>
+        <label>Pagamento</label>
+        <input id="cPagamento" placeholder="PIX / CRÉDITO / DINHEIRO..." />
+      </div>
+      <div>
+        <label>Data entrega</label>
+        <input id="cData" type="date" />
+      </div>
+      <div>
+        <label>Hora entrega</label>
+        <input id="cHora" type="time" />
+      </div>
+      <div>
+        <label>Tipo</label>
+        <select id="cTipo">
+          <option value="ENTREGA">ENTREGA</option>
+          <option value="RETIRADA">RETIRADA</option>
+        </select>
+      </div>
+      <div>
+        <label>Nº do cupom fiscal</label>
+        <input id="cCupom" placeholder="ex.: 123456-1/001" />
+      </div>
+      <div class="col-span-2">
+        <label>Observações</label>
+        <input id="cObs" placeholder="(opcional)" />
+      </div>
+    </section>
+
+    <!-- Itens -->
+    <section class="card">
+      <div class="muted">Itens</div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width:40%">Descrição</th>
+            <th style="width:14%">Qtd</th>
+            <th style="width:14%">Un</th>
+            <th style="width:16%">Preço (R$)</th>
+            <th style="width:16%">Subtotal</th>
+            <th>Remover</th>
+          </tr>
+        </thead>
+        <tbody id="itensBody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6">
+              <button class="btn ghost" id="btnAddItem">+ Adicionar item</button>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="right mt8">
+        <label>Total (R$)</label>
+        <input id="cTotal" class="right" readonly />
+      </div>
+    </section>
+
+    <!-- Ações -->
+    <div class="actions">
+      <button class="btn" id="btnSalvar"><span class="lbl">Salvar PDF</span></button>
+      <button class="btn gray" id="btnCompartilhar"><span class="lbl">Compartilhar PDF</span></button>
+    </div>
+  </main>
+
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/calcular-entrega.js"></script>
+  <script type="module" src="./js/app.js"></script>
+
+  <!-- SW registro (escopo local) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          reg.addEventListener('updatefound', () => {
+            const sw = reg.installing;
+            sw && sw.addEventListener('statechange', () => {
+              if (sw.state === 'installed' && navigator.serviceWorker.controller) reg.waiting?.postMessage('SKIP_WAITING');
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+        } catch (e) {}
+      });
+    }
   </script>
 </body>
 </html>
