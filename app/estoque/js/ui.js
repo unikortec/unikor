@@ -1,90 +1,106 @@
-import { $, fmt3, round3, dtLabel } from "./constants.js";
+import { $, fmt3 } from "./constants.js";
 import {
   FAMILIAS, PADROES,
   ensureCatalogEntry, ensureSessaoEntry,
-  getSessao, setSessaoKg, editBothKg, clearItem,
-  deleteIfCustom, resumoTexto
+  getSessao, setSessaoKg, editBothKg,
+  clearItem, deleteIfCustom, resumoTexto
 } from "./catalog.js";
 import { gerarModeloConfigXLSX, importarConfigXLS } from "./prices.js";
-import { catalogo, ultimo, setUltimo } from "./store.js";
+import { catalogo, ultimo } from "./store.js";
 import { fbFetchAllInventory } from "./firebase.js";
 
 let termoBusca = '';
 
-/* ===== Boot inicial: carrega "Última:" do Firestore se não houver local ===== */
 export async function bootFromFirestoreIfNeeded(){
+  // Mantém a UI independente do Firestore: só tenta popular "ultimo" se estiver vazio
   try{
-    if(!ultimo){
+    if(!ultimo.value){
       const docs = await fbFetchAllInventory();
       const snapData = {};
       for(const d of docs){
-        const fam = String(d.family||"").toUpperCase();
-        const prod= String(d.product||"").toUpperCase();
+        const fam = String(d.family||'').toUpperCase();
+        const prod= String(d.product||'').toUpperCase();
         if(!fam || !prod) continue;
-        ensureCatalogEntry(fam, prod);
-        const rk = round3(+d.resfriado_kg||0);
-        const ck = round3(+d.congelado_kg||0);
+        const rk = +d.resfriado_kg || 0;
+        const ck = +d.congelado_kg || 0;
         if(rk>0 || ck>0){
-          (snapData[fam] ??= {})[prod] = { RESFRIADO_KG:rk, CONGELADO_KG:ck, SUM_KG:round3(rk+ck) };
+          snapData[fam] ??= {};
+          snapData[fam][prod] = { RESFRIADO_KG:rk, CONGELADO_KG:ck, SUM_KG:+(rk+ck) };
         }
       }
       if(Object.keys(snapData).length){
-        setUltimo({ dateISO:new Date().toISOString(), dateLabel:dtLabel(new Date()), data:snapData });
+        ultimo.value = { dateISO:new Date().toISOString(), dateLabel:"", data:snapData };
+        localStorage.setItem("estoque_v3_last_report", JSON.stringify(ultimo.value));
       }
     }
-  }catch(e){ console.warn('Falha boot Firestore:', e); }
+  }catch(e){ console.warn('Boot Firestore (ignorado):', e); }
 }
 
-/* ===== Montagem dos listeners de topo ===== */
 export function mountUI(){
-  $('#busca').addEventListener('input', (e)=>{
-    termoBusca = (e.target.value||'').trim().toUpperCase();
-    render();
-  });
+  const buscaEl = $('#busca');
+  if (buscaEl){
+    buscaEl.addEventListener('input', (e)=>{
+      termoBusca = (e.target.value||'').trim().toUpperCase();
+      render();
+    });
+  }
 
-  // Upload/Modelo preços + mínimos
-  const inputUpload=document.createElement('input');
-  inputUpload.type='file'; inputUpload.accept='.xlsx,.xls';
-  inputUpload.style.display='none';
-  document.body.appendChild(inputUpload);
+  // upload/modelo
+  const uploadBtn = $('#btnPrecoUpload');
+  if (uploadBtn){
+    const inputUpload=document.createElement('input');
+    inputUpload.type='file';
+    inputUpload.accept='.xlsx,.xls';
+    inputUpload.style.display='none';
+    document.body.appendChild(inputUpload);
 
-  $('#btnPrecoUpload').onclick=async ()=>{
-    const querModelo = confirm('OK para baixar o modelo de preços e mínimos.\nCancelar para enviar uma planilha.');
-    if(querModelo){
-      const blob=gerarModeloConfigXLSX(FAMILIAS);
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download=`MODELO_CONFIG_${Date.now()}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),60000);
-    }else{
-      inputUpload.click();
-    }
-  };
-  inputUpload.onchange=async (ev)=>{
-    const file = ev.target.files?.[0];
-    if(!file) return;
-    try{ const ok = await importarConfigXLS(file, ensureCatalogEntry); alert(`${ok} item(ns) configurado(s).`); render(); }
-    catch(e){ console.error(e); alert('Falha ao processar a planilha.'); }
-    finally{ inputUpload.value=''; }
-  };
+    uploadBtn.onclick=async ()=>{
+      const querModelo = confirm('OK para baixar o modelo de preços e mínimos.\nCancelar para enviar uma planilha.');
+      if(querModelo){
+        const blob=gerarModeloConfigXLSX(FAMILIAS);
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=`MODELO_CONFIG_${Date.now()}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),60000);
+      }else{
+        inputUpload.click();
+      }
+    };
+    inputUpload.onchange=async (ev)=>{
+      const file = ev.target.files?.[0];
+      if(!file) return;
+      try{
+        const ok = await importarConfigXLS(file, ensureCatalogEntry);
+        alert(`${ok} item(ns) configurado(s).`);
+        render();
+      }catch(e){
+        console.error(e); alert('Falha ao processar a planilha.');
+      }finally{
+        inputUpload.value='';
+      }
+    };
+  }
 }
 
-/* ===== Render principal ===== */
 export function render(){
-  const app=$('#app'); app.innerHTML='';
+  const app=$('#app');
+  if(!app){ console.warn('Container #app não encontrado'); return; }
+  app.innerHTML='';
+
+  // Monta cards das famílias sempre usando FAMILIAS como fonte primária (catálogo pode estar vazio)
   FAMILIAS.forEach((fam,idx)=>{
     const card=document.createElement('section'); card.className=`card fam-${idx}`;
     const head=document.createElement('div'); head.className='fam-head';
     const title=document.createElement('div'); title.className='fam-title'; title.textContent=fam.nome;
 
+    // contagem preenchidos considera itens do catálogo + padrões
     const itensFamilia = Object.keys(catalogo[fam.nome]||{});
-    const preenchidos = itensFamilia
-      .filter(p=>{ const v = getSessao(fam.nome,p); return (v.RESFRIADO_KG>0 || v.CONGELADO_KG>0); }).length;
-
+    const preenchidos = itensFamilia.filter(p=>{ const v = getSessao(fam.nome,p); return (v.RESFRIADO_KG>0 || v.CONGELADO_KG>0); }).length;
     const meta=document.createElement('div'); meta.className='fam-meta';
-    meta.textContent = `${preenchidos}/${itensFamilia.length} item(ns) preenchidos`;
+    meta.textContent = `${preenchidos}/${Math.max(itensFamilia.length, fam.itens.length)} item(ns) preenchidos`;
 
     const body=document.createElement('div'); body.className='fam-body';
     const ordenados=[...new Set([...fam.itens, ...Object.keys(catalogo[fam.nome]||{})])].sort();
+
     for(const p of ordenados){
       const row=linhaProduto(fam.nome,p);
       if(row) body.appendChild(row);
@@ -96,7 +112,6 @@ export function render(){
   });
 }
 
-/* ===== Linha de produto ===== */
 function linhaProduto(fam,prod){
   ensureCatalogEntry(fam,prod);
   if(termoBusca && !String(prod).toUpperCase().includes(termoBusca)) return null;
@@ -107,18 +122,22 @@ function linhaProduto(fam,prod){
   nome.innerHTML = `<strong>${prod}:</strong>`;
 
   const last=document.createElement('div'); last.className='last';
-  const prev = (ultimo?.data?.[fam]?.[prod]);
-  last.textContent = prev
-    ? `Última: RESF ${fmt3(prev.RESFRIADO_KG||0)} kg | CONG ${fmt3(prev.CONGELADO_KG||0)} kg`
-    : 'Última: —';
+  const prev = ultimo.value?.data?.[fam]?.[prod];
+  if(prev){
+    const rk = fmt3(prev.RESFRIADO_KG||0);
+    const ck = fmt3(prev.CONGELADO_KG||0);
+    last.textContent = `Última: RESF ${rk} kg | CONG ${ck} kg`;
+  }else{
+    last.textContent = 'Última: —';
+  }
 
   // chips
   const chips=document.createElement('div'); chips.className='chips';
   const cR=document.createElement('div'); cR.className='chip active'; cR.textContent='RESFRIADO';
   const cC=document.createElement('div'); cC.className='chip';          cC.textContent='CONGELADO';
   let tipo='RESFRIADO';
-  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')};
-  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')};
+  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')}
+  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')}
   chips.append(cR,cC);
 
   // qty
@@ -136,7 +155,7 @@ function linhaProduto(fam,prod){
   const btnEdit = document.createElement('button'); btnEdit.className='btn xs'; btnEdit.textContent='Editar';
   const btnClear= document.createElement('button'); btnClear.className='btn xs'; btnClear.textContent='Limpar';
   const btnDel  = document.createElement('button'); btnDel.className='btn xs'; btnDel.textContent='Excluir';
-  if(PADROES[fam]?.has(prod)) btnDel.style.display='none'; // excluir só para itens custom
+  if(PADROES[fam]?.has(prod)) btnDel.style.display='none';
 
   actions.append(btnEdit,btnClear,btnDel);
   res.append(numbers, actions);
@@ -144,7 +163,7 @@ function linhaProduto(fam,prod){
   btnAdd.onclick=()=>{
     const valStr=(inp.value||'').replace(',','.');
     if(valStr===''){ alert('Informe KG.'); return; }
-    const v = parseFloat(valStr);
+    let v = parseFloat(valStr);
     if(isNaN(v) || v<0){ alert('KG inválido.'); return; }
     setSessaoKg(fam,prod,tipo,v);
     numbers.textContent = resumoTexto(fam,prod);
@@ -181,7 +200,6 @@ function linhaProduto(fam,prod){
   return wrap;
 }
 
-/* ===== Bloco: novo produto custom da família ===== */
 function blocoNovaLinhaProduto(fam){
   const wrap=document.createElement('div'); wrap.className='row';
   const nomeInp=document.createElement('input'); nomeInp.placeholder='Novo produto (CAIXA ALTA)'; nomeInp.style.textTransform='uppercase';
@@ -190,8 +208,8 @@ function blocoNovaLinhaProduto(fam){
   const cR=document.createElement('div'); cR.className='chip active'; cR.textContent='RESFRIADO';
   const cC=document.createElement('div'); cC.className='chip';          cC.textContent='CONGELADO';
   let tipo='RESFRIADO';
-  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')};
-  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')};
+  cR.onclick=()=>{tipo='RESFRIADO';cR.classList.add('active');cC.classList.remove('active')}
+  cC.onclick=()=>{tipo='CONGELADO';cC.classList.add('active');cR.classList.remove('active')}
   chips.append(cR,cC);
 
   const qty=document.createElement('div'); qty.className='qty';
@@ -206,7 +224,7 @@ function blocoNovaLinhaProduto(fam){
     if(!prod){ alert('Digite o nome do produto.'); return; }
     const valStr=(inp.value||'').replace(',','.');
     if(valStr===''){ alert('Informe KG.'); return; }
-    const v=parseFloat(valStr); if(isNaN(v)||v<0){ alert('KG inválido.'); return; }
+    let v=parseFloat(valStr); if(isNaN(v)||v<0){ alert('KG inválido.'); return; }
 
     ensureCatalogEntry(fam,prod);
     ensureSessaoEntry(fam,prod);
@@ -217,8 +235,9 @@ function blocoNovaLinhaProduto(fam){
     res.textContent = `${prod}: Resfriado ${fmt3(cur.RESFRIADO_KG)} kg | Congelado ${fmt3(cur.CONGELADO_KG)} kg`;
     nomeInp.value=''; inp.value='';
 
-    // injeta linha "oficial" acima do bloco
-    wrap.parentElement.insertBefore(linhaProduto(fam,prod), wrap);
+    // injeta linha real acima do bloco
+    const before = linhaProduto(fam,prod);
+    if(before) wrap.parentElement.insertBefore(before, wrap);
   };
 
   wrap.append(nomeInp,last,chips,qty,res);
