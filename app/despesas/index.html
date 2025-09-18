@@ -9,56 +9,55 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e7f46">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Despesas">
 
-  <!-- Ícones globais do portal -->
-  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
+  <!-- Ícones (usando os globais do portal) -->
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/logo/android-chrome-192x192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/assets/logo/android-chrome-512x512.png">
+  <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
   <link rel="icon" href="/assets/logo/favicon.ico">
 
-  <!-- Estilos -->
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="hdr">
-    <h1 class="ttl">Despesas</h1>
+    <h1 class="ttl">Despesas V1.0.1</h1>
     <div class="spacer"></div>
     <div class="toolbar">
-      <button class="btn" id="btnScanQR">Ler QR</button>
-      <button class="btn success" id="btnNova">Nova</button>
+      <button id="btnScan" class="btn">Ler QR</button>
+      <button id="btnSync" class="btn">Sincronizar</button>
     </div>
   </header>
 
-  <main class="wrap" id="app">
-    <!-- sua lista/cards de despesas aqui (render via JS) -->
+  <main class="wrap">
+    <section class="card">
+      <div class="card-head">Lançamentos</div>
+      <div class="card-body">
+        <ul id="lista" class="list"></ul>
+      </div>
+    </section>
   </main>
 
-  <!-- Overlay do Scanner -->
-  <div class="qr-sheet" id="qrSheet" aria-hidden="true">
-    <div class="qr-card">
-      <div class="qr-head">
-        <h3>Ler QR</h3>
-        <button class="qr-close" id="qrClose">Fechar</button>
-      </div>
-      <video id="qrVideo" class="qr-video" playsinline muted></video>
-      <canvas id="qrCanvas" class="qr-canvas" style="display:none"></canvas>
-      <div class="qr-hint">Aponte a câmera para o QR. Requer HTTPS/localhost.</div>
-      <div class="qr-actions">
-        <button class="btn" id="qrFlash" style="display:none">Flash</button>
+  <!-- Overlay do scanner -->
+  <div id="scanOverlay" class="scan-overlay" hidden>
+    <div class="scan-box">
+      <video id="scanVideo" autoplay playsinline></video>
+      <div class="scan-actions">
+        <button id="scanClose" class="btn">Fechar</button>
       </div>
     </div>
   </div>
 
-  <!-- libs opcionais do seu app (ex: date-fns, etc.) -->
-  <!-- App -->
-  <script type="module" src="js/main.js"></script>
+  <!-- Lib ZXing (QR) -->
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0"></script>
 
-  <!-- SW (registro simples) -->
+  <!-- App entry (renomeado para app.js) -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- Service Worker -->
   <script>
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .catch(err => console.warn('SW:', err));
     }
   </script>
 </body>
