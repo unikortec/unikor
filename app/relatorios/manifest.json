@@ -1,0 +1,10 @@
+{
+  "name": "UNIKOR — Relatórios",
+  "short_name": "Relatórios",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#1e7f46",
+  "icons": []
+}
