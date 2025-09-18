@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "portal",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "app/despesas/**", "destination": "/app/despesas/index.html" },
+      { "source": "**", "destination": "/index.html" }
+    ]
+  }
+}
