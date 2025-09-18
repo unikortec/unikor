@@ -2,26 +2,39 @@
 // Guard de rota baseado em Firebase Auth (v12.2.1 ESM)
 
 import { auth } from "./firebase.js";
-import { onAuthStateChanged } 
+import { onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+/** ===== Helpers novos p/ tenant/claims ===== */
+export async function getClaims(force=false){
+  const u = auth.currentUser;
+  if (!u) return {};
+  const tok = await u.getIdTokenResult(force);
+  return tok?.claims || {};
+}
+// HOJE: tenant fixo "unikor". Amanhã: virá de claims (ou e-mail).
+export async function getTenantId(){
+  const claims = await getClaims(true);
+  return claims.tenantId || "unikor";
+}
+let __tenantCache = null;
+export async function ensureTenant(){
+  if (!__tenantCache) __tenantCache = await getTenantId();
+  return __tenantCache;
+}
+/** ========================================= */
 
 /**
  * Protege páginas que exigem login/autorização.
- * 
- * Exemplo de uso:
- * requireAuth({
- *   roles: ["master", "gerente"],   // opcional: restringe a claims específicas
- *   onReady: ({ user, role, token }) => {
- *     console.log("Usuário autenticado:", user.email, "Role:", role);
- *   }
- * });
+ *
+ * Ex.: requireAuth({ roles:["master","gerente"], onReady: ({user,role,token})=>{...} })
  */
 export function requireAuth({ roles = null, onReady }) {
   onAuthStateChanged(auth, async (user) => {
-    // Se não estiver logado → volta para login
-    if (!user) { 
-      window.location.href = "index.html"; 
-      return; 
+    // não logado → volta ao portal
+    if (!user) {
+      window.location.href = "/portal/index.html";
+      return;
     }
 
     let token, role = "geral";
@@ -30,18 +43,16 @@ export function requireAuth({ roles = null, onReady }) {
       role  = token?.claims?.role || "geral";
     } catch (err) {
       console.error("Erro ao obter claims:", err);
-      window.location.href = "index.html";
+      window.location.href = "/portal/index.html";
       return;
     }
 
-    // Se houver restrição de roles e usuário não for aceito
     if (Array.isArray(roles) && roles.length && !roles.includes(role)) {
       alert("Acesso negado para este perfil.");
-      window.location.href = "index.html";
+      window.location.href = "/portal/index.html";
       return;
     }
 
-    // Callback de sucesso
     onReady?.({ user, role, token });
   });
 }
