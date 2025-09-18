@@ -1,4 +1,4 @@
-// app/estoque/js/prices.js
+// prices.js — geração de planilha e importação de preços/mínimos
 import { getPriceKg, getMinKg, setPriceMin } from "./store.js";
 
 /**
@@ -11,8 +11,6 @@ export function gerarModeloConfigXLSX(FAMILIAS){
 
   for (const f of FAMILIAS) {
     const conhecidos = new Set([...(f.itens || [])]);
-    // Caso o catálogo já tenha itens extras na família, acrescente-os
-    // (Deixamos o UI/Store cuidar de popular catálogo; aqui só modelo básico)
     for (const p of Array.from(conhecidos).sort()) {
       const atualP = getPriceKg(f.nome,p) || '';
       const atualM = getMinKg(f.nome,p)   || '';
@@ -60,7 +58,6 @@ export async function importarConfigXLS(file, ensureCatalogEntry){
     const hasMN = mnStr !== '' && !isNaN(parseFloat(mnStr));
     if (!hasPK && !hasMN) continue;
 
-    // Garante existência no catálogo
     if (typeof ensureCatalogEntry === 'function') ensureCatalogEntry(fam, prod);
 
     const newPrice = hasPK ? parseFloat(pkStr) : getPriceKg(fam, prod);
@@ -71,3 +68,6 @@ export async function importarConfigXLS(file, ensureCatalogEntry){
   }
   return ok;
 }
+
+// Re-export para módulos que importam de prices.js (ex.: pdf.js)
+export { getPriceKg, getMinKg } from "./store.js";
