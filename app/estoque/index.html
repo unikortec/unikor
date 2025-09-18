@@ -4,14 +4,15 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <base href="./">
-  <title>Estoque V1.0.1</title>
+  <title>Estoque V1.0.2</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e7f46">
   <meta name="apple-mobile-web-app-title" content="Estoque">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 
-  <!-- Ícones globais do portal (não duplicar dentro do app) -->
+  <!-- Ícones globais do portal (reuso; não precisa duplicar no app) -->
   <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/assets/logo/android-chrome-192x192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/assets/logo/android-chrome-512x512.png">
@@ -22,7 +23,7 @@
 </head>
 <body>
   <header class="hdr">
-    <h1 class="ttl">Estoque V1.0.1</h1>
+    <h1 class="ttl">Estoque V1.0.2</h1>
     <div class="spacer"></div>
     <div class="toolbar">
       <div class="search">🔎 <input id="busca" type="text" placeholder="Pesquisar produto..."/></div>
@@ -36,7 +37,7 @@
 
   <main class="wrap" id="app"></main>
 
-  <!-- libs -->
+  <!-- libs (globais obrigatórias p/ prices/pdf) -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
