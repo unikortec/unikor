@@ -1,6 +1,6 @@
 // Service Worker — UNIKOR • ESTOQUE v1.0.1
 // Estratégias:
-// - Precaching (estáticos locais essenciais)
+// - Precaching (estáticos locais essenciais + ícones globais)
 // - Navegação (HTML): network-first (+ navigation preload) com fallback offline
 // - CDNs/terceiros: stale-while-revalidate em cache dinâmico
 // - Demais requisições same-origin: network, fallback cache
@@ -12,11 +12,16 @@ const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
 const OFFLINE_URL  = './index.html';
 
-// ⚠ Pré-cache minimalista (evita 404 quebrar install)
+// ⚠ Pré-cache minimalista + ícones globais (mesmo domínio, outro path)
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+
+  // Ícones globais do portal (não falha se não existir em dev)
+  '/assets/logo/android-chrome-192x192.png',
+  '/assets/logo/android-chrome-512x512.png',
+  '/assets/logo/apple-touch-icon.png'
 ];
 
 // ——— Helpers
@@ -76,7 +81,7 @@ self.addEventListener('fetch', (event) => {
   // só tratamos GET
   if (request.method !== 'GET') return;
 
-  // 🚫 ignora qualquer esquema fora http/https (ex.: chrome-extension://)
+  // 🚫 ignora esquemas fora http/https (ex.: chrome-extension://)
   const url = new URL(request.url);
   if (!/^https?:$/.test(url.protocol)) return;
 
@@ -104,7 +109,7 @@ self.addEventListener('fetch', (event) => {
 
   // 2) Estáticos locais pré-cacheados → cache-first (ignoreSearch p/ bust simples)
   if (sameOrigin) {
-    const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./', '/')));
+    const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./', '/')) || url.pathname === p);
     if (isPrecached) {
       event.respondWith((async () => {
         const cached = await caches.match(request, { ignoreSearch: true });
