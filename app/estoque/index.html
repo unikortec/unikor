@@ -3,18 +3,22 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
   <title>Estoque V1.0.1</title>
 
-  <link rel="icon" type="image/svg+xml" href="../../assets/logo/unikor-logo.svg" />
-  <link rel="manifest" href="./js/manifest.json" />
+  <!-- PWA -->
+  <link rel="manifest" href="/app/estoque/manifest.json">
   <meta name="theme-color" content="#1e7f46"/>
 
-  <link rel="stylesheet" href="../shared.css">
-  <link rel="stylesheet" href="../shared-header.css">
-  <link rel="stylesheet" href="./css/style.css">
+  <!-- Ícones/Logo -->
+  <link rel="icon" type="image/svg+xml" href="/assets/logo/unikor-logo.svg">
+  <link rel="icon" type="image/png" href="/assets/logo/unikor-logo.png">
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="/app/estoque/css/style.css">
 </head>
 <body>
-  <header class="app-header">
+  <header>
     <h1>Estoque V1.0.1</h1>
     <div class="spacer"></div>
     <div class="toolbar">
@@ -29,17 +33,17 @@
 
   <div class="wrap" id="app"></div>
 
-  <!-- libs necessárias pelos módulos -->
+  <!-- Libs -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- app -->
-  <script type="module" src="./js/main.js"></script>
+  <!-- App (módulo raiz) -->
+  <script type="module" src="/app/estoque/js/main.js"></script>
 
-  <!-- SW local do módulo -->
+  <!-- SW com escopo do módulo (fallback se main ainda não registrou) -->
   <script>
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/app/estoque/sw.js', { scope: '/app/estoque/' }).catch(()=>{});
     }
   </script>
 </body>
