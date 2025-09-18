@@ -1,11 +1,13 @@
+/* ====== Tema Unikor (Estoque) ====== */
 :root{
-  /* Unikor */
-  --bg:#f1f5f9; --card:#ffffff; --line:#e2e8f0;
-  --ink:#0f172a; --muted:#475569;
-  --green-soft:#d7f5f3;
-  --green-strong:#0ea5a6;
-  --green-dark:#0ea5a6;
+  --brand:#1e7f46;      /* primary */
+  --brand-600:#17693a;  /* hover/contorno */
+  --brand-700:#135830;  /* header/botão forte */
 
+  --bg:#edf9f1; --card:#ffffff; --line:#e2e8f0;
+  --ink:#0e2b14; --muted:#2e5a2e;
+
+  /* Paletas das famílias (mantidas) */
   --fam0-soft:#e7fbf0; --fam0-strong:#10b981;
   --fam1-soft:#edfdf3; --fam1-strong:#22c55e;
   --fam2-soft:#f5fde8; --fam2-strong:#84cc16;
@@ -19,11 +21,17 @@
 }
 
 *{box-sizing:border-box}
-body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--ink) }
+html,body{height:100%;margin:0}
+body{
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+  background:var(--bg);
+  color:var(--ink);
+}
 
+/* ===== Header verde Unikor ===== */
 header{
   position:sticky;top:0;z-index:5;
-  background:var(--green-dark);
+  background:var(--brand-700);
   border-bottom:1px solid rgba(255,255,255,.15);
   padding:12px 16px;
   display:flex;gap:10px;align-items:center;flex-wrap:wrap;
@@ -31,22 +39,43 @@ header{
 header h1{font-size:18px;margin:0;letter-spacing:.4px;color:#fff}
 header .spacer{flex:1}
 
-.btn{ border:1px solid rgba(255,255,255,.35); background:#ffffff; color:var(--ink); border-radius:12px; padding:10px 14px; cursor:pointer }
-.btn.primary{background:#fff;color:var(--green-dark);border-color:#fff}
-.btn.success{background:var(--green-strong);color:#fff;border-color:var(--green-strong)}
-.btn.xs{padding:6px 10px;border-radius:10px;font-size:12px}
+/* Botões no header */
+.btn{
+  border:2px solid var(--brand-600);
+  background:#ffffff;
+  color:var(--ink);
+  border-radius:12px;
+  padding:10px 14px;
+  cursor:pointer;
+}
+.btn:hover{box-shadow:0 6px 16px rgba(23,68,46,.15)}
+.btn.success{
+  background:var(--brand);
+  color:#fff;
+  border-color:var(--brand);
+}
 
 .wrap{max-width:980px;margin:16px auto;padding:0 12px}
-.toolbar{display:flex;gap:8px;flex-wrap:wrap}
-.search{ display:flex;align-items:center;gap:8px; border:1px solid rgba(255,255,255,.35); background:#fff; border-radius:12px; padding:8px 12px; min-width:220px }
-.search input{ border:none; outline:none; width:220px }
 
+.toolbar{display:flex;gap:8px;flex-wrap:wrap}
+.search{
+  display:flex;align-items:center;gap:8px;
+  border:2px solid var(--brand-600);
+  background:#fff;border-radius:12px;padding:8px 12px;min-width:220px
+}
+.search input{border:none;outline:none;width:220px}
+
+/* ===== Cards / Famílias ===== */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:16px;overflow:hidden}
-.fam-head{ display:flex;align-items:center;gap:10px; padding:12px 14px;color:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap }
+.fam-head{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;color:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap
+}
 .fam-title{font-weight:900;letter-spacing:.6px;font-size:18px}
 .fam-body{padding:0 12px 10px}
 .fam-meta{margin-left:auto;font-size:12px;color:#fff;opacity:.95}
 
+/* ===== Linhas (3 linhas) ===== */
 .row{
   display:grid;
   grid-template-columns: 1fr auto;
@@ -54,21 +83,30 @@ header .spacer{flex:1}
     "name last"
     "chips qty"
     "result result";
-  gap:10px; padding:10px 8px; border-bottom:1px dashed var(--line); align-items:center;
+  gap:10px;
+  padding:10px 8px;
+  border-bottom:1px dashed var(--line);
+  align-items:center;
 }
 .name{grid-area:name;font-weight:800}
 .last{grid-area:last;font-size:12px;color:var(--muted);justify-self:end}
 .chips{grid-area:chips;display:flex;gap:8px;flex-wrap:wrap}
-.chip{ border:1px solid var(--line);padding:6px 10px;border-radius:999px; background:#fff;cursor:pointer;user-select:none;font-size:12px }
-.chip.active{border-color:var(--green-dark);background:var(--green-dark);color:#fff}
+.chip{
+  border:1px solid var(--line);padding:6px 10px;border-radius:999px;
+  background:#fff;cursor:pointer;user-select:none;font-size:12px
+}
+.chip.active{
+  border-color:var(--brand-700);
+  background:var(--brand-700);
+  color:#fff
+}
 .qty{grid-area:qty;display:flex;gap:8px;align-items:center;justify-self:end}
 .qty input{width:130px;padding:10px;border:1px solid var(--line);border-radius:10px}
-.result{grid-area:result;font-size:13px;color:var(--ink);padding:4px 2px 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.result .numbers{font-weight:600}
-.result .actions{display:flex;gap:6px;flex-wrap:wrap}
+.result{grid-area:result;font-size:13px;color:var(--ink);padding:4px 2px 6px}
 
 .divider{height:1px;background:var(--line);margin:12px 0}
 
+/* Alternância de fundo por família */
 .fam-0 .fam-head{background:var(--fam0-strong)} .fam-0 .fam-body .row:nth-child(even){background:var(--fam0-soft)}
 .fam-1 .fam-head{background:var(--fam1-strong)} .fam-1 .fam-body .row:nth-child(even){background:var(--fam1-soft)}
 .fam-2 .fam-head{background:var(--fam2-strong)} .fam-2 .fam-body .row:nth-child(even){background:var(--fam2-soft)}
@@ -80,4 +118,6 @@ header .spacer{flex:1}
 .fam-8 .fam-head{background:var(--fam8-strong)} .fam-8 .fam-body .row:nth-child(even){background:var(--fam8-soft)}
 .fam-9 .fam-head{background:var(--fam9-strong)} .fam-9 .fam-body .row:nth-child(even){background:var(--fam9-soft)}
 
-@media (max-width:640px){ .qty input{width:120px} }
+@media (max-width:640px){
+  .qty input{width:120px}
+}
