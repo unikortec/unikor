@@ -1,69 +1,140 @@
-// Entry renomeado: app.js (antes main.js)
-import { QRScanner } from './scanner.js';
+// ENTRADA única: app.js
+import { parseNFCe, shortKey, fileToBase64 } from './nfce.js';
 
-// evita dependência externa de utils
+// ---- Firebase Auth (usa a instância do portal se existir) ----
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+// Se você já tem window.UNIKOR_APP (portal/js/firebase.js), reaproveite:
+const CONFIG = window.UNIKOR_FIREBASE_CONFIG || {
+  apiKey: "AIzaSyC12s4PvUWtNxOlShPc7sXlzq4XWqlVo2w",
+  authDomain: "unikorapp.firebaseapp.com",
+  projectId: "unikorapp",
+  storageBucket: "unikorapp.appspot.com",
+  messagingSenderId: "329806123621",
+  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c"
+};
+const app = initializeApp(CONFIG);
+const auth = getAuth(app);
+
+// ---- DOM helpers ----
 const $ = (s)=>document.querySelector(s);
+const categoriaSel = $('#categoria');
+const btnScan = $('#btnScan');
+const btnFechar = $('#btnFechar');
+const btnSalvar = $('#btnSalvar');
+const xmlInput = $('#xml55');
+const scanArea = $('#scanArea');
+const preview = $('#preview');
 
-// Estado local minimal
-const STORAGE_KEY = 'despesas_itens';
-const load = ()=>{ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? []; } catch { return []; } };
-const save = (arr)=>localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-let itens = load();
+let UID = null;
+let draft = null;     // último documento retornado pela function
+let lastFnEndpoint = {
+  nfce: 'https://southamerica-east1-unikorapp.cloudfunctions.net/ingestNfceByQr',
+  nfe55:'https://southamerica-east1-unikorapp.cloudfunctions.net/ingestNfe55Xml'
+};
 
-function render(){
-  const ul = $('#lista');
-  if (!ul) return;
-  ul.innerHTML = itens.length
-    ? itens.map(i=>`<li class="list-item">
-        <div class="li-main"><strong>${i.titulo || 'Sem título'}</strong><div class="li-sub">${i.valor ?? ''}</div></div>
-        <button class="btn btn-xs" data-del="${i.id}">Excluir</button>
-      </li>`).join('')
-    : '<li class="list-empty">Sem lançamentos</li>';
+// ---- Auth flow ----
+onAuthStateChanged(auth, async (user)=>{
+  if (user){ UID = user.uid; return; }
+  await signInAnonymously(auth);
+});
 
-  ul.querySelectorAll('[data-del]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = btn.getAttribute('data-del');
-      itens = itens.filter(x=>String(x.id)!==String(id));
-      save(itens); render();
-    };
-  });
+// ---- QR scanner (html5-qrcode) ----
+let scanner = null;
+btnScan.onclick = async ()=>{
+  scanArea.hidden = false;
+  if (!scanner){
+    // @ts-ignore
+    scanner = new Html5Qrcode("qrReader");
+  }
+  try{
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: 260 },
+      async (decodedText)=>{
+        await handleQr(decodedText);
+        await stopScanner();
+      }
+    );
+  }catch(e){
+    alert('Não foi possível iniciar a câmera.');
+  }
+};
+btnFechar.onclick = stopScanner;
+async function stopScanner(){
+  if (scanner){ try{ await scanner.stop(); }catch{} }
+  scanArea.hidden = true;
 }
 
-async function startScanner(){
-  const ov = $('#scanOverlay');
-  const video = $('#scanVideo');
-  const closeBtn = $('#scanClose');
+// ---- XML 55 upload ----
+xmlInput.onchange = async (ev)=>{
+  const file = ev.target.files?.[0]; if (!file) return;
+  if (!UID){ alert('Aguarde autenticação.'); return; }
+  const category = categoriaSel.value || 'OUTROS';
+  const b64 = await fileToBase64(file);
 
-  ov.hidden = false;
+  const accessKeyGuess = (file.name.match(/\d{44}/)?.[0]) || prompt('Chave de acesso (44 dígitos):') || '';
+  if (accessKeyGuess.length !== 44){ alert('Chave inválida.'); return; }
 
-  const scanner = new QRScanner(video, (text)=>{
-    // exemplo de payload simples {"titulo":"NF 123","valor":"R$ 45,90"}
-    try{
-      const data = JSON.parse(text);
-      itens.unshift({
-        id: Date.now(),
-        titulo: data.titulo || text.slice(0,50),
-        valor: data.valor || ''
-      });
-    }catch{
-      itens.unshift({ id: Date.now(), titulo: text, valor: '' });
-    }
-    save(itens);
-    render();
-    scanner.stop();
-    ov.hidden = true;
+  const r = await fetch(lastFnEndpoint.nfe55, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      uid: UID,
+      category,
+      accessKey: accessKeyGuess,
+      xmlBase64: b64
+    })
   });
+  if(!r.ok){ alert('Falha ao importar XML 55'); return; }
+  const js = await r.json();
+  draft = js.doc;
+  showPreview(js.doc);
+};
 
-  await scanner.start();
+// ---- QR handler ----
+async function handleQr(text){
+  const parsed = parseNFCe(text);
+  if (!parsed){ alert('QR NFC-e inválido.'); return; }
+  if (!UID){ alert('Aguarde autenticação.'); return; }
+  const category = categoriaSel.value || 'OUTROS';
 
-  closeBtn.onclick = ()=>{
-    scanner.stop();
-    ov.hidden = true;
-  };
+  const r = await fetch(lastFnEndpoint.nfce, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      uid: UID,
+      category,
+      qrUrl: parsed.raw,
+      accessKey: parsed.accessKey
+    })
+  });
+  if(!r.ok){ alert('Falha ao importar NFC-e'); return; }
+  const js = await r.json();
+  draft = js.doc;
+  showPreview(js.doc);
 }
 
-// Binds
-$('#btnScan')?.addEventListener('click', startScanner);
-$('#btnSync')?.addEventListener('click', ()=>alert('Sincronização com Firestore: em breve 👷'));
+function showPreview(doc){
+  const lines = [];
+  lines.push(`Modelo: ${doc.model}  •  Chave: ${shortKey(doc.accessKey)}`);
+  if (doc.emitter?.name) lines.push(`Emitente: ${doc.emitter.name}`);
+  if (doc.emitter?.cnpj) lines.push(`CNPJ: ${doc.emitter.cnpj}`);
+  if (doc.date) lines.push(`Data: ${doc.date}`);
+  if (doc.payment?.amount) lines.push(`Total: R$ ${Number(doc.payment.amount).toFixed(2)}`);
+  lines.push('');
+  lines.push('Itens:');
+  for(const it of (doc.items||[])){
+    lines.push(`- ${it.description}  •  ${it.qty} ${it.unit} × ${it.unitPrice?.toFixed?.(2) ?? it.unitPrice} = ${Number(it.lineTotal||0).toFixed(2)}`);
+  }
+  preview.textContent = lines.join('\n');
+}
 
-render();
+// ---- Salvar/ajustar (update do doc criado pela function) ----
+// Aqui, como a function já grava, o "Salvar" fica para ajustes futuros.
+// Você pode estender para editar/atualizar campos do draft no Firestore via REST/SDK.
+btnSalvar.onclick = ()=>{
+  if (!draft){ alert('Importe uma NFC-e (QR) ou XML 55 primeiro.'); return; }
+  alert('Dados importados e salvos. Se quiser, implemento a tela de edição para atualizar o Firestore.');
+};
