@@ -1,5 +1,6 @@
+// app/estoque/js/catalog.js
 import { fmt3, round3 } from "./constants.js";
-import { catalogo, sessao, syncSave } from "./store.js";
+import { catalogo, sessao, persist } from "./store.js";
 
 export const FAMILIAS = [
   { nome:"BOVINO GANCHO", itens:["CASADO GANCHO","DIANTEIRO GANCHO","COSTELA GANCHO","CHULETA GANCHO","COXA GANCHO"]},
@@ -14,65 +15,66 @@ export const FAMILIAS = [
   { nome:"SUINO", itens:["CARRE SUINO","COSTELINHA SUINA","FILEZINHO SUINO","PALETA SUINA","PERNIL SUINO","SOBREPALETA SUINA"]},
 ];
 
-export const PADROES = Object.fromEntries(FAMILIAS.map(f=>[f.nome,new Set(f.itens)]));
+export const PADROES = Object.fromEntries(FAMILIAS.map(f => [f.nome, new Set(f.itens)]));
 
+// ---- helpers de catálogo/sessão ----
 export function ensureCatalogEntry(fam, prod){
   catalogo[fam] ??= {};
-  catalogo[fam][prod] ??= { RESFRIADO_KG:0, CONGELADO_KG:0 };
-  syncSave();
+  catalogo[fam][prod] ??= { RESFRIADO_KG: 0, CONGELADO_KG: 0 };
+  persist();
 }
 
 export function ensureSessaoEntry(fam, prod){
   sessao[fam] ??= {};
-  sessao[fam][prod] ??= { RESFRIADO_KG:0, CONGELADO_KG:0 };
-  syncSave();
+  sessao[fam][prod] ??= { RESFRIADO_KG: 0, CONGELADO_KG: 0 };
+  persist();
 }
 
 export function getSessao(fam, prod){
-  return (sessao[fam]?.[prod]) || { RESFRIADO_KG:0, CONGELADO_KG:0 };
+  return (sessao[fam]?.[prod]) || { RESFRIADO_KG: 0, CONGELADO_KG: 0 };
 }
 
 export function setSessaoKg(fam, prod, tipo, kg){
   ensureSessaoEntry(fam, prod);
-  if(tipo === "RESFRIADO") sessao[fam][prod].RESFRIADO_KG = round3(+kg||0);
-  else                     sessao[fam][prod].CONGELADO_KG = round3(+kg||0);
-  syncSave();
+  if (tipo === "RESFRIADO") sessao[fam][prod].RESFRIADO_KG = round3(+kg || 0);
+  else                      sessao[fam][prod].CONGELADO_KG = round3(+kg || 0);
+  persist();
 }
 
 export function editBothKg(fam, prod, rk, ck){
   ensureSessaoEntry(fam, prod);
-  sessao[fam][prod].RESFRIADO_KG = round3(+rk||0);
-  sessao[fam][prod].CONGELADO_KG = round3(+ck||0);
-  syncSave();
+  sessao[fam][prod].RESFRIADO_KG = round3(+rk || 0);
+  sessao[fam][prod].CONGELADO_KG = round3(+ck || 0);
+  persist();
 }
 
 export function clearItem(fam, prod){
-  if(sessao[fam]?.[prod]){
-    sessao[fam][prod] = { RESFRIADO_KG:0, CONGELADO_KG:0 };
-    syncSave();
+  if (sessao[fam]?.[prod]) {
+    sessao[fam][prod] = { RESFRIADO_KG: 0, CONGELADO_KG: 0 };
+    persist();
   }
 }
 
+// remove do catálogo **apenas** se não for item padrão
 export function deleteIfCustom(fam, prod){
-  // só remove do catálogo se não for padrão da família
-  if(!PADROES[fam]?.has(prod)){
-    delete catalogo[fam]?.[prod];
-    delete sessao[fam]?.[prod];
-    syncSave();
+  if (!PADROES[fam]?.has(prod)) {
+    if (catalogo[fam]) delete catalogo[fam][prod];
+    if (sessao[fam])   delete sessao[fam][prod];
+    persist();
     return true;
   }
   return false;
 }
 
 export function itensDigitadosDaFamilia(fam){
-  const prods = Object.keys(catalogo[fam]||{});
-  return prods.filter(p=>{
+  const prods = Object.keys(catalogo[fam] || {});
+  return prods.filter(p => {
     const v = sessao[fam]?.[p];
-    return v && ((v.RESFRIADO_KG||0)>0 || (v.CONGELADO_KG||0)>0);
+    return v && ((v.RESFRIADO_KG || 0) > 0 || (v.CONGELADO_KG || 0) > 0);
   }).sort();
 }
 
 export function resumoTexto(fam, prod){
   const s = getSessao(fam, prod);
-  return `Resfriado ${fmt3(s.RESFRIADO_KG)} kg / Congelado ${fmt3(s.CONGELADO_KG)} kg`;
+  return `Resfriado ${fmt3(s.RESFRIADO_KG)} kg | Congelado ${fmt3(s.CONGELADO_KG)} kg`;
 }
