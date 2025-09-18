@@ -1,25 +1,20 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Estoque V1.0.1</title>
 
-  <link rel="manifest" href="./manifest.json" />
-  <meta name="apple-mobile-web-app-title" content="Unikor Estoque" />
-  <meta name="theme-color" content="#0b7a33" />
+  <link rel="icon" type="image/svg+xml" href="../../assets/logo/unikor-logo.svg" />
+  <link rel="manifest" href="./js/manifest.json" />
+  <meta name="theme-color" content="#1e7f46"/>
 
-  <!-- ícones (os mesmos do portal) -->
-  <link rel="icon" type="image/png" href="./favicon-96x96.png" sizes="96x96" />
-  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <link rel="shortcut icon" href="./favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
-
-  <!-- css do app -->
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="../shared.css">
+  <link rel="stylesheet" href="../shared-header.css">
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <h1>Estoque V1.0.1</h1>
     <div class="spacer"></div>
     <div class="toolbar">
@@ -34,11 +29,18 @@
 
   <div class="wrap" id="app"></div>
 
-  <!-- libs -->
+  <!-- libs necessárias pelos módulos -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-  <!-- entrada do app -->
+  <!-- app -->
   <script type="module" src="./js/main.js"></script>
+
+  <!-- SW local do módulo -->
+  <script>
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  </script>
 </body>
 </html>
