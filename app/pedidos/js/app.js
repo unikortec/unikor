@@ -1,8 +1,19 @@
 import { db, ensureAnonAuth } from './firebase.js';
 import {
-  doc, getDoc, setDoc, updateDoc, serverTimestamp
+  collection, doc, getDoc, setDoc, updateDoc,
+  serverTimestamp, orderBy, query, limit
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { ensureTenant } from "../../../js/guard.js"; // <- NOVO
 
+// helpers de caminho multi-tenant
+async function colPedidos(){
+  const t = await ensureTenant();
+  return collection(db, `tenants/${t}/pedidos`);
+}
+async function refPedido(id){
+  const t = await ensureTenant();
+  return doc(db, `tenants/${t}/pedidos/${id}`);
+}
 const $ = (id)=>document.getElementById(id);
 const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
 const parseMoney=(s)=>Number((s||"0").toString().replace(/\./g,'').replace(',','.'))||0;
