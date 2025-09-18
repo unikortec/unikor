@@ -1,9 +1,10 @@
-import { dtFile, fmt3, round3, brl, dtLabel } from "./constants.js";
+import { fmt3, round3, dtLabel } from "./constants.js";
 import { FAMILIAS, itensDigitadosDaFamilia } from "./catalog.js";
-import { getMinKg, getPriceKg } from "./prices.js";
+import { getPriceKg, getMinKg } from "./prices.js";
 import { sessao, ultimo } from "./store.js";
 
-const PALETAS=[
+/* ===== Helpers ===== */
+const PALETAS = [
   {soft:'#ecfdf5',strong:'#10b981'},
   {soft:'#f0fdf4',strong:'#22c55e'},
   {soft:'#f7fee7',strong:'#84cc16'},
@@ -15,21 +16,23 @@ const PALETAS=[
   {soft:'#f1f5f9',strong:'#334155'},
   {soft:'#fff1f2',strong:'#f43f5e'}
 ];
-
 const hex2rgb=h=>{h=h.replace('#','');return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}};
 
 function headerCell2(doc, text, xCenter, topY, boxH, maxW){
   const lines = doc.splitTextToSize(String(text).replace(/\s*\n\s*/g,'\n'), maxW).slice(0,2);
-  const lh = 12; const totH = lines.length*lh; const startY = topY + (boxH - totH)/2 + 2;
+  const lh = 12;
+  const totH = lines.length*lh;
+  const startY = topY + (boxH - totH)/2 + 2;
   lines.forEach((ln,i)=>doc.text(ln, xCenter, startY + i*lh, {align:'center'}));
   return topY + boxH;
 }
 
+/* ===== Snapshot ===== */
 export function snapshotFromSession(){
   const s={};
   for(const fam of FAMILIAS){
     const famName=fam.nome;
-    const prods = Object.keys((window.__catalogoRef || {})[famName]||{});
+    const prods = Object.keys(sessao[famName]||{});
     for(const p of prods){
       const v = sessao[famName]?.[p];
       if(!v) continue;
@@ -41,19 +44,19 @@ export function snapshotFromSession(){
   }
   return s;
 }
-
 export function snapshotNow(){
   const now = new Date();
   return {dateISO:now.toISOString(), dateLabel:dtLabel(now), data:snapshotFromSession()};
 }
 
+/* ===== PDF: ESTOQUE DO DIA (sem logo) ===== */
 export async function pdfEstoqueBlob(){
   const { jsPDF } = window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
   const W=doc.internal.pageSize.getWidth();
   const margin=36; let y=margin;
 
-  // Título (sem logo)
+  // Título + data (sem logo)
   doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text('ESTOQUE DO DIA', W/2, y+10, {align:'center'});
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -64,19 +67,22 @@ export async function pdfEstoqueBlob(){
   const colW = (W - margin*2) / cols;
   const X = (i)=> margin + colW*(i+0.5);
 
-  // header faixa verde Unikor
+  // barra Unikor #1e7f46
   const headerTop = y, headerBoxH = 30;
-  doc.setFillColor(14,165,166);
+  doc.setFillColor(30,127,70); // #1e7f46
   doc.rect(margin, headerTop, W - margin*2, headerBoxH, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.setFont('helvetica','bold'); 
+  doc.setFontSize(11);
   doc.setTextColor(255,255,255);
-  doc.text('PRODUTO',         X(0), headerTop + 20, {align:'center'});
-  doc.text('SOMA (KG)',       X(1), headerTop + 20, {align:'center'});
-  doc.text('ESTOQUE MÍNIMO',  X(2), headerTop + 20, {align:'center'});
-  doc.text('SUGESTÃO COMPRA', X(3), headerTop + 20, {align:'center'});
+  doc.text('PRODUTO',          X(0), headerTop + 20, {align:'center'});
+  doc.text('SOMA (KG)',        X(1), headerTop + 20, {align:'center'});
+  doc.text('ESTOQUE MÍNIMO',   X(2), headerTop + 20, {align:'center'});
+  doc.text('SUGESTÃO COMPRA',  X(3), headerTop + 20, {align:'center'});
 
   y = headerTop + headerBoxH + 6;
-  doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setTextColor(0,0,0);
+  doc.setFont('helvetica','normal'); 
+  doc.setFontSize(9);
 
   for(let i=0;i<FAMILIAS.length;i++){
     const fam=FAMILIAS[i].nome;
@@ -91,9 +97,12 @@ export async function pdfEstoqueBlob(){
     doc.setFillColor(soft.r,soft.g,soft.b); 
     doc.rect(margin,y,W-margin*2,22,'F');
     doc.setTextColor(strong.r,strong.g,strong.b); 
-    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.setFont('helvetica','bold'); 
+    doc.setFontSize(13);
     doc.text(fam, W/2, y+15, {align:'center'});
-    doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(9);
+    doc.setTextColor(0,0,0);
+    doc.setFont('helvetica','normal'); 
+    doc.setFontSize(9);
     y+=28;
 
     let sumR=0,sumC=0,sumM=0, sumSug=0;
@@ -133,7 +142,7 @@ export async function pdfEstoqueBlob(){
     doc.setFillColor(216,243,226);
     doc.rect(margin,y-8,W-margin*2,20,'F');
     doc.setFont('helvetica','bold');
-    doc.text('TOTAL', X(0), y+4, {align:'center'});
+    doc.text('TOTAL',     X(0), y+4, {align:'center'});
     doc.text(fmt3(round3(sumR+sumC)), X(1), y+4, {align:'center'});
     doc.text(fmt3(sumM),  X(2), y+4, {align:'center'});
     doc.text(fmt3(sumSug),X(3), y+4, {align:'center'});
@@ -143,6 +152,7 @@ export async function pdfEstoqueBlob(){
   return doc.output('blob');
 }
 
+/* ===== PDF: POSIÇÃO (R$) (sem logo) ===== */
 export async function pdfPosicaoBlob(){
   const { jsPDF } = window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
@@ -161,12 +171,16 @@ export async function pdfPosicaoBlob(){
   const X = (i)=> margin + colW*(i+0.5);
 
   const headerTop = y, headerBoxH = 26;
+  doc.setFillColor(30,127,70); // barra Unikor
+  doc.rect(margin, headerTop, W - margin*2, headerBoxH, 'F');
+  doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
   y = headerCell2(doc, 'PRODUTOS', X(0), headerTop, headerBoxH, colW-16);
   headerCell2(doc, `${lastLabel} ESTOQUE`, X(1), headerTop, headerBoxH, colW-16);
   headerCell2(doc, `${lastLabel} VALOR`,   X(2), headerTop, headerBoxH, colW-16);
   headerCell2(doc, 'ESTOQUE\nATUAL',       X(3), headerTop, headerBoxH, colW-16);
   headerCell2(doc, 'VALOR\nESTOQUE',       X(4), headerTop, headerBoxH, colW-16);
+  doc.setTextColor(0,0,0);
   y += 10; doc.line(margin,y,W-margin,y); y+=8;
   doc.setFont('helvetica','normal'); doc.setFontSize(9);
 
@@ -205,9 +219,9 @@ export async function pdfPosicaoBlob(){
 
       doc.text(p, X(0), y, {align:'center'});
       doc.text(`${fmt3(lastKg)} KG`, X(1), y, {align:'center'});
-      doc.text(brl(lastVal),        X(2), y, {align:'center'});
+      doc.text(lastVal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}), X(2), y, {align:'center'});
       doc.text(`${fmt3(nowKg)} KG`, X(3), y, {align:'center'});
-      doc.text(brl(nowVal),         X(4), y, {align:'center'});
+      doc.text(nowVal.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),  X(4), y, {align:'center'});
 
       sumLastKG+=lastKg; sumLastR$+=lastVal; sumNowKG+=nowKg; sumNowR$+=nowVal;
       y+=16;
@@ -216,11 +230,11 @@ export async function pdfPosicaoBlob(){
     doc.setFillColor(235, 250, 240); 
     doc.rect(margin,y-10,W-margin*2,18,'F');
     doc.setFont('helvetica','bold');
-    doc.text('TOTAL',              X(0), y, {align:'center'});
-    doc.text(`${fmt3(sumLastKG)} KG`, X(1), y, {align:'center'});
-    doc.text(brl(sumLastR$),      X(2), y, {align:'center'});
-    doc.text(`${fmt3(sumNowKG)} KG`,  X(3), y, {align:'center'});
-    doc.text(brl(sumNowR$),       X(4), y, {align:'center'});
+    doc.text('TOTAL',                X(0), y, {align:'center'});
+    doc.text(`${fmt3(sumLastKG)} KG`,X(1), y, {align:'center'});
+    doc.text(sumLastR$.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}), X(2), y, {align:'center'});
+    doc.text(`${fmt3(sumNowKG)} KG`, X(3), y, {align:'center'});
+    doc.text(sumNowR$.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),  X(4), y, {align:'center'});
     doc.setFont('helvetica','normal'); y+=18;
   }
   return doc.output('blob');
