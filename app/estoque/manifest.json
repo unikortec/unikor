@@ -1,5 +1,5 @@
 {
-  "name": "Estoque V1.0.1",
+  "name": "Estoque V1.0.2",
   "short_name": "Estoque",
   "id": "/app/estoque/",
   "start_url": "/app/estoque/",
@@ -10,7 +10,9 @@
   "background_color": "#ffffff",
   "description": "PWA de estoque Unikor com posição (R$) e planilha de preços.",
   "icons": [
-    { "src": "/assets/logo/unikor-logo.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/assets/logo/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/logo/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/assets/logo/apple-touch-icon.png",       "sizes": "180x180", "type": "image/png" }
   ],
   "prefer_related_applications": false
 }
