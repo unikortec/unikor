@@ -1,76 +1,133 @@
-// portal/apps/despesas/sw.js
-// Força update: skipWaiting + clients.claim + network-first p/ navegações
-const CACHE_VERSION = 'v3'; // <-- se mudar assets, incremente aqui
-const CACHE = `unikor-despesas-${CACHE_VERSION}`;
-const CORE_ASSETS = [
+// Service Worker — DESPESAS v1 (entry=app.js)
+// Estratégias:
+// - Precaching (assets locais)
+// - Navegação: network-first (+ navigation preload) com fallback offline
+// - CDNs: stale-while-revalidate
+// - Outros same-origin: network com fallback cache
+// - Atualização forçada via postMessage {type:'SKIP_WAITING'}
+
+const APP_VERSION  = '1.0.0';
+const CACHE_TAG    = 'despesas';
+const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
+const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
+const OFFLINE_URL  = './index.html';
+
+// ATENÇÃO: entry agora é js/app.js (antes js/main.js)
+const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+
+  // JS
   './js/app.js',
-  './js/drive.js',
-  './js/nfe.js',
-  './js/store.js',
+  './js/scanner.js',
+
+  // CSS
+  './css/style.css',
 ];
+
+async function putInCache(cacheName, req, res) {
+  try { const c = await caches.open(cacheName); await c.put(req, res); } catch {}
+}
+async function limitCache(cacheName, max = 150) {
+  try {
+    const c = await caches.open(cacheName);
+    const keys = await c.keys();
+    while (keys.length > max) await c.delete(keys.shift());
+  } catch {}
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
-    const c = await caches.open(CACHE);
-    await c.addAll(CORE_ASSETS);
+    const cache = await caches.open(STATIC_CACHE);
+    await cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })));
+    self.skipWaiting();
   })());
-  // entra em ação imediatamente na próxima navegação
-  self.skipWaiting();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
-    // limpa caches antigos
-    const names = await caches.keys();
-    await Promise.all(names.map(n => (n.startsWith('unikor-despesas-') && n !== CACHE) ? caches.delete(n) : undefined));
+    if ('navigationPreload' in self.registration) {
+      try { await self.registration.navigationPreload.enable(); } catch {}
+    }
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter(k => k.startsWith(`${CACHE_TAG}-`) && ![STATIC_CACHE, DYN_CACHE].includes(k))
+        .map(k => caches.delete(k))
+    );
     await self.clients.claim();
   })());
 });
 
-// opcional: permitir pular waiting via mensagem
-self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
-});
-
-// Estratégia:
-// - Navegações (HTML): network-first com no-store (pega versão nova do app); fallback cache quando offline
-// - Outros assets: cache-first
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
+  const { request } = event;
+  if (request.method !== 'GET') return;
 
-  // HTML / navegações
-  if (req.mode === 'navigate' || (req.destination === 'document')) {
+  const url = new URL(request.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  // Navegação
+  if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        // sempre tentar rede sem usar cache do browser
-        const fresh = await fetch(req, { cache: 'no-store' });
-        const cache = await caches.open(CACHE);
-        cache.put('./', fresh.clone()); // mantém um shell
-        return fresh;
+        const preload = 'preloadResponse' in event ? await event.preloadResponse : null;
+        if (preload) {
+          putInCache(STATIC_CACHE, './', preload.clone());
+          return preload;
+        }
+        const net = await fetch(request);
+        putInCache(STATIC_CACHE, './', net.clone());
+        return net;
       } catch {
-        // se offline, tentar cache
-        const cached = await caches.match('./');
-        return cached || new Response('Offline', { status: 200 });
+        return (await caches.match('./')) || (await caches.match(OFFLINE_URL));
       }
     })());
     return;
   }
 
-  // Demais arquivos: cache-first
+  // Estáticos precacheados
+  if (sameOrigin) {
+    const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./', '/')));
+    if (isPrecached) {
+      event.respondWith((async () => {
+        const cached = await caches.match(request, { ignoreSearch: true });
+        if (cached) return cached;
+        const net = await fetch(request);
+        putInCache(STATIC_CACHE, request, net.clone());
+        return net;
+      })());
+      return;
+    }
+  }
+
+  // CDNs / terceiros
+  const isCDN = /(^|\.)(?:gstatic|googleapis|jsdelivr|unpkg|cloudflare|cdnjs)\.com$/i.test(url.hostname);
+  if (!sameOrigin || isCDN) {
+    event.respondWith((async () => {
+      const cached = await caches.match(request);
+      const fetchPromise = fetch(request)
+        .then(res => { putInCache(DYN_CACHE, request, res.clone()); limitCache(DYN_CACHE); return res; })
+        .catch(() => null);
+      return cached || (await fetchPromise) || new Response('', { status: 504, statusText: 'Offline' });
+    })());
+    return;
+  }
+
+  // Demais same-origin
   event.respondWith((async () => {
-    const cached = await caches.match(req);
-    if (cached) return cached;
     try {
-      const res = await fetch(req);
-      const cache = await caches.open(CACHE);
-      cache.put(req, res.clone());
-      return res;
+      const net = await fetch(request);
+      putInCache(DYN_CACHE, request, net.clone());
+      limitCache(DYN_CACHE);
+      return net;
     } catch {
-      // offline e sem cache
-      return new Response('Offline', { status: 200 });
+      const cached = await caches.match(request, { ignoreSearch: true });
+      return cached || new Response('', { status: 504, statusText: 'Offline' });
     }
   })());
 });
