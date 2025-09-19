@@ -1,19 +1,41 @@
 {
   "indexes": [
     {
-      "collectionGroup": "expenses",
-      "queryScope": "COLLECTION_GROUP",
+      "collectionGroup": "pedidos",
+      "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "category", "order": "ASCENDING" },
-        { "fieldPath": "date",     "order": "DESCENDING" }
+        { "fieldPath": "dataEntregaISO", "order": "DESCENDING" },
+        { "fieldPath": "createdAt",      "order": "DESCENDING" },
+        { "fieldPath": "__name__",       "order": "ASCENDING"  }
       ]
     },
     {
-      "collectionGroup": "expenses",
-      "queryScope": "COLLECTION_GROUP",
+      "collectionGroup": "pedidos",
+      "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "date",   "order": "DESCENDING" }
+        { "fieldPath": "status",         "order": "ASCENDING"  },
+        { "fieldPath": "dataEntregaISO", "order": "DESCENDING" },
+        { "fieldPath": "createdAt",      "order": "DESCENDING" },
+        { "fieldPath": "__name__",       "order": "ASCENDING"  }
+      ]
+    },
+    {
+      "collectionGroup": "historico_precos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cliente", "order": "ASCENDING"  },
+        { "fieldPath": "data",    "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "historico_precos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cliente", "order": "ASCENDING"  },
+        { "fieldPath": "produto", "order": "ASCENDING"  },
+        { "fieldPath": "data",    "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
     }
   ],
