@@ -1,8 +1,83 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{db}/documents {
-    match /users/{uid}/expenses/{docId} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+  match /databases/{database}/documents {
+
+    // ---------- Helpers ----------
+    function isAuthed() {
+      return request.auth != null;
+    }
+    function userRole() {
+      return isAuthed() && request.auth.token.role != null
+        ? request.auth.token.role
+        : "geral";
+    }
+    function isAdmin() {
+      return userRole() == "admin" || userRole() == "master";
+    }
+
+    // ---------- CLIENTES ----------
+    // leitura por usuários logados; criação/edição por logados; delete só admin
+    match /clientes/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAuthed();
+      allow update:  if isAuthed();
+      allow delete:  if isAdmin();
+    }
+
+    // ---------- HISTÓRICO DE PREÇOS ----------
+    // leitura por logados; criação por logados; sem update/delete
+    match /historico_precos/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAuthed();
+      allow update:  if false;
+      allow delete:  if false;
+    }
+
+    // ---------- PEDIDOS ----------
+    // leitura, criação e edição por logados; exclusão só admin/master
+    // Observação: o teu app (Pedidos/Relatórios) atualiza vários campos
+    // (itens, totalPedido, pagamento, cupomFiscal, entrega.tipo, etc.),
+    // então manter update aberto para usuários logados evita erro de permissão.
+    match /pedidos/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAuthed();
+      allow update:  if isAuthed();
+      allow delete:  if isAdmin();
+    }
+
+    // ---------- INVENTORY ----------
+    // Mantido mais restritivo (ajusta conforme o módulo estiver pronto)
+    match /inventory/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAuthed();
+      allow update:  if isAuthed();
+      allow delete:  if false;
+    }
+
+    // ---------- HISTORY ----------
+    match /history/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAuthed();
+      allow update:  if false;
+      allow delete:  if false;
+    }
+
+    // ---------- DESPESAS ----------
+    match /despesas/{docId} {
+      allow read:    if isAuthed();
+      allow create:  if isAdmin();
+      allow update:  if isAdmin();
+      allow delete:  if isAdmin();
+    }
+
+    // ---------- CRM (placeholders para futuro) ----------
+    match /crm_contatos/{docId} { allow read: if isAuthed(); allow write: if isAdmin(); }
+    match /crm_leads/{docId}    { allow read: if isAuthed(); allow write: if isAdmin(); }
+    match /metrics/{docId}      { allow read: if isAdmin();  allow write: if false; }
+
+    // ---------- Bloqueio padrão ----------
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
