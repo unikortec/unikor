@@ -57,3 +57,19 @@ export function requireAuth({ roles = null, onReady }) {
     onReady?.({ user, role, token });
   });
 }
+// Retorna tenantId do token; se ausente, usa domínio do e-mail (ex.: unikor.com.br → "unikor")
+export async function getTenantIdFrom(userOrNull) {
+  const user = userOrNull;
+  if (!user) return "unikor"; // fallback seguro
+
+  try {
+    const token = await user.getIdTokenResult(true);
+    if (token?.claims?.tenantId) return token.claims.tenantId;
+  } catch {}
+
+  // fallback por domínio
+  const email = user.email || "";
+  const domain = email.split("@")[1] || "";
+  const tenant = (domain.split(".")[0] || "unikor").toLowerCase().replace(/[^a-z0-9_-]/g,"");
+  return tenant || "unikor";
+}
