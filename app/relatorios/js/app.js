@@ -1,16 +1,35 @@
+// app/relatorios/js/app.js
 import { db, ensureAnonAuth } from '../../pedidos/js/firebase.js';
 import {
   collection, query, where, orderBy, limit, getDocs,
   doc, getDoc, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { ensureTenant, getClaims } from "../../../js/guard.js";
 
 const $=(id)=>document.getElementById(id);
 const moneyBR=(n)=> (Number(n||0)).toFixed(2).replace('.',',');
 const parseMoney=(s)=>Number((s||"0").toString().replace(/\./g,'').replace(',','.'))||0;
 
-let __rows=[]; let __currentId=null;
+let __rows=[]; let __currentId=null; let __canDelete=false;
 
-// spinner
+/* ===== coleção multi-tenant ===== */
+async function colPedidos(){
+  const t = await ensureTenant();
+  return collection(db, `tenants/${t}/pedidos`);
+}
+async function refPedido(id){
+  const t = await ensureTenant();
+  return doc(db, `tenants/${t}/pedidos/${id}`);
+}
+
+/* ===== permissão de excluir ===== */
+(async () => {
+  const claims = await getClaims(true);
+  const role = claims.role || 'geral';
+  __canDelete = (role === 'admin' || role === 'master');
+})();
+
+/* ===== spinner ===== */
 function setLoading(btn, is, idle){
   const lbl = btn.querySelector('.lbl');
   if (is){
@@ -25,16 +44,21 @@ function setLoading(btn, is, idle){
 }
 const nextFrame=()=>new Promise(r=>setTimeout(r,0));
 
-// render
+/* ===== render ===== */
 function toBR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
 function renderRows(list){
   const tbody=$('tbody'); let total=0;
-  if (!list.length){ tbody.innerHTML=`<tr><td colspan="9">Sem resultados.</td></tr>`; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; return; }
+  if (!list.length){
+    tbody.innerHTML=`<tr><td colspan="9">Sem resultados.</td></tr>`;
+    $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00';
+    return;
+  }
 
   const rows = list.map(r=>{
     total += Number(r.totalPedido||0);
     const cupom = (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : '–';
     const tipo  = ((r.entrega?.tipo||'').toUpperCase()==='RETIRADA'?'RETIRADA':'ENTREGA');
+    const delBtn = __canDelete ? `<button class="btn danger btn-cancel" data-id="${r.id}">×</button>` : '';
     return `<tr data-id="${r.id}">
       <td>${toBR(r.dataEntregaISO)||''}</td>
       <td>${r.horaEntrega||''}</td>
@@ -44,7 +68,7 @@ function renderRows(list){
       <td>${tipo}</td>
       <td>${r.pagamento||''}</td>
       <td>${cupom}</td>
-      <td><button class="btn danger btn-cancel" data-id="${r.id}">×</button></td>
+      <td>${delBtn}</td>
     </tr>`;
   });
   tbody.innerHTML = rows.join('');
@@ -52,14 +76,15 @@ function renderRows(list){
   $('ftTotal').textContent = `R$ ${moneyBR(total)}`;
 }
 
-// busca
+/* ===== busca ===== */
 async function buscar(){
   await ensureAnonAuth();
   const di=$('fDataIni').value, df=$('fDataFim').value;
   const cliente=($('fCliente').value||'').trim().toUpperCase();
   const tipoSel=($('fTipo').value||'').trim();
 
-  let ref=collection(db,'pedidos'); let qRef;
+  const ref = await colPedidos();
+  let qRef;
   if (di||df){
     const wh=[]; if (di) wh.push(where('dataEntregaISO','>=',di)); if (df) wh.push(where('dataEntregaISO','<=',df));
     qRef = query(ref, ...wh, orderBy('dataEntregaISO','desc'), limit(1000));
@@ -76,7 +101,7 @@ async function buscar(){
   __rows=out; renderRows(out);
 }
 
-// editar
+/* ===== modal editar ===== */
 function openModal(){ const m=$('modalBackdrop'); m.style.display='flex'; m.setAttribute('aria-hidden','false'); }
 function closeModal(){ const m=$('modalBackdrop'); m.style.display='none'; m.setAttribute('aria-hidden','true'); __currentId=null; $('itemsBody').innerHTML=''; }
 function recalcTotal(){
@@ -108,8 +133,7 @@ function addItemRow(it={}){
 async function carregarPedidoEmModal(id){
   await ensureAnonAuth();
   __currentId=id;
-  const ref=doc(db,'pedidos',id);
-  const s=await getDoc(ref);
+  const s=await getDoc(await refPedido(id));
   if (!s.exists()) return alert('Pedido não encontrado.');
   const r={ id:s.id, ...s.data() };
 
@@ -148,7 +172,7 @@ async function salvarEdicao(){
     itens, totalPedido:Number(total.toFixed(2)),
     updatedAt: serverTimestamp()
   };
-  await updateDoc(doc(db,'pedidos',__currentId), payload);
+  await updateDoc(await refPedido(__currentId), payload);
   closeModal();
   const idx=__rows.findIndex(x=>x.id===__currentId);
   if (idx>=0) __rows[idx]={ ...__rows[idx], ...payload };
@@ -156,12 +180,13 @@ async function salvarEdicao(){
   alert('Pedido atualizado.');
 }
 
-// excluir (atenção às Rules)
+/* ===== excluir ===== */
 async function excluirPedido(id){
   await ensureAnonAuth();
+  if (!__canDelete){ return alert('Sem permissão para excluir.'); }
   if (!confirm('Gostaria de excluir o pedido?')) return;
   try{
-    await deleteDoc(doc(db,'pedidos',id));
+    await deleteDoc(await refPedido(id));
     __rows = __rows.filter(x=>x.id!==id);
     renderRows(__rows);
     alert('Pedido excluído.');
@@ -170,7 +195,7 @@ async function excluirPedido(id){
   }
 }
 
-// xlsx
+/* ===== XLSX ===== */
 async function exportarXLSX(){
   if (!__rows.length) return alert('Nada para exportar.');
   const btn=$('btnXLSX'); setLoading(btn,true,'Exportar XLSX');
@@ -197,7 +222,7 @@ async function exportarXLSX(){
   } finally { setLoading(btn,false,'Exportar XLSX'); }
 }
 
-// pdf (detalhado opcional)
+/* ===== PDF ===== */
 async function exportarPDF(){
   if (!__rows.length) return alert('Nada para gerar.');
   const btn=$('btnPDF'); setLoading(btn,true,'Gerar PDF');
@@ -261,7 +286,7 @@ async function exportarPDF(){
   } finally { setLoading(btn,false,'Gerar PDF'); }
 }
 
-// eventos
+/* ===== eventos ===== */
 $('btnBuscar').onclick=buscar;
 $('btnLimpar').onclick=()=>{ ['fDataIni','fDataFim','fCliente'].forEach(i=>$(i).value=''); $('fTipo').value=''; $('tbody').innerHTML=''; __rows=[]; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; };
 $('btnXLSX').onclick=exportarXLSX;
@@ -277,4 +302,4 @@ $('btnAddItem').onclick = ()=> addItemRow({});
 $('btnSalvar').onclick  = ()=> salvarEdicao();
 
 await ensureAnonAuth();
-// buscar(); opcional
+// buscar(); // opcional
