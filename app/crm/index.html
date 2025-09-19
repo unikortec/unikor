@@ -1,26 +1,55 @@
-<!DOCTYPE html><html lang="pt-br"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<base href="./"><title>UNIKOR • CRM</title>
-<link rel="manifest" href="manifest.json"/>
-<link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
-<link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
-</head><body><div class="container" id="root"></div>
-<script type="module" src="./js/ui.js"></script>
-<script type="module" src="./js/icons.js"></script>
-<script type="module" src="./js/firebase.js"></script>
-<script type="module" src="./js/guard.js"></script>
-<script type="module">
-import { injectBaseStyles, renderTopbar } from "./js/ui.js";
-import { Icons } from "./js/icons.js";
-import { requireAuth } from "./js/guard.js";
-import { doLogout } from "./js/auth.js";
-injectBaseStyles();
-requireAuth({ onReady: ({user})=>{
-  const root=document.getElementById("root");
-  root.appendChild(renderTopbar({title:"UNIKOR",logoSVG:Icons.logo,showLogout:true,onLogout:()=>doLogout()}));
-  document.getElementById("bemVindo").textContent=`Bem-vindo(a), ${(user.displayName||user.email.split("@")[0])}`;
-  const h=document.createElement("h2"); h.textContent="CRM"; h.style.marginTop="16px"; root.appendChild(h);
-}});
-</script>
-<script type="module" src="./js/auth.js"></script>
-</body></html>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unikor • CRM</title>
+  <meta name="theme-color" content="#0f1115" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="../../assets/logo/icon-192.png" />
+  <link rel="apple-touch-icon" href="../../assets/logo/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- libs CDN para PDF e OCR (usadas quando online) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img class="logo" src="../../assets/logo/unikor.svg" alt="Unikor" />
+    <div>
+      <strong>Unikor</strong> <span class="muted">CRM</span>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button data-view="clientes" class="tab active">Clientes</button>
+    <button data-view="mapa" class="tab">Mapa</button>
+    <button data-view="despesas" class="tab">Despesas</button>
+    <button data-view="entradas" class="tab">Entradas</button>
+    <button data-view="financeiro" class="tab">Financeiro</button>
+    <button data-view="total" class="tab">Total</button>
+  </nav>
+  <div class="userbox">
+    <span id="usrTenant" class="badge">tenant: —</span>
+    <span id="usrName">—</span>
+    <button id="btnSignOut" class="btn ghost">Sair</button>
+  </div>
+</header>
+
+<main class="container">
+  <section id="view-clientes" class="view active"></section>
+  <section id="view-mapa" class="view"></section>
+  <section id="view-despesas" class="view"></section>
+  <section id="view-entradas" class="view"></section>
+  <section id="view-financeiro" class="view"></section>
+  <section id="view-total" class="view"></section>
+</main>
+
+<footer class="bottombar">
+  <small>Unikor • PWA CRM • Offline-first • <span id="conn">online</span></small>
+</footer>
+
+<script type="module" src="js/firebase.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
