@@ -1,35 +1,29 @@
-// app/relatorios/js/app.js
-import { db, ensureAnonAuth } from '../../pedidos/js/firebase.js';
+// portal/app/relatorios/js/app.js
+// UNIKOR – Relatórios (V1.0.1) – multi-tenant
+
+import { auth, db } from "../../../js/firebase.js";
+import { getTenantIdFrom } from "../../../js/guard.js";
 import {
   collection, query, where, orderBy, limit, getDocs,
   doc, getDoc, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-import { ensureTenant, getClaims } from "../../../js/guard.js";
+import { onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+// --- garante login vindo do PORTAL ---
+onAuthStateChanged(auth, (u) => {
+  if (!u) window.location.href = "../../index.html"; // ajuste se necessário
+});
+
+async function currentTenant(){ return await getTenantIdFrom(auth.currentUser); }
 
 const $=(id)=>document.getElementById(id);
 const moneyBR=(n)=> (Number(n||0)).toFixed(2).replace('.',',');
 const parseMoney=(s)=>Number((s||"0").toString().replace(/\./g,'').replace(',','.'))||0;
 
-let __rows=[]; let __currentId=null; let __canDelete=false;
+let __rows=[]; let __currentId=null;
 
-/* ===== coleção multi-tenant ===== */
-async function colPedidos(){
-  const t = await ensureTenant();
-  return collection(db, `tenants/${t}/pedidos`);
-}
-async function refPedido(id){
-  const t = await ensureTenant();
-  return doc(db, `tenants/${t}/pedidos/${id}`);
-}
-
-/* ===== permissão de excluir ===== */
-(async () => {
-  const claims = await getClaims(true);
-  const role = claims.role || 'geral';
-  __canDelete = (role === 'admin' || role === 'master');
-})();
-
-/* ===== spinner ===== */
+// spinner
 function setLoading(btn, is, idle){
   const lbl = btn.querySelector('.lbl');
   if (is){
@@ -44,21 +38,16 @@ function setLoading(btn, is, idle){
 }
 const nextFrame=()=>new Promise(r=>setTimeout(r,0));
 
-/* ===== render ===== */
+// render
 function toBR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
 function renderRows(list){
   const tbody=$('tbody'); let total=0;
-  if (!list.length){
-    tbody.innerHTML=`<tr><td colspan="9">Sem resultados.</td></tr>`;
-    $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00';
-    return;
-  }
+  if (!list.length){ tbody.innerHTML=`<tr><td colspan="9">Sem resultados.</td></tr>`; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; return; }
 
   const rows = list.map(r=>{
     total += Number(r.totalPedido||0);
     const cupom = (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : '–';
     const tipo  = ((r.entrega?.tipo||'').toUpperCase()==='RETIRADA'?'RETIRADA':'ENTREGA');
-    const delBtn = __canDelete ? `<button class="btn danger btn-cancel" data-id="${r.id}">×</button>` : '';
     return `<tr data-id="${r.id}">
       <td>${toBR(r.dataEntregaISO)||''}</td>
       <td>${r.horaEntrega||''}</td>
@@ -68,7 +57,7 @@ function renderRows(list){
       <td>${tipo}</td>
       <td>${r.pagamento||''}</td>
       <td>${cupom}</td>
-      <td>${delBtn}</td>
+      <td><button class="btn danger btn-cancel" data-id="${r.id}">×</button></td>
     </tr>`;
   });
   tbody.innerHTML = rows.join('');
@@ -76,15 +65,14 @@ function renderRows(list){
   $('ftTotal').textContent = `R$ ${moneyBR(total)}`;
 }
 
-/* ===== busca ===== */
+// busca
 async function buscar(){
-  await ensureAnonAuth();
+  const tenantId = await currentTenant();
   const di=$('fDataIni').value, df=$('fDataFim').value;
   const cliente=($('fCliente').value||'').trim().toUpperCase();
   const tipoSel=($('fTipo').value||'').trim();
 
-  const ref = await colPedidos();
-  let qRef;
+  let ref=collection(db, `tenants/${tenantId}/pedidos`); let qRef;
   if (di||df){
     const wh=[]; if (di) wh.push(where('dataEntregaISO','>=',di)); if (df) wh.push(where('dataEntregaISO','<=',df));
     qRef = query(ref, ...wh, orderBy('dataEntregaISO','desc'), limit(1000));
@@ -101,7 +89,7 @@ async function buscar(){
   __rows=out; renderRows(out);
 }
 
-/* ===== modal editar ===== */
+// editar
 function openModal(){ const m=$('modalBackdrop'); m.style.display='flex'; m.setAttribute('aria-hidden','false'); }
 function closeModal(){ const m=$('modalBackdrop'); m.style.display='none'; m.setAttribute('aria-hidden','true'); __currentId=null; $('itemsBody').innerHTML=''; }
 function recalcTotal(){
@@ -120,7 +108,7 @@ function addItemRow(it={}){
   tr.innerHTML = `
     <td><input class="it-desc" value="${(it.descricao||'').replace(/"/g,'&quot;')}" /></td>
     <td><input class="it-qtd" type="number" min="0" step="0.001" value="${it.qtd||0}" /></td>
-    <td><input class="it-un" value="${it.un||'un'}" /></td>
+    <td><input class="it-un" value="${(it.un||'UN')}" /></td>
     <td><input class="it-preco" value="${moneyBR(it.precoUnit||0)}" /></td>
     <td class="it-sub">R$ 0,00</td>
     <td class="right"><button class="btn ghost btn-rem">X</button></td>
@@ -131,9 +119,10 @@ function addItemRow(it={}){
   recalcTotal();
 }
 async function carregarPedidoEmModal(id){
-  await ensureAnonAuth();
+  const tenantId = await currentTenant();
   __currentId=id;
-  const s=await getDoc(await refPedido(id));
+  const ref=doc(db, `tenants/${tenantId}/pedidos/${id}`);
+  const s=await getDoc(ref);
   if (!s.exists()) return alert('Pedido não encontrado.');
   const r={ id:s.id, ...s.data() };
 
@@ -148,13 +137,14 @@ async function carregarPedidoEmModal(id){
   recalcTotal(); openModal();
 }
 async function salvarEdicao(){
-  await ensureAnonAuth();
   if (!__currentId){ closeModal(); return; }
+  const tenantId = await currentTenant();
+
   const itens=[];
   $('itemsBody').querySelectorAll('tr').forEach(tr=>{
     const desc=tr.querySelector('.it-desc').value.trim();
     const qtd =Number(tr.querySelector('.it-qtd').value)||0;
-    const un  =tr.querySelector('.it-un').value.trim()||'un';
+    const un  =(tr.querySelector('.it-un').value.trim()||'UN').toUpperCase();
     const pu  =parseMoney(tr.querySelector('.it-preco').value);
     if (!desc && qtd<=0) return;
     itens.push({ descricao:desc, qtd, un, precoUnit:pu, subtotal:Number((qtd*pu).toFixed(2)) });
@@ -172,7 +162,7 @@ async function salvarEdicao(){
     itens, totalPedido:Number(total.toFixed(2)),
     updatedAt: serverTimestamp()
   };
-  await updateDoc(await refPedido(__currentId), payload);
+  await updateDoc(doc(db, `tenants/${tenantId}/pedidos/${__currentId}`), payload);
   closeModal();
   const idx=__rows.findIndex(x=>x.id===__currentId);
   if (idx>=0) __rows[idx]={ ...__rows[idx], ...payload };
@@ -180,13 +170,12 @@ async function salvarEdicao(){
   alert('Pedido atualizado.');
 }
 
-/* ===== excluir ===== */
+// excluir (depende de permissão nas Rules)
 async function excluirPedido(id){
-  await ensureAnonAuth();
-  if (!__canDelete){ return alert('Sem permissão para excluir.'); }
+  const tenantId = await currentTenant();
   if (!confirm('Gostaria de excluir o pedido?')) return;
   try{
-    await deleteDoc(await refPedido(id));
+    await deleteDoc(doc(db, `tenants/${tenantId}/pedidos/${id}`));
     __rows = __rows.filter(x=>x.id!==id);
     renderRows(__rows);
     alert('Pedido excluído.');
@@ -195,7 +184,7 @@ async function excluirPedido(id){
   }
 }
 
-/* ===== XLSX ===== */
+// xlsx
 async function exportarXLSX(){
   if (!__rows.length) return alert('Nada para exportar.');
   const btn=$('btnXLSX'); setLoading(btn,true,'Exportar XLSX');
@@ -209,8 +198,7 @@ async function exportarXLSX(){
         'Pagamento':r.pagamento||'','Cupom':(r.cupomFiscal?.trim()?r.cupomFiscal:'-'),'ID':r.id
       };
       if (modo==='detalhado'){
-        const items=(Array.isArray(r.itens)?r.itens:[])
-          .map(i=>`${i.descricao||''} • ${i.qtd||0} ${i.un||'un'} x ${i.precoUnit||0}`).join(' | ');
+        const items=(Array.isArray(r.itens)?r.itens:[]).map(i=>`${i.descricao||''} • ${i.qtd||0} ${i.un||'UN'} x ${i.precoUnit||0}`).join(' | ');
         return { ...base, 'Itens (detalhe)':items };
       }
       return base;
@@ -222,7 +210,7 @@ async function exportarXLSX(){
   } finally { setLoading(btn,false,'Exportar XLSX'); }
 }
 
-/* ===== PDF ===== */
+// pdf (detalhado opcional)
 async function exportarPDF(){
   if (!__rows.length) return alert('Nada para gerar.');
   const btn=$('btnPDF'); setLoading(btn,true,'Gerar PDF');
@@ -270,7 +258,7 @@ async function exportarPDF(){
       y+=h;
 
       if (modo==='detalhado' && Array.isArray(r.itens) && r.itens.length){
-        const items=r.itens.map(it=>`• ${it.descricao||''} — ${it.qtd||0} ${it.un||'un'} x ${moneyBR(it.precoUnit||0)} = ${moneyBR(it.subtotal||0)}`).join('\n');
+        const items=r.itens.map(it=>`• ${it.descricao||''} — ${it.qtd||0} ${it.un||'UN'} x ${moneyBR(it.precoUnit||0)} = ${moneyBR(it.subtotal||0)}`).join('\n');
         const lines=doc.splitTextToSize(items, maxW);
         lines.forEach(ln=>{ if (y>200){ doc.addPage(); y=top; } doc.text(ln,left+6,y); y+=5; });
         y+=2;
@@ -286,7 +274,7 @@ async function exportarPDF(){
   } finally { setLoading(btn,false,'Gerar PDF'); }
 }
 
-/* ===== eventos ===== */
+// eventos
 $('btnBuscar').onclick=buscar;
 $('btnLimpar').onclick=()=>{ ['fDataIni','fDataFim','fCliente'].forEach(i=>$(i).value=''); $('fTipo').value=''; $('tbody').innerHTML=''; __rows=[]; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; };
 $('btnXLSX').onclick=exportarXLSX;
@@ -300,6 +288,3 @@ $('tbody').addEventListener('click', (ev)=>{
 $('btnFecharModal').onclick=()=>closeModal();
 $('btnAddItem').onclick = ()=> addItemRow({});
 $('btnSalvar').onclick  = ()=> salvarEdicao();
-
-await ensureAnonAuth();
-// buscar(); // opcional
