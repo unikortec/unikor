@@ -99,26 +99,18 @@ function buildPedido(){
 
 // ---------- ID determinístico (evita duplicação) ----------
 function pedidoId(p){
-  // YYYYMMDD-HHMM + 1ºs 8 chars do cliente (sem espaços)
   const base = (p.dataEntregaISO||'').replaceAll('-','') + '-' + (p.horaEntrega||'').replace(':','');
   const slug = (p.cliente||'').toUpperCase().replace(/\s+/g,'').slice(0,8) || 'SEMCLIENTE';
   return `pd-${base}-${slug}`;
 }
 
-// ---------- Salva uma vez (idempotente) ----------
 async function saveOnce(p){
-  const tenantId = await currentTenant();
+  await ensureAnonAuth();
   const id = pedidoId(p);
-  const ref = doc(db, `tenants/${tenantId}/pedidos/${id}`);
+  const ref = doc(db, 'pedidos', id);
   const snap = await getDoc(ref);
-
   if (!snap.exists()){
-    await setDoc(ref, {
-      ...p,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      status: 'ABERTO'
-    });
+    await setDoc(ref, { ...p, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), status: 'ABERTO' });
   } else {
     await updateDoc(ref, { ...p, updatedAt: serverTimestamp() });
   }
@@ -127,7 +119,7 @@ async function saveOnce(p){
 
 // ---------- Nome do PDF: "Cliente DD_MM_AA HH-MM.pdf" ----------
 function nomePdf(p){
-  const nome = (p.cliente||'CLIENTE').replace(/\s+/g,' ').trim(); // sem "_"
+  const nome = (p.cliente||'CLIENTE').replace(/\s+/g,' ').trim();
   const [Y,M,D] = (p.dataEntregaISO||'').split('-');
   const [h,m]   = (p.horaEntrega||'').split(':');
   const dd = D||'DD', mm=M||'MM', aa=(Y?Y.slice(2):'AA');
