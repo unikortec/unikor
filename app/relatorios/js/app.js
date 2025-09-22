@@ -1,45 +1,28 @@
-// portal/app/relatorios/js/app.js
-// UNIKOR – Relatórios (V1.0.1) – multi-tenant
-
-import { auth, db } from "../../../js/firebase.js";
-import { getTenantIdFrom } from "../../../js/guard.js";
+// app/relatorios/js/app.js
+import { requireAuth } from "/portal/js/guard.js";
+import { app } from "/portal/js/firebase.js";
 import {
-  collection, query, where, orderBy, limit, getDocs,
+  getFirestore, collection, query, where, orderBy, limit, getDocs,
   doc, getDoc, updateDoc, deleteDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-import { onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 
-// --- garante login vindo do PORTAL ---
-onAuthStateChanged(auth, (u) => {
-  if (!u) window.location.href = "../../index.html"; // ajuste se necessário
-});
-
-async function currentTenant(){ return await getTenantIdFrom(auth.currentUser); }
-
+const db = getFirestore(app);
 const $=(id)=>document.getElementById(id);
 const moneyBR=(n)=> (Number(n||0)).toFixed(2).replace('.',',');
 const parseMoney=(s)=>Number((s||"0").toString().replace(/\./g,'').replace(',','.'))||0;
+const toBR=(iso)=>{ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
 
 let __rows=[]; let __currentId=null;
 
-// spinner
+// spinner util
 function setLoading(btn, is, idle){
   const lbl = btn.querySelector('.lbl');
-  if (is){
-    btn.setAttribute('disabled','true');
-    const sp=document.createElement('span'); sp.className='spinner'; sp.dataset.spin=1;
-    btn.prepend(sp); lbl&&(lbl.textContent='Gerando…');
-  } else {
-    btn.removeAttribute('disabled');
-    btn.querySelector('.spinner[data-spin]')?.remove();
-    lbl&&(lbl.textContent=idle);
-  }
+  if (is){ btn.setAttribute('disabled','true'); const sp=document.createElement('span'); sp.className='spinner'; sp.dataset.spin=1; btn.prepend(sp); if(lbl) lbl.textContent='Gerando…'; }
+  else { btn.removeAttribute('disabled'); btn.querySelector('.spinner[data-spin]')?.remove(); if(lbl) lbl.textContent=idle; }
 }
 const nextFrame=()=>new Promise(r=>setTimeout(r,0));
 
-// render
-function toBR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+/* ---------- RENDER ---------- */
 function renderRows(list){
   const tbody=$('tbody'); let total=0;
   if (!list.length){ tbody.innerHTML=`<tr><td colspan="9">Sem resultados.</td></tr>`; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; return; }
@@ -65,14 +48,13 @@ function renderRows(list){
   $('ftTotal').textContent = `R$ ${moneyBR(total)}`;
 }
 
-// busca
+/* ---------- BUSCA ---------- */
 async function buscar(){
-  const tenantId = await currentTenant();
   const di=$('fDataIni').value, df=$('fDataFim').value;
   const cliente=($('fCliente').value||'').trim().toUpperCase();
   const tipoSel=($('fTipo').value||'').trim();
 
-  let ref=collection(db, `tenants/${tenantId}/pedidos`); let qRef;
+  let ref=collection(db,'pedidos'); let qRef;
   if (di||df){
     const wh=[]; if (di) wh.push(where('dataEntregaISO','>=',di)); if (df) wh.push(where('dataEntregaISO','<=',df));
     qRef = query(ref, ...wh, orderBy('dataEntregaISO','desc'), limit(1000));
@@ -89,9 +71,10 @@ async function buscar(){
   __rows=out; renderRows(out);
 }
 
-// editar
+/* ---------- MODAL EDIÇÃO ---------- */
 function openModal(){ const m=$('modalBackdrop'); m.style.display='flex'; m.setAttribute('aria-hidden','false'); }
 function closeModal(){ const m=$('modalBackdrop'); m.style.display='none'; m.setAttribute('aria-hidden','true'); __currentId=null; $('itemsBody').innerHTML=''; }
+
 function recalcTotal(){
   let tot=0;
   $('itemsBody').querySelectorAll('tr').forEach(tr=>{
@@ -103,12 +86,13 @@ function recalcTotal(){
   });
   $('mTotal').value = moneyBR(tot);
 }
+
 function addItemRow(it={}){
   const tr=document.createElement('tr');
   tr.innerHTML = `
     <td><input class="it-desc" value="${(it.descricao||'').replace(/"/g,'&quot;')}" /></td>
     <td><input class="it-qtd" type="number" min="0" step="0.001" value="${it.qtd||0}" /></td>
-    <td><input class="it-un" value="${(it.un||'UN')}" /></td>
+    <td><input class="it-un" value="${it.un||'un'}" /></td>
     <td><input class="it-preco" value="${moneyBR(it.precoUnit||0)}" /></td>
     <td class="it-sub">R$ 0,00</td>
     <td class="right"><button class="btn ghost btn-rem">X</button></td>
@@ -118,10 +102,10 @@ function addItemRow(it={}){
   tr.querySelector('.btn-rem').addEventListener('click', ()=>{ tr.remove(); recalcTotal(); });
   recalcTotal();
 }
+
 async function carregarPedidoEmModal(id){
-  const tenantId = await currentTenant();
   __currentId=id;
-  const ref=doc(db, `tenants/${tenantId}/pedidos/${id}`);
+  const ref=doc(db,'pedidos',id);
   const s=await getDoc(ref);
   if (!s.exists()) return alert('Pedido não encontrado.');
   const r={ id:s.id, ...s.data() };
@@ -136,15 +120,14 @@ async function carregarPedidoEmModal(id){
   if (!r.itens?.length) addItemRow({});
   recalcTotal(); openModal();
 }
+
 async function salvarEdicao(){
   if (!__currentId){ closeModal(); return; }
-  const tenantId = await currentTenant();
-
   const itens=[];
   $('itemsBody').querySelectorAll('tr').forEach(tr=>{
     const desc=tr.querySelector('.it-desc').value.trim();
     const qtd =Number(tr.querySelector('.it-qtd').value)||0;
-    const un  =(tr.querySelector('.it-un').value.trim()||'UN').toUpperCase();
+    const un  =tr.querySelector('.it-un').value.trim()||'un';
     const pu  =parseMoney(tr.querySelector('.it-preco').value);
     if (!desc && qtd<=0) return;
     itens.push({ descricao:desc, qtd, un, precoUnit:pu, subtotal:Number((qtd*pu).toFixed(2)) });
@@ -162,7 +145,7 @@ async function salvarEdicao(){
     itens, totalPedido:Number(total.toFixed(2)),
     updatedAt: serverTimestamp()
   };
-  await updateDoc(doc(db, `tenants/${tenantId}/pedidos/${__currentId}`), payload);
+  await updateDoc(doc(db,'pedidos',__currentId), payload);
   closeModal();
   const idx=__rows.findIndex(x=>x.id===__currentId);
   if (idx>=0) __rows[idx]={ ...__rows[idx], ...payload };
@@ -170,12 +153,10 @@ async function salvarEdicao(){
   alert('Pedido atualizado.');
 }
 
-// excluir (depende de permissão nas Rules)
 async function excluirPedido(id){
-  const tenantId = await currentTenant();
   if (!confirm('Gostaria de excluir o pedido?')) return;
   try{
-    await deleteDoc(doc(db, `tenants/${tenantId}/pedidos/${id}`));
+    await deleteDoc(doc(db,'pedidos',id));
     __rows = __rows.filter(x=>x.id!==id);
     renderRows(__rows);
     alert('Pedido excluído.');
@@ -184,7 +165,7 @@ async function excluirPedido(id){
   }
 }
 
-// xlsx
+/* ---------- XLSX ---------- */
 async function exportarXLSX(){
   if (!__rows.length) return alert('Nada para exportar.');
   const btn=$('btnXLSX'); setLoading(btn,true,'Exportar XLSX');
@@ -198,7 +179,8 @@ async function exportarXLSX(){
         'Pagamento':r.pagamento||'','Cupom':(r.cupomFiscal?.trim()?r.cupomFiscal:'-'),'ID':r.id
       };
       if (modo==='detalhado'){
-        const items=(Array.isArray(r.itens)?r.itens:[]).map(i=>`${i.descricao||''} • ${i.qtd||0} ${i.un||'UN'} x ${i.precoUnit||0}`).join(' | ');
+        const items=(Array.isArray(r.itens)?r.itens:[])
+          .map(i=>`${i.descricao||''} • ${i.qtd||0} ${i.un||'un'} x ${i.precoUnit||0}`).join(' | ');
         return { ...base, 'Itens (detalhe)':items };
       }
       return base;
@@ -210,7 +192,7 @@ async function exportarXLSX(){
   } finally { setLoading(btn,false,'Exportar XLSX'); }
 }
 
-// pdf (detalhado opcional)
+/* ---------- PDF ---------- */
 async function exportarPDF(){
   if (!__rows.length) return alert('Nada para gerar.');
   const btn=$('btnPDF'); setLoading(btn,true,'Gerar PDF');
@@ -258,7 +240,7 @@ async function exportarPDF(){
       y+=h;
 
       if (modo==='detalhado' && Array.isArray(r.itens) && r.itens.length){
-        const items=r.itens.map(it=>`• ${it.descricao||''} — ${it.qtd||0} ${it.un||'UN'} x ${moneyBR(it.precoUnit||0)} = ${moneyBR(it.subtotal||0)}`).join('\n');
+        const items=r.itens.map(it=>`• ${it.descricao||''} — ${it.qtd||0} ${it.un||'un'} x ${moneyBR(it.precoUnit||0)} = ${moneyBR(it.subtotal||0)}`).join('\n');
         const lines=doc.splitTextToSize(items, maxW);
         lines.forEach(ln=>{ if (y>200){ doc.addPage(); y=top; } doc.text(ln,left+6,y); y+=5; });
         y+=2;
@@ -274,7 +256,7 @@ async function exportarPDF(){
   } finally { setLoading(btn,false,'Gerar PDF'); }
 }
 
-// eventos
+/* ---------- Eventos UI ---------- */
 $('btnBuscar').onclick=buscar;
 $('btnLimpar').onclick=()=>{ ['fDataIni','fDataFim','fCliente'].forEach(i=>$(i).value=''); $('fTipo').value=''; $('tbody').innerHTML=''; __rows=[]; $('ftCount').textContent='0 pedidos'; $('ftTotal').textContent='R$ 0,00'; };
 $('btnXLSX').onclick=exportarXLSX;
@@ -288,3 +270,6 @@ $('tbody').addEventListener('click', (ev)=>{
 $('btnFecharModal').onclick=()=>closeModal();
 $('btnAddItem').onclick = ()=> addItemRow({});
 $('btnSalvar').onclick  = ()=> salvarEdicao();
+$('btnExcluir').onclick = ()=> { if (__currentId) excluirPedido(__currentId); };
+
+requireAuth({ onReady:()=>{} });
