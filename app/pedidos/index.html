@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#1e7f46" />
   <title>Pedidos — UNIKOR V1.0.1</title>
+
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
-  <!-- SheetJS e jsPDF só se usados aqui (PDF local) -->
+
+  <!-- libs para exportar -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -19,53 +21,91 @@
   </header>
 
   <main class="container">
-    <h1>Pedido</h1>
+    <h1>Pedidos</h1>
 
-    <!-- Campos essenciais (exemplo simplificado) -->
+    <!-- BLOCO: dados do cliente/entrega (mesmos campos do antigo) -->
     <section class="card grid grid-2">
-      <div>
+      <div class="span-2">
         <label>Cliente</label>
         <input id="cCliente" placeholder="Nome do cliente" />
       </div>
+
       <div>
-        <label>Pagamento</label>
-        <input id="cPagamento" placeholder="PIX / CRÉDITO / DINHEIRO..." />
+        <label>CNPJ</label>
+        <input id="cCnpj" inputmode="numeric" placeholder="00.000.000/0000-00" />
+        <small class="muted">Serão salvos apenas dígitos (validação leve).</small>
       </div>
       <div>
-        <label>Data entrega</label>
+        <label>Inscrição Estadual</label>
+        <input id="cIe" placeholder="Ex.: ISENTO ou número" />
+        <small class="muted">Aceita “ISENTO”.</small>
+      </div>
+
+      <div class="span-2">
+        <label>Endereço</label>
+        <input id="cEndereco" placeholder="Rua, nº — bairro — cidade/UF" />
+        <small class="muted">Se for outra cidade, inclua o <b>nome da cidade</b> ao final.</small>
+      </div>
+
+      <div>
+        <label>Contato (tel/WhatsApp)</label>
+        <input id="cContato" placeholder="(00) 00000-0000" />
+      </div>
+      <div>
+        <label>CEP</label>
+        <input id="cCep" inputmode="numeric" placeholder="00000-000" />
+      </div>
+
+      <div>
+        <label>Data de entrega</label>
         <input id="cData" type="date" />
       </div>
       <div>
-        <label>Hora entrega</label>
+        <label>Hora de entrega</label>
         <input id="cHora" type="time" />
       </div>
+
       <div>
-        <label>Tipo</label>
+        <label>Entrega/Retirada</label>
         <select id="cTipo">
           <option value="ENTREGA">ENTREGA</option>
           <option value="RETIRADA">RETIRADA</option>
         </select>
       </div>
       <div>
+        <label>Valor do frete (R$)</label>
+        <input id="cFrete" class="right" placeholder="0,00" />
+        <div class="row gap8 mt6">
+          <label class="chk"><input id="cIsentarFrete" type="checkbox" /> Isentar frete</label>
+          <button id="btnCalcularFrete" class="btn ghost sm">Calcular automaticamente</button>
+        </div>
+      </div>
+
+      <div>
+        <label>Forma de pagamento</label>
+        <input id="cPagamento" placeholder="PIX / CRÉDITO / DINHEIRO..." />
+      </div>
+      <div>
         <label>Nº do cupom fiscal</label>
         <input id="cCupom" placeholder="ex.: 123456-1/001" />
       </div>
-      <div class="col-span-2">
-        <label>Observações</label>
+
+      <div class="span-2">
+        <label>Observação geral</label>
         <input id="cObs" placeholder="(opcional)" />
       </div>
     </section>
 
-    <!-- Itens -->
+    <!-- ITENS (mesma lógica do antigo) -->
     <section class="card">
       <div class="muted">Itens</div>
       <table class="items">
         <thead>
           <tr>
-            <th style="width:40%">Descrição</th>
-            <th style="width:14%">Qtd</th>
-            <th style="width:14%">Un</th>
-            <th style="width:16%">Preço (R$)</th>
+            <th style="width:36%">Produto/Descrição</th>
+            <th style="width:12%">Tipo</th>
+            <th style="width:12%">Quantidade</th>
+            <th style="width:16%">Preço Unit. (R$)</th>
             <th style="width:16%">Subtotal</th>
             <th>Remover</th>
           </tr>
@@ -74,29 +114,36 @@
         <tfoot>
           <tr>
             <td colspan="6">
-              <button class="btn ghost" id="btnAddItem">+ Adicionar item</button>
+              <button class="btn ghost" id="btnAddItem">+ Adicionar Item</button>
             </td>
           </tr>
         </tfoot>
       </table>
-      <div class="right mt8">
-        <label>Total (R$)</label>
-        <input id="cTotal" class="right" readonly />
+
+      <div class="right mt8 totals">
+        <div class="row gap12">
+          <div><b>Itens:</b> <span id="lblTotItens">0</span></div>
+          <div><b>Subtotal:</b> R$ <span id="lblSubtotal">0,00</span></div>
+          <div><b>Frete:</b> R$ <span id="lblFrete">0,00</span></div>
+          <div><b>Total:</b> R$ <span id="lblTotal">0,00</span></div>
+        </div>
       </div>
     </section>
 
-    <!-- Ações -->
+    <!-- AÇÕES -->
     <div class="actions">
       <button class="btn" id="btnSalvar"><span class="lbl">Salvar PDF</span></button>
       <button class="btn gray" id="btnCompartilhar"><span class="lbl">Compartilhar PDF</span></button>
     </div>
   </main>
 
+  <!-- scripts do app -->
+  <script type="module" src="../../js/guard.js"></script>
   <script type="module" src="./js/firebase.js"></script>
   <script type="module" src="./js/calcular-entrega.js"></script>
   <script type="module" src="./js/app.js"></script>
 
-  <!-- SW registro (escopo local) -->
+  <!-- SW local -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
