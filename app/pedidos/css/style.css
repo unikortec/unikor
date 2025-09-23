@@ -87,5 +87,29 @@ button{
 .pdf-btn.salvar{ background:var(--brand) }
 .pdf-btn.compartilhar{ background:#475569 }
 
-.item{ border:1px solid var(--line); background:#fff; border-radius:10px; padding:10px; margin-bottom:10px }
+/* ITENS */
+.item{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:10px;
+}
 .total{ font-weight:700; font-size:1.05rem }
+
+/* BOTÕES ADICIONAR/REMOVER */
+#adicionarItemBtn{
+  background:#16a34a;  /* verde */
+  color:#fff;
+  font-weight:700;
+  margin:8px 0 16px;
+}
+#adicionarItemBtn:hover{ filter:brightness(0.95); }
+
+.item .remove{
+  background:var(--danger); /* vermelho */
+  color:#fff;
+  font-weight:700;
+  margin-top:8px;
+}
+.item .remove:hover{ filter:brightness(0.95); }
