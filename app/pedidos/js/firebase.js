@@ -1,43 +1,48 @@
-// portal/app/pedidos/js/firebase.js
-import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, onAuthStateChanged }    from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, enableIndexedDbPersistence }
-  from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+// js/firebase.js (versão mínima — temporária)
+// Usa custom token (se fornecido por Unikor) ou faz sign-in anônimo como fallback.
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import {
+  getFirestore, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-/**
- * ⚙️ Config Firebase Unikor
- * - Reusa config do portal se exposta em window.UNIKOR.firebaseConfig
- * - Caso contrário, usa a config padrão do projeto unikorapp
- */
-export const firebaseConfig = window.UNIKOR?.firebaseConfig || {
+export const firebaseConfig = {
   apiKey: "AIzaSyC12s4PvUWtNxOlShPc7zXlzq4XWqlVo2w",
   authDomain: "unikorapp.firebaseapp.com",
   projectId: "unikorapp",
   storageBucket: "unikorapp.appspot.com",
   messagingSenderId: "329806123621",
-  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c"
+  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c",
 };
 
-/**
- * ✅ Reutiliza a instância já criada pelo portal (evita múltiplos inits)
- */
-export const app  = getApps().length ? getApp() : initializeApp(firebaseConfig);
+export const app  = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
-/**
- * 🔐 Sem login anônimo:
- * - Esse Promise só RESOLVE quando houver um usuário autenticado no portal.
- * - Não rejeita: apenas espera até o login acontecer (evita crash silencioso nos módulos).
- */
+// Tenta usar token custom (injetado via shell Unikor), senão faz auth anônimo.
+// Quando a Unikor estiver pronta, basta passar window.UNIKOR_CUSTOM_TOKEN e desabilitar Anonymous no Console.
+async function ensureAuth() {
+  try {
+    if (window.UNIKOR_CUSTOM_TOKEN) {
+      await signInWithCustomToken(auth, window.UNIKOR_CUSTOM_TOKEN);
+      return;
+    }
+  } catch (e) { console.warn("[Auth] custom token falhou, usando anônimo:", e?.message || e); }
+
+  try {
+    await signInAnonymously(auth);
+  } catch (e) {
+    console.error("[Auth] anônimo falhou:", e?.message || e);
+  }
+}
+
+// Promise que o app usa para aguardar login
 export const authReady = new Promise((resolve) => {
-  const unsub = onAuthStateChanged(auth, (user) => {
-    if (user) { unsub(); resolve(user); }
-    // Se não houver user, fica aguardando o login do portal.
-  });
+  onAuthStateChanged(auth, (u) => { if (u) resolve(u); });
+  ensureAuth();
 });
 
-/**
- * 🌐 Cache offline do Firestore (best-effort)
- */
-try { await enableIndexedDbPersistence(db); } catch (_) {}
+// IndexedDB persistence (best-effort)
+try { await enableIndexedDbPersistence(db); } catch (e) { /* ignora se não suportado */ }
