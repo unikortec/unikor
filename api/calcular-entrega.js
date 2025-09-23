@@ -5,68 +5,109 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
-    const { enderecoTexto, totalItens, clienteIsento } = req.body || {};
-    if (!enderecoTexto || typeof enderecoTexto !== "string") {
-      return res.status(400).json({ error: "Campo 'enderecoTexto' é obrigatório (string)" });
-    }
-
-    const ISENCAO_MIN = Number(process.env.ISENCAO_MIN || 200); // padrão 200
-    const txt = String(enderecoTexto).trim().toUpperCase();
-
-    // Se veio lat,lon por engano, devolve para o front tratar via /portal/api/frete
-    const isLatLon = /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*$/.test(txt);
-    if (isLatLon) {
-      return res.status(400).json({
-        error: "Endereço em formato coordenadas deve usar /portal/api/frete",
-        hint: "Envie um endereço textual (rua, número, cidade...)"
+    const { enderecoTexto, totalItens = 0, clienteIsento = false } = req.body || {};
+    if (!enderecoTexto) {
+      return res.status(200).json({
+        valorBase: 0,
+        valorCobravel: 0,
+        isento: false,
+        labelIsencao: "",
+        _vazio: true
       });
     }
 
-    // Extrai cidade se existir “, NOME - UF”. Se não houver, assume POA por padrão
-    const mCidade = /,\s*([A-ZÀ-Ý'\.\-\s]{2,})\s*-\s*([A-Z]{2})\s*$/.exec(txt);
-    const cidade = (mCidade ? mCidade[1] : "PORTO ALEGRE").trim();
-    const uf = (mCidade ? mCidade[2] : "RS").trim();
-
-    // Regras simples por cidade
-    // ajuste à vontade (valores só de exemplo prático)
-    let base = 12; // POA default
-    const cidadeKey = cidade.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-    if (uf !== "RS") {
-      base = 35; // fora RS
-    } else if (cidadeKey.includes("PORTO ALEGRE")) {
-      base = 12; // POA
-    } else if (
-      /CANOAS|CACHOEIRINHA|ALVORADA/.test(cidadeKey)
-    ) {
-      base = 20;
-    } else if (/GRAVATAI|VIAMAO/.test(cidadeKey)) {
-      base = 22;
-    } else {
-      base = 25; // demais RS
+    // isenção manual pelo app
+    if (clienteIsento) {
+      return res.status(200).json({
+        valorBase: 0,
+        valorCobravel: 0,
+        isento: true,
+        labelIsencao: "(ISENTO pelo cliente)"
+      });
     }
 
-    // Isenção por checkbox/cliente ou por subtotal
-    const isentoByCliente = !!clienteIsento;
-    const isentoByValor = Number(totalItens || 0) >= ISENCAO_MIN;
+    const ORS_KEY  = process.env.ORS_API_KEY;
+    const ORIGIN   = process.env.ORIGIN_ADDRESS; // "-30.0277,-51.2287"
+    const PROFILE  = process.env.TRANSPORT_PROFILE || "driving-car";
 
-    const isento = isentoByCliente || isentoByValor;
-    const valorBase = isento ? 0 : base;
-    const labelIsencao = isento
-      ? (isentoByCliente ? "(cliente isento)" : `(isento ≥ R$ ${ISENCAO_MIN.toFixed(2)})`)
-      : "";
+    if (!ORS_KEY || !ORIGIN) {
+      // Sem ORS configurado → frete 0 (app continua funcionando)
+      return res.status(200).json({
+        valorBase: 0,
+        valorCobravel: 0,
+        isento: false,
+        labelIsencao: "(sem ORS configurado)"
+      });
+    }
+
+    // 1) geocodifica destino pelo ORS
+    const geocode = await fetch(
+      `https://api.openrouteservice.org/geocode/search?api_key=${encodeURIComponent(ORS_KEY)}&text=${encodeURIComponent(enderecoTexto)}&size=1`
+    );
+    const gdata = await geocode.json();
+    const feat = gdata?.features?.[0];
+    if (!feat) {
+      return res.status(200).json({
+        valorBase: 0,
+        valorCobravel: 0,
+        isento: false,
+        labelIsencao: "(destino não encontrado)"
+      });
+    }
+    const [destLon, destLat] = feat.geometry.coordinates.map(Number);
+
+    // 2) directions ORS
+    const [oLat, oLon] = ORIGIN.split(",").map(Number);
+    const body = { coordinates: [[oLon, oLat], [destLon, destLat]] };
+    const url = `https://api.openrouteservice.org/v2/directions/${PROFILE}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Authorization": ORS_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      return res.status(200).json({
+        valorBase: 0,
+        valorCobravel: 0,
+        isento: false,
+        labelIsencao: "(falha no cálculo de rota)"
+      });
+    }
+
+    const data = await r.json();
+    const sum = data?.features?.[0]?.properties?.summary || {};
+    const distanceKm = (sum.distance || 0) / 1000;
+
+    // 3) regra simples de preço (ajuste à vontade)
+    //   - bandeirada 8,00
+    //   - 2,50 por km
+    //   - mínimo 12,00
+    let valor = 8 + distanceKm * 2.5;
+    if (valor < 12) valor = 12;
+
+    // exemplo: pedidos altos podem zerar frete (limite ajustável)
+    const LIMITE_ISENCAO = 600;
+    const isentoPorValor = Number(totalItens) >= LIMITE_ISENCAO;
+
+    const valorBase = isentoPorValor ? 0 : Number(valor.toFixed(2));
+    const valorCobravel = valorBase; // aqui não há taxas extras
 
     return res.status(200).json({
-      ok: true,
-      cidadeDetectada: `${cidade} - ${uf}`,
-      regra: isento ? "ISENTO" : "TABELA_CIDADE",
       valorBase,
-      valorCobravel: valorBase,
-      isento,
-      labelIsencao,
-      totalItens: Number(totalItens || 0)
+      valorCobravel,
+      isento: isentoPorValor,
+      labelIsencao: isentoPorValor ? `(pedido ≥ R$ ${LIMITE_ISENCAO})` : "",
+      distance_km: Number(distanceKm.toFixed(2)),
+      duration_s: sum.duration || 0
     });
   } catch (e) {
-    return res.status(500).json({ error: "Erro interno", detail: e?.message || String(e) });
+    return res.status(200).json({
+      valorBase: 0,
+      valorCobravel: 0,
+      isento: false,
+      labelIsencao: "(erro interno no frete)"
+    });
   }
 }
