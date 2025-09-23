@@ -4,16 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Serra Nobre – Pedidos</title>
+  <title>Unikor – Pedidos</title>
   <meta name="theme-color" content="#0ea5a6" />
   <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
 
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+  <!-- Garante que todos os paths resolvam a partir de /portal/app/pedidos/ -->
+  <base href="./">
+
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
 
   <!-- CSS externo -->
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 
 <body>
@@ -22,7 +25,7 @@
     <div class="hero-inner">
       <!-- LOGO maior -->
       <div class="hero-left">
-        <img class="hero-logo big" src="unikorbranco-logo.svg" alt="UNIKOR" />
+        <img class="hero-logo big" src="./unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
 
       <!-- DIREITA: botão relatórios (abre no link externo na mesma aba) -->
@@ -127,24 +130,28 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <!-- Módulos do app -->
-  <script type="module" src="js/firebase.js"></script>
-  <script type="module" src="js/utils.js"></script>
-  <script type="module" src="js/ui.js"></script>
-  <script type="module" src="js/clientes.js"></script>
-  <script type="module" src="js/frete.js"></script>
-  <script type="module" src="js/pdf.js"></script>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/utils.js"></script>
+  <script type="module" src="./js/ui.js"></script>
+  <script type="module" src="./js/clientes.js"></script>
+  <script type="module" src="./js/frete.js"></script>
+  <script type="module" src="./js/pdf.js"></script>
+  <script type="module" src="./js/app.js"></script>
 
   <!-- SW registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          // scope dinâmico baseado no diretório atual
+          const scope = location.pathname.replace(/[^/]+$/, ''); // ex.: /portal/app/pedidos/
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope });
+
           document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') reg.update();
           });
           setInterval(() => reg.update(), 10 * 60 * 1000);
+
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
             nw && nw.addEventListener('statechange', () => {
@@ -153,6 +160,7 @@
               }
             });
           });
+
           navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
           });
