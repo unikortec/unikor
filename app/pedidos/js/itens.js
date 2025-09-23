@@ -30,8 +30,8 @@ function parsePesoFromProduto(nome){
 }
 
 function calcTotalComPesoSeAplicavel({produto, tipo, quantidade, preco}){
-  const q = parseFloat(quantidade)||0;
-  const p = parseFloat(preco)||0;
+  const q = parseFloat(String(quantidade).replace(',','.'))||0;
+  const p = parseFloat(String(preco).replace(',','.'))||0;
   if (tipo === 'UN'){
     const kgUn = parsePesoFromProduto(produto);
     if (kgUn){
@@ -54,14 +54,18 @@ function salvarCamposAntesRender(){
     const { total, pesoTotalKg } = calcTotalComPesoSeAplicavel({produto:prod, tipo, quantidade:qtd, preco});
     itens[idx] = {
       produto: prod, tipo,
-      quantidade: parseFloat(qtd) || 0,
-      preco: parseFloat(preco) || 0,
+      quantidade: parseFloat(String(qtd).replace(',','.')) || 0,
+      preco: parseFloat(String(preco).replace(',','.')) || 0,
       obs,
       total: Number(total || 0),
       _pesoTotalKg: pesoTotalKg || 0
     };
+    // grava no DOM para o pdf.js fallback
+    el.setAttribute('data-peso-total-kg', String(itens[idx]._pesoTotalKg || 0));
   });
-  window.itens = itens; // opcional p/ outros módulos
+  // também deixa disponível global (para pdf.js pegar o array direto)
+  window.getItens = getItens;
+  window.itens = itens;
 }
 
 function criarSelectProduto(i){
@@ -102,8 +106,8 @@ function calcularItem(i){
 
   const { total, pesoTotalKg } = calcTotalComPesoSeAplicavel({produto:prod, tipo, quantidade:q, preco:p});
   itens[i].produto = prod;
-  itens[i].quantidade = parseFloat(q)||0;
-  itens[i].preco = parseFloat(p)||0;
+  itens[i].quantidade = parseFloat(String(q).replace(',','.'))||0;
+  itens[i].preco = parseFloat(String(p).replace(',','.'))||0;
   itens[i].tipo = tipo;
   itens[i].total = Number(total||0);
   itens[i]._pesoTotalKg = pesoTotalKg||0;
@@ -119,6 +123,10 @@ function calcularItem(i){
       pi.textContent = "";
     }
   }
+
+  // sincroniza atributo para o pdf fallback
+  const wrapper = document.querySelector(`.item[data-idx="${i}"]`);
+  if (wrapper) wrapper.setAttribute('data-peso-total-kg', String(itens[i]._pesoTotalKg || 0));
 }
 
 function renderItens(){
@@ -129,7 +137,7 @@ function renderItens(){
 
   itens.forEach((item, i) => {
     const html = `
-      <div class="item" data-idx="${i}">
+      <div class="item" data-idx="${i}" data-peso-total-kg="${item._pesoTotalKg || 0}">
         <label>Produto:</label>
         ${criarSelectProduto(i)}
         <label>Tipo:</label>
@@ -154,6 +162,10 @@ function renderItens(){
   if (!document.getElementById("listaProdutos")) {
     const dl = document.createElement("datalist"); dl.id = "listaProdutos"; document.body.appendChild(dl);
   }
+
+  // garante o getter global
+  window.getItens = getItens;
+  window.itens = itens;
 }
 
 // ===== API PÚBLICA =====
@@ -177,4 +189,5 @@ export function removerItem(i){
   renderItens();
 }
 
-export function getItens(){ return itens.slice(); } // se precisar em outros módulos
+export function getItens(){ return itens.slice(); } // acesso para pdf.js
+// também exposto em window em salvarCamposAntesRender/renderItens
