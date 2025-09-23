@@ -1,15 +1,15 @@
 /* Unikor – Pedidos: Service Worker */
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '3.4.1';
 const SW_VERSION  = `pedidos-v${APP_VERSION}`;
 const CACHE_NAME  = `unikor-pedidos::${SW_VERSION}`;
 
-/* === Escopo / Base path detectados do registro (ex.: /portal/app/pedidos/) === */
+/* Escopo detectado (ex.: /portal/app/pedidos/) */
 const SCOPE_URL = new URL(self.registration.scope);
 const BASE_PATH = SCOPE_URL.pathname.endsWith('/') ? SCOPE_URL.pathname : SCOPE_URL.pathname + '/';
 const abs = (path) => new URL(path, SCOPE_URL).toString();
 
-/* === Lista de ativos essenciais (same-origin, relativos ao diretório do app) ===
-   Ajuste conforme a pasta /portal/app/pedidos/ */
+/* Ativos essenciais (relativos ao diretório do app)
+   + ícones globais fora do diretório (paths absolutos começando com /assets/...) */
 const CORE_ASSETS_REL = [
   'index.html',
   'manifest.json',
@@ -26,28 +26,28 @@ const CORE_ASSETS_REL = [
   'js/ui.js',
   'js/utils.js',
   'js/legacy-adapter.js',
-  // 'js/state.js', // inclua se existir no build final
 
-  // Logos/ícones
-  'unikorbranco-logo.svg',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/apple-touch-icon.png',
+  // Ícones/branding em assets/logo (raiz do site)
+  '/assets/logo/icon-192.png',
+  '/assets/logo/icon-512.png',
+  '/assets/logo/apple-touch-icon.png',
+  '/assets/logo/unikorbranco-logo.svg',
+  '/assets/logo/favicon.ico',
 
-  // O próprio SW (útil p/ update/debug)
+  // O próprio SW
   'sw.js'
 ];
 
 /* Converte para URLs absolutas respeitando subpasta */
 const CORE_ASSETS = [ BASE_PATH, ...CORE_ASSETS_REL.map((p) => abs(p)) ];
 
-/* === Pré-cache (best-effort) === */
+/* Pré-cache (best-effort) */
 async function cacheCoreAssets(cache) {
   const reqs = CORE_ASSETS.map((u) => new Request(u, { cache: 'reload' }));
   await Promise.allSettled(reqs.map((r) => cache.add(r)));
 }
 
-/* === INSTALL → precache + ativação imediata === */
+/* INSTALL */
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
@@ -56,7 +56,7 @@ self.addEventListener('install', (event) => {
   })());
 });
 
-/* === ACTIVATE → limpa caches antigos + assume abas === */
+/* ACTIVATE */
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
@@ -67,7 +67,6 @@ self.addEventListener('activate', (event) => {
     );
     await self.clients.claim();
 
-    // avisa janelas que novo SW está ativo
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clientsList) {
       client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
@@ -75,7 +74,7 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
-/* === Mensagens da página === */
+/* Mensagens */
 self.addEventListener('message', (event) => {
   const data = event.data;
   const type = (typeof data === 'string') ? data : (data && data.type);
@@ -90,29 +89,29 @@ self.addEventListener('message', (event) => {
   }
 });
 
-/* === Utils === */
+/* Utils */
 function fetchWithTimeout(req, ms = 9000, opts = {}) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort('timeout'), ms);
   return fetch(req, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
 }
-
 function isHTMLRequest(req) {
   if (req.mode === 'navigate') return true;
   const accept = req.headers.get('accept') || '';
   return accept.includes('text/html');
 }
 
-/* Não cachear APIs e domínios dinâmicos (Firebase e afins) */
+/* Não cachear APIs e domínios dinâmicos */
 function isBypassCache(url) {
   const u = new URL(url);
-  // APIs do app: /portal/app/pedidos/api/*  (ou qualquer /api sob o BASE_PATH)
+
+  // APIs do app (…/pedidos/api/*)
   if (u.origin === self.location.origin && u.pathname.startsWith(BASE_PATH + 'api/')) return true;
 
-  // Rotas API no root do portal (ex.: /portal/api/* ou /api/*)
+  // APIs do portal ( /portal/api/* ou /api/* )
   if (u.origin === self.location.origin && /^\/(portal\/)?api\//.test(u.pathname)) return true;
 
-  // Infra Firebase / uploads
+  // Firebase
   const bypassHosts = new Set([
     'firestore.googleapis.com',
     'firebaseinstallations.googleapis.com',
@@ -124,14 +123,13 @@ function isBypassCache(url) {
   return bypassHosts.has(u.host);
 }
 
-/* Estáticos same-origin? */
 function isStaticSameOrigin(url) {
   const u = new URL(url);
   if (u.origin !== self.location.origin) return false;
   return /\.(png|jpg|jpeg|svg|webp|ico|css|js|json|woff2?)$/i.test(u.pathname);
 }
 
-/* Offline HTML simples */
+/* Offline mínimo */
 function offlineHTML() {
   return new Response(
     '<!doctype html><meta charset="utf-8"><title>Offline</title><h1>Offline</h1><p>Sem conexão e sem cache disponível.</p>',
@@ -139,15 +137,13 @@ function offlineHTML() {
   );
 }
 
-/* === Estratégias de fetch === */
+/* Fetch strategy */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  // Nunca interceptar chamadas que não devem ser cacheadas
   if (isBypassCache(req.url)) return;
 
-  // Navegação HTML → network-first com fallback ao cache/offline
   if (isHTMLRequest(req)) {
     event.respondWith((async () => {
       try {
@@ -166,7 +162,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Estáticos same-origin → stale-while-revalidate
   if (isStaticSameOrigin(req.url)) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
@@ -180,7 +175,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Outros GET same-origin → network com fallback simples de cache
   const url = new URL(req.url);
   if (url.origin === self.location.origin) {
     event.respondWith((async () => {
