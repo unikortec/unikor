@@ -1,20 +1,13 @@
 // app/pedidos/js/frete.js
-// Detecta o prefixo "/app" para as APIs no Unikor (ex.: /app/api/calcular-entrega)
-function getBaseApiPrefix() {
-  const p = location.pathname;
-  // pega o primeiro segmento depois da barra inicial
-  const firstSeg = "/" + p.split("/").filter(Boolean)[0];
-  // se estiver dentro de /app/... → usa /app, senão usa raiz
-  return firstSeg === "/app" ? "/app" : "";
-}
+// ⇨ Sempre usa /api/... (raiz). Nada de /app/api/...
+const API_BASE = "";                       // same-origin
+export const ABS_FRETE_BASE = location.origin; // fallback absoluto same-origin
 
-// fallback absoluto (caso esteja usando preview/ambiente sem API local)
-export const ABS_FRETE_BASE = `${location.origin}${getBaseApiPrefix()}`;
-
+// Estado interno (último frete calculado e sugestão vinda do cliente)
 const freteCtrl = { ultimo: null, sugestao: null };
 
+// Utils
 function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
-
 function appendPOA(str){
   const t = String(str||"").trim();
   if (!t) return t;
@@ -24,6 +17,7 @@ function appendPOA(str){
   return `${t}, Porto Alegre - RS`;
 }
 
+// ---- chamada HTTP para o serviço de frete ----
 export async function calcularFrete(enderecoTexto, subtotal){
   if (!enderecoTexto) {
     return { valorBase:0, valorCobravel:0, isento:false, labelIsencao:"", _vazio:true };
@@ -31,19 +25,19 @@ export async function calcularFrete(enderecoTexto, subtotal){
   const isentar = !!document.getElementById('isentarFrete')?.checked;
   const payload = { enderecoTexto, totalItens: subtotal, clienteIsento: isentar };
 
-  // 1) tenta same-origin com prefixo correto (ex.: /app/api/...)
+  // 1) endpoint principal (raiz)
   try{
-    const r = await fetch(`${getBaseApiPrefix()}/api/calcular-entrega`, {
-      method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(payload)
+    const r = await fetch(`${API_BASE}/api/calcular-entrega`, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload)
     });
     if(!r.ok) throw new Error("HTTP "+r.status);
     return await r.json();
   }catch(_){}
 
-  // 2) fallback absoluto
+  // 2) fallback absoluto same-origin
   try{
     const r2 = await fetch(`${ABS_FRETE_BASE}/api/calcular-entrega`, {
-      method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(payload)
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload)
     });
     if(!r2.ok) throw new Error("HTTP "+r2.status);
     return await r2.json();
@@ -52,6 +46,7 @@ export async function calcularFrete(enderecoTexto, subtotal){
   }
 }
 
+// ---- Atualização do rótulo de frete (com debounce para digitação) ----
 export const atualizarFreteUI = debounce(async function(){
   const out = document.getElementById("freteValor");
   if (!out) return;
@@ -59,6 +54,7 @@ export const atualizarFreteUI = debounce(async function(){
   let end = document.getElementById("endereco")?.value?.trim()?.toUpperCase() || "";
   end = appendPOA(end);
 
+  // soma usando DOM dos itens renderizados
   const totais = Array.from(document.querySelectorAll("[id^='totalItem_']"))
     .map(el => parseFloat(String(el.textContent||"0").replace(",", ".")) || 0);
   const subtotal = totais.reduce((s,v)=>s+(v||0),0);
@@ -71,13 +67,14 @@ export const atualizarFreteUI = debounce(async function(){
   out.textContent = resp?.valorBase==null ? "—" : `R$ ${Number(resp.valorBase||0).toFixed(2)} ${rotulo}`;
 }, 300);
 
+// ---- Sem debounce: garante frete calculado antes do PDF ----
 export async function ensureFreteBeforePDF(){
   const out = document.getElementById("freteValor");
 
   let end = document.getElementById("endereco")?.value?.trim()?.toUpperCase() || "";
   end = appendPOA(end);
 
-  // Subtotal preciso lendo inputs
+  // Subtotal preciso baseado nos inputs dos itens
   const itensEls = Array.from(document.querySelectorAll(".item"));
   let subtotal = 0;
   if (itensEls.length){
@@ -109,6 +106,7 @@ export async function ensureFreteBeforePDF(){
   return resp;
 }
 
+// Getters/Setters auxiliares
 export function getFreteAtual(){ return freteCtrl.ultimo || { valorBase:0, valorCobravel:0, isento:false }; }
 export function setFreteSugestao(v){ freteCtrl.sugestao = v; }
 export function getFreteSugestao(){ return freteCtrl.sugestao; }
