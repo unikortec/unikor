@@ -1,33 +1,34 @@
+// js/db.js
 import {
-  db, auth, authReady,
+  db, auth, authReady, TENANT_ID,
   collection, addDoc, getDocs, query, where, orderBy, limit,
   updateDoc, increment, doc, setDoc, serverTimestamp
 } from './firebase.js';
 import { up, removeAcentos, normNome, digitsOnly } from './utils.js';
+
+// helpers p/ coleções no tenant
+const col = (name) => collection(db, "tenants", TENANT_ID, name);
 
 // ==== Clientes ====
 export async function getClienteDocByNome(nomeInput) {
   await authReady;
   const alvo = normNome(nomeInput);
 
-  // consulta direta por nomeNormalizado (se existir)
   try{
-    const qn = query(collection(db, "clientes"), where("nomeNormalizado","==", alvo), limit(1));
+    const qn = query(col("clientes"), where("nomeNormalizado","==", alvo), limit(1));
     const sn = await getDocs(qn);
     if (!sn.empty) return { id: sn.docs[0].id, ref: sn.docs[0].ref, data: sn.docs[0].data() };
   }catch(_) {}
 
-  // fallback por nomeUpper exato
   try{
-    const q2 = query(collection(db, "clientes"), where("nomeUpper","==", up(nomeInput)), limit(1));
+    const q2 = query(col("clientes"), where("nomeUpper","==", up(nomeInput)), limit(1));
     const s2 = await getDocs(q2);
     if (!s2.empty) return { id: s2.docs[0].id, ref: s2.docs[0].ref, data: s2.docs[0].data() };
   }catch(_){}
 
-  // fallback por prefixo de nome
   try{
     const start = up(nomeInput), end = start + '\uf8ff';
-    const q3 = query(collection(db, "clientes"), orderBy("nome"), where("nome", ">=", start), where("nome", "<=", end), limit(5));
+    const q3 = query(col("clientes"), orderBy("nome"), where("nome", ">=", start), where("nome", "<=", end), limit(5));
     const s3 = await getDocs(q3);
     if (!s3.empty){
       const hit = s3.docs.find(d=> removeAcentos(up(d.data()?.nome||"")) === alvo ) || s3.docs[0];
@@ -67,7 +68,7 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
 
     await updateDoc(exist.ref, campos);
   } else {
-    await addDoc(collection(db, "clientes"), {
+    await addDoc(col("clientes"), {
       nome: nomeNorm,
       nomeUpper: nomeNorm,
       nomeNormalizado: normNome(nomeNorm),
@@ -104,14 +105,14 @@ export async function clientesMaisUsados(limitQtd = 50) {
   await authReady;
   const lista = [];
   try{
-    const qs = await getDocs(query(collection(db, "clientes"), orderBy("compras","desc"), limit(limitQtd)));
+    const qs = await getDocs(query(col("clientes"), orderBy("compras","desc"), limit(limitQtd)));
     qs.forEach(d => {
       const x = d.data() || {};
       const theNome = (x.nome || x.nomeUpper || "").toString().trim();
       if (theNome) lista.push({ nome: theNome, compras: x.compras || 0 });
     });
   }catch(_){
-    const qs2 = await getDocs(query(collection(db, "clientes"), orderBy("nome"), limit(limitQtd)));
+    const qs2 = await getDocs(query(col("clientes"), orderBy("nome"), limit(limitQtd)));
     qs2.forEach(d => {
       const x = d.data() || {};
       const nome = (x.nome || x.nomeUpper || "").toString().trim();
@@ -130,7 +131,7 @@ export async function buscarUltimoPreco(clienteNome, produtoNome) {
   if (!nomeCli || !nomeProd) return null;
 
   const q = query(
-    collection(db, "historico_precos"),
+    col("historico_precos"),
     where("cliente", "==", nomeCli),
     where("produto", "==", nomeProd),
     orderBy("data", "desc"),
@@ -148,7 +149,7 @@ export async function produtosDoCliente(nomeCliente) {
   if (!nome) return [];
   const set = new Set();
   const q = query(
-    collection(db, "historico_precos"),
+    col("historico_precos"),
     where("cliente", "==", nome),
     orderBy("data", "desc"),
     limit(1000)
@@ -166,7 +167,7 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco) {
   const valor    = parseFloat(preco);
   if (!nomeCli || !nomeProd || isNaN(valor)) return;
 
-  await addDoc(collection(db, "historico_precos"), {
+  await addDoc(col("historico_precos"), {
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
 
@@ -175,6 +176,7 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco) {
 }
 
 // ==== Pedidos (idempotente) ====
+// (mesma lógica — apenas muda o caminho da coleção)
 function normalizeEnderecoForKey(str){ return up(str).replace(/\s+/g,' ').trim(); }
 function itemsSig(items){
   if (!Array.isArray(items)) return '';
@@ -206,14 +208,14 @@ export async function savePedidoIdempotente(payload){
     (payload.clienteFiscal?.contato||"")
   ].join("|");
 
-  const qKey = query(collection(db,"pedidos"), where("idempotencyKey","==", key), limit(1));
+  const qKey = query(col("pedidos"), where("idempotencyKey","==", key), limit(1));
   const snap = await getDocs(qKey);
   if (!snap.empty){
     return { id: snap.docs[0].id, key };
   }
 
   const id = `${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
-  await setDoc(doc(collection(db, "pedidos"), id), {
+  await setDoc(doc(col("pedidos"), id), {
     ...payload,
     idempotencyKey: key,
     dataEntregaDia: payload.dataEntregaISO ? Number(payload.dataEntregaISO.replaceAll('-','')) : null,
@@ -236,13 +238,3 @@ export async function updateLastFreteCliente(nomeCliente, lastFreteNumber){
     });
   }
 }
-
-// Exposição opcional para compatibilidade (se algo externo ainda usar window.*)
-window.buscarClienteInfo = async (nome)=> buscarClienteInfo(up(nome));
-window.clientesMaisUsados = clientesMaisUsados;
-window.buscarUltimoPreco = buscarUltimoPreco;
-window.produtosDoCliente = produtosDoCliente;
-window.registrarPrecoCliente = registrarPrecoCliente;
-window.savePedidoIdempotente = savePedidoIdempotente;
-window.updateLastFreteCliente = updateLastFreteCliente;
-window.salvarCliente = salvarCliente;
