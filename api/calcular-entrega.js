@@ -6,108 +6,78 @@ export default async function handler(req, res) {
     }
 
     const { enderecoTexto, totalItens = 0, clienteIsento = false } = req.body || {};
-    if (!enderecoTexto) {
-      return res.status(200).json({
-        valorBase: 0,
-        valorCobravel: 0,
-        isento: false,
-        labelIsencao: "",
-        _vazio: true
-      });
+    if (!enderecoTexto || typeof enderecoTexto !== "string") {
+      return res.status(400).json({ error: "Campo 'enderecoTexto' é obrigatório." });
     }
 
-    // isenção manual pelo app
+    // 1) Isenção manual
     if (clienteIsento) {
       return res.status(200).json({
-        valorBase: 0,
-        valorCobravel: 0,
+        ok: true,
         isento: true,
-        labelIsencao: "(ISENTO pelo cliente)"
-      });
-    }
-
-    const ORS_KEY  = process.env.ORS_API_KEY;
-    const ORIGIN   = process.env.ORIGIN_ADDRESS; // "-30.0277,-51.2287"
-    const PROFILE  = process.env.TRANSPORT_PROFILE || "driving-car";
-
-    if (!ORS_KEY || !ORIGIN) {
-      // Sem ORS configurado → frete 0 (app continua funcionando)
-      return res.status(200).json({
+        labelIsencao: "(ISENTO manual)",
         valorBase: 0,
         valorCobravel: 0,
-        isento: false,
-        labelIsencao: "(sem ORS configurado)"
+        meta: { motivo: "manual" }
       });
     }
 
-    // 1) geocodifica destino pelo ORS
-    const geocode = await fetch(
-      `https://api.openrouteservice.org/geocode/search?api_key=${encodeURIComponent(ORS_KEY)}&text=${encodeURIComponent(enderecoTexto)}&size=1`
-    );
-    const gdata = await geocode.json();
-    const feat = gdata?.features?.[0];
-    if (!feat) {
-      return res.status(200).json({
-        valorBase: 0,
-        valorCobravel: 0,
-        isento: false,
-        labelIsencao: "(destino não encontrado)"
-      });
-    }
-    const [destLon, destLat] = feat.geometry.coordinates.map(Number);
+    // 2) Resolve coordenadas destino (geocoding leve via ORS)
+    const ORS_KEY = process.env.ORS_API_KEY;
+    if (!ORS_KEY) return res.status(500).json({ error: "Falta ORS_API_KEY" });
 
-    // 2) directions ORS
-    const [oLat, oLon] = ORIGIN.split(",").map(Number);
-    const body = { coordinates: [[oLon, oLat], [destLon, destLat]] };
-    const url = `https://api.openrouteservice.org/v2/directions/${PROFILE}`;
-    const r = await fetch(url, {
+    const geocodeUrl = `https://api.openrouteservice.org/geocode/search?api_key=${encodeURIComponent(ORS_KEY)}&text=${encodeURIComponent(enderecoTexto)}&size=1`;
+    const g = await fetch(geocodeUrl);
+    if (!g.ok) return res.status(502).json({ error: "Falha no geocoding" });
+    const gj = await g.json();
+    const feat = gj?.features?.[0];
+    if (!feat) return res.status(404).json({ error: "Endereço não encontrado" });
+    const [destLon, destLat] = feat.geometry?.coordinates || [];
+
+    // 3) Distância/tempo via nosso endpoint interno /api/frete
+    const fr = await fetch(`${process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : ""}/api/frete`, {
       method: "POST",
-      headers: { "Authorization": ORS_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: `${destLat},${destLon}`,
+        profile: process.env.TRANSPORT_PROFILE || "driving-car"
+      })
+    }).catch(()=>null);
 
-    if (!r.ok) {
-      const detail = await r.text().catch(() => "");
-      return res.status(200).json({
-        valorBase: 0,
-        valorCobravel: 0,
-        isento: false,
-        labelIsencao: "(falha no cálculo de rota)"
-      });
+    let distance_m = 0;
+    if (fr && fr.ok) {
+      const fj = await fr.json();
+      distance_m = Number(fj?.distance_m || 0);
     }
 
-    const data = await r.json();
-    const sum = data?.features?.[0]?.properties?.summary || {};
-    const distanceKm = (sum.distance || 0) / 1000;
+    // 4) regra de preço (exemplo simples & estável)
+    //    - compras grandes: isento
+    //    - degraus por distância
+    let isento = false;
+    let labelIsencao = "";
+    let valorBase = 0;
 
-    // 3) regra simples de preço (ajuste à vontade)
-    //   - bandeirada 8,00
-    //   - 2,50 por km
-    //   - mínimo 12,00
-    let valor = 8 + distanceKm * 2.5;
-    if (valor < 12) valor = 12;
+    if (Number(totalItens) >= 1500) {
+      isento = true;
+      labelIsencao = "(ISENTO por valor)";
+      valorBase = 0;
+    } else {
+      const km = distance_m / 1000;
+      if (km <= 1.5)      valorBase = 8;
+      else if (km <= 5)   valorBase = 15;
+      else if (km <= 10)  valorBase = 25;
+      else                valorBase = 35 + Math.ceil(km - 10) * 2;
+    }
 
-    // exemplo: pedidos altos podem zerar frete (limite ajustável)
-    const LIMITE_ISENCAO = 600;
-    const isentoPorValor = Number(totalItens) >= LIMITE_ISENCAO;
-
-    const valorBase = isentoPorValor ? 0 : Number(valor.toFixed(2));
-    const valorCobravel = valorBase; // aqui não há taxas extras
+    const valorCobravel = isento ? 0 : valorBase;
 
     return res.status(200).json({
-      valorBase,
-      valorCobravel,
-      isento: isentoPorValor,
-      labelIsencao: isentoPorValor ? `(pedido ≥ R$ ${LIMITE_ISENCAO})` : "",
-      distance_km: Number(distanceKm.toFixed(2)),
-      duration_s: sum.duration || 0
+      ok: true,
+      isento, labelIsencao,
+      valorBase, valorCobravel,
+      meta: { distance_m, totalItens: Number(totalItens)||0 }
     });
   } catch (e) {
-    return res.status(200).json({
-      valorBase: 0,
-      valorCobravel: 0,
-      isento: false,
-      labelIsencao: "(erro interno no frete)"
-    });
+    return res.status(500).json({ error: "Erro interno", detail: e.message });
   }
 }
