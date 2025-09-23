@@ -8,14 +8,15 @@
   <meta name="theme-color" content="#0ea5a6" />
   <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
 
-  <!-- Garante que todos os paths resolvam a partir de /portal/app/pedidos/ -->
+  <!-- garante paths corretos mesmo sem a barra final na URL -->
   <base href="./">
 
+  <!-- Manifest e ícones globais (assets/logo/ na main) -->
   <link rel="manifest" href="./manifest.json" />
-  <link rel="icon" href="./favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png" />
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
 
-  <!-- CSS externo -->
+  <!-- CSS -->
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 
@@ -23,12 +24,10 @@
   <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
-      <!-- LOGO maior -->
       <div class="hero-left">
-        <img class="hero-logo big" src="./unikorbranco-logo.svg" alt="UNIKOR" />
+        <!-- logo global lida do assets/logo da main -->
+        <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
-
-      <!-- DIREITA: botão relatórios (abre no link externo na mesma aba) -->
       <div class="hero-right">
         <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
       </div>
@@ -143,7 +142,6 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          // scope dinâmico baseado no diretório atual
           const scope = location.pathname.replace(/[^/]+$/, ''); // ex.: /portal/app/pedidos/
           const reg = await navigator.serviceWorker.register('./sw.js', { scope });
 
