@@ -1,6 +1,20 @@
 // js/app.js
-import { initItens, adicionarItem, atualizarFreteAoEditarItem } from './itens.js';
 import { atualizarFreteUI } from './frete.js';
+
+// Carrega itens.js com fallback (evita crash se SW servir versão antiga)
+let initItens, adicionarItem, atualizarFreteAoEditarItem;
+async function loadItensModule(){
+  const m = await import('./itens.js');
+  initItens                  = m.initItens                  ?? m.default?.initItens;
+  adicionarItem              = m.adicionarItem              ?? m.default?.adicionarItem;
+  atualizarFreteAoEditarItem = m.atualizarFreteAoEditarItem ?? m.default?.atualizarFreteAoEditarItem;
+  if (!initItens || !adicionarItem) {
+    console.error('[itens.js] exports não encontrados', m);
+    alert('Falha ao carregar módulo de itens. Atualize a página.');
+    return false;
+  }
+  return true;
+}
 
 // Carrega o módulo do PDF só quando necessário e com fallback de diferentes tipos de export
 async function callGerarPDF(mode, btn) {
@@ -40,14 +54,31 @@ function wirePagamentoOutro(){
   sync();
 }
 
-// Banner offline
-function updateOfflineBanner(){
+// Banner offline (ping real ao host)
+async function isReallyOnline(timeoutMs = 5000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const url = "/app/pedidos/manifest.json?ts=" + Date.now();
+    const r = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    return r.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
+async function updateOfflineBanner(){
   const el = document.getElementById('offlineBanner');
   if (!el) return;
-  el.style.display = navigator.onLine ? 'none' : 'block';
+  el.style.display = (await isReallyOnline()) ? 'none' : 'block';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Carrega módulo de itens
+  const ok = await loadItensModule();
+  if (!ok) return;
+
   // Render inicial dos itens e listeners internos
   initItens();
 
@@ -82,6 +113,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // offline banner
   updateOfflineBanner();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') updateOfflineBanner();
+  });
   window.addEventListener('online', updateOfflineBanner);
   window.addEventListener('offline', updateOfflineBanner);
 });
