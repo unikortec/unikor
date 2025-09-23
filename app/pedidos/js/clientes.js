@@ -1,5 +1,5 @@
 // js/clientes.js
-import { db, authReady } from './firebase.js';
+import { db, authReady, TENANT_ID } from './firebase.js';
 import {
   collection, doc, setDoc, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
   serverTimestamp, increment
@@ -10,29 +10,30 @@ const digits = (s)=>String(s||"").replace(/\D/g,"");
 const removeAcentos = (s)=>String(s||"").normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const normNome = (s)=> removeAcentos(up(s));
 
+// helpers p/ coleções no tenant
+const colClientes        = () => collection(db, "tenants", TENANT_ID, "clientes");
+const colHistPreco       = () => collection(db, "tenants", TENANT_ID, "historico_precos");
+
 // ---- Busca única, usando campo normalizado (novo) + fallbacks (legado)
 export async function getClienteDocByNome(nomeInput){
   await authReady;
   const alvo = normNome(nomeInput);
-  // novo (1 query)
   try{
-    const q1 = query(collection(db,"clientes"), where("nomeNormalizado","==",alvo), limit(1));
+    const q1 = query(colClientes(), where("nomeNormalizado","==",alvo), limit(1));
     const s1 = await getDocs(q1);
     if (!s1.empty) return { id:s1.docs[0].id, ref:s1.docs[0].ref, data:s1.docs[0].data() };
   }catch(_){}
 
-  // fallback por nome exato upper
   try{
     const u = up(nomeInput);
-    const q2 = query(collection(db,"clientes"), where("nomeUpper","==",u), limit(1));
+    const q2 = query(colClientes(), where("nomeUpper","==",u), limit(1));
     const s2 = await getDocs(q2);
     if (!s2.empty) return { id:s2.docs[0].id, ref:s2.docs[0].ref, data:s2.docs[0].data() };
   }catch(_){}
 
-  // fallback por prefixo (ordenado)
   try{
     const u = up(nomeInput), end = u+'\uf8ff';
-    const q3 = query(collection(db,"clientes"), orderBy("nome"), where("nome",">=",u), where("nome","<=",end), limit(5));
+    const q3 = query(colClientes(), orderBy("nome"), where("nome",">=",u), where("nome","<=",end), limit(5));
     const s3 = await getDocs(q3);
     if (!s3.empty) return { id:s3.docs[0].id, ref:s3.docs[0].ref, data:s3.docs[0].data() };
   }catch(_){}
@@ -62,7 +63,7 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   if (exist) {
     await updateDoc(exist.ref, base);
   } else {
-    await addDoc(collection(db,"clientes"), { ...base, compras:0, criadoEm: serverTimestamp() });
+    await addDoc(colClientes(), { ...base, compras:0, criadoEm: serverTimestamp() });
   }
 }
 
@@ -85,10 +86,10 @@ export async function clientesMaisUsados(n=50){
   await authReady;
   const out = [];
   try{
-    const qs = await getDocs(query(collection(db,"clientes"), orderBy("compras","desc"), limit(n)));
+    const qs = await getDocs(query(colClientes(), orderBy("compras","desc"), limit(n)));
     qs.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }catch(_){
-    const qs2 = await getDocs(query(collection(db,"clientes"), orderBy("nome"), limit(n)));
+    const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
     qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }
   return out.filter(Boolean);
@@ -100,7 +101,7 @@ export async function buscarUltimoPreco(clienteNome, produtoNome){
   const nomeProd = String(produtoNome||"").trim();
   if (!nomeCli || !nomeProd) return null;
   const qs = await getDocs(query(
-    collection(db,"historico_precos"),
+    colHistPreco(),
     where("cliente","==",nomeCli),
     where("produto","==",nomeProd),
     orderBy("data","desc"),
@@ -116,7 +117,7 @@ export async function produtosDoCliente(nomeCliente){
   const set = new Set();
   const nomeCli = up(nomeCliente);
   const qs = await getDocs(query(
-    collection(db,"historico_precos"),
+    colHistPreco(),
     where("cliente","==",nomeCli),
     orderBy("data","desc"),
     limit(1000)
@@ -133,7 +134,7 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
   const valor = parseFloat(preco);
   if (!nomeCli || !nomeProd || isNaN(valor)) return;
 
-  await addDoc(collection(db,"historico_precos"), {
+  await addDoc(colHistPreco(), {
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
 
