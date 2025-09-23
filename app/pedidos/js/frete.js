@@ -1,4 +1,4 @@
-// js/frete.js
+// portal/app/pedidos/js/frete.js
 // ==================== Config ====================
 export const ABS_FRETE_BASE = "https://app.unikor.com.br"; // fallback absoluto (opcional)
 
@@ -21,8 +21,8 @@ function appendPOA(str){
 // ==================== Cálculo / chamadas HTTP ====================
 /**
  * Estratégia híbrida:
- *  - Se enderecoTexto for "lat,lon" => chama /api/frete (legado ORS)
- *  - Caso contrário => chama /api/calcular-entrega (novo)
+ *  - Se enderecoTexto for "lat,lon" => chama /portal/api/frete (legado ORS)
+ *  - Caso contrário => chama /portal/api/calcular-entrega (novo)
  *  - Se falhar, tenta fallback em ABS_FRETE_BASE
  */
 export async function calcularFrete(enderecoTexto, subtotal){
@@ -32,12 +32,12 @@ export async function calcularFrete(enderecoTexto, subtotal){
 
   const isentar = !!document.getElementById('isentarFrete')?.checked;
 
-  // 1) Compat: coordenadas "lat,lon" => usa /api/frete (legado)
+  // 1) Compat: coordenadas "lat,lon" => usa /portal/api/frete (legado)
   const coordsMatch = String(enderecoTexto).trim().match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
   if (coordsMatch) {
     try {
       const [_, lat, lon] = coordsMatch;
-      const r = await fetch("/api/frete", {
+      const r = await fetch("/portal/api/frete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,7 +71,7 @@ export async function calcularFrete(enderecoTexto, subtotal){
     }
   }
 
-  // 2) Rota nova (principal): /api/calcular-entrega
+  // 2) Rota nova (principal): /portal/api/calcular-entrega
   const payload = {
     enderecoTexto,
     totalItens: subtotal,
@@ -79,7 +79,7 @@ export async function calcularFrete(enderecoTexto, subtotal){
   };
 
   try{
-    const r = await fetch("/api/calcular-entrega", {
+    const r = await fetch("/portal/api/calcular-entrega", {
       method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload)
     });
     if(!r.ok) throw new Error("HTTP "+r.status);
@@ -88,7 +88,7 @@ export async function calcularFrete(enderecoTexto, subtotal){
 
   // 3) Fallback absoluto (opcional) para o mesmo domínio
   try{
-    const r2 = await fetch(`${ABS_FRETE_BASE}/portal/app/pedidos/api/calcular-entrega`, {
+    const r2 = await fetch(`${ABS_FRETE_BASE}/portal/api/calcular-entrega`, {
       method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload)
     });
     if(!r2.ok) throw new Error("HTTP "+r2.status);
