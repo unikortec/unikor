@@ -1,40 +1,12 @@
-// js/firebase.js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import {
-  getAuth, signInAnonymously, onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import {
-  getFirestore, enableIndexedDbPersistence
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+// app/pedidos/js/firebase.js
+// Rodando isolado (sem login Unikor) mas salvando/consultando no tenant Serra Nobre.
+// Quando formos plugar no app Unikor, basta trocar para extrair o tenant do token.
 
-// ⚙️ Config do projeto Unikor (inalterado)
-export const firebaseConfig = {
-  apiKey: "AIzaSyC12s4PvUWtNxOlShPc7zXlzq4XWqlVo2w",
-  authDomain: "unikorapp.firebaseapp.com",
-  projectId: "unikorapp",
-  storageBucket: "unikorapp.appspot.com",
-  messagingSenderId: "329806123621",
-  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c",
-};
-
-// 🔸 Tenant que vamos usar agora (também quando migrarmos pro login, continua o mesmo caminho)
+// 🔒 Tenant alvo (fixo por enquanto)
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-
-// 🔐 anônimo (temporário)
-export const authReady = new Promise((resolve) => {
-  onAuthStateChanged(auth, (user) => {
-    if (user) resolve(user);
-    else signInAnonymously(auth).then(resolve).catch((e) => {
-      console.warn("Anon auth falhou:", e?.message || e);
-      resolve(null);
-    });
-  });
-});
-
-export const db = getFirestore(app);
-
-// 🌐 cache offline (best-effort)
-try { await enableIndexedDbPersistence(db); } catch (_) {}
+// Placeholders para manter compatibilidade com imports existentes
+export const authReady = Promise.resolve(null);
+export const db = null;
+export const app = null;
+export const auth = null;
