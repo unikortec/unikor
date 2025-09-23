@@ -37,19 +37,37 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${base}_${dia || 'DD'}_${mes || 'MM'}_${aa}_${hh}-${mm}.pdf`;
 }
 
-// Lê itens da UI (se itens.js expõe getItens, usa; senão, lê do DOM)
+// ==== Fallback robusto: extrai peso do nome do produto (ex.: "100G", "0,2 kg", "1.5kg")
+function parsePesoFromProduto(nome){
+  const s = String(nome||"").toLowerCase().replace(',', '.');
+  const re = /(\d+(?:\.\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/g;
+  let m, last=null;
+  while ((m = re.exec(s)) !== null) last = m;
+  if(!last) return null;
+  const val = parseFloat(last[1]);
+  const unit = last[2];
+  if(!isFinite(val) || val<=0) return null;
+  return (unit === 'kg' || unit.startsWith('quilo')) ? val : (val/1000);
+}
+
+// Lê itens da UI (usa window.getItens; senão DOM com fallback de peso)
 function lerItensDaTela() {
   if (typeof window.getItens === 'function') return window.getItens();
 
   const blocks = document.querySelectorAll('#itens .item');
   const out = [];
-  blocks.forEach((el, i) => {
+  blocks.forEach((el) => {
     const produto = el.querySelector('.produto')?.value || '';
     const tipo = el.querySelector('.tipo-select')?.value || 'KG';
-    const quantidade = parseFloat(el.querySelector('.quantidade')?.value || '0') || 0;
-    const preco = parseFloat(el.querySelector('.preco')?.value || '0') || 0;
+    const quantidade = parseFloat(String(el.querySelector('.quantidade')?.value || '0').replace(',', '.')) || 0;
+    const preco = parseFloat(String(el.querySelector('.preco')?.value || '0').replace(',', '.')) || 0;
     const obs = el.querySelector('.obsItem')?.value || '';
-    const pesoTotalKg = parseFloat(el.getAttribute('data-peso-total-kg') || '0') || 0;
+    // pega do atributo; se não vier e for UN, calcula pelo nome
+    let pesoTotalKg = parseFloat(String(el.getAttribute('data-peso-total-kg') || '0').replace(',', '.')) || 0;
+    if (!pesoTotalKg && tipo === 'UN') {
+      const kgUn = parsePesoFromProduto(produto);
+      if (kgUn) pesoTotalKg = quantidade * kgUn;
+    }
 
     let total = quantidade * preco;
     if (tipo === 'UN' && pesoTotalKg > 0) total = pesoTotalKg * preco;
@@ -92,6 +110,11 @@ function drawKeyValueBox(doc, x, y, w, label, value, opts = {}) {
 
 export async function montarPDF() {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [72, 297] });
+
+  // Cabeçalho solicitado
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("PEDIDO SERRA NOBRE", 36, 7, { align: "center" });
 
   const margemX = 2, larguraCaixa = 68;
   const W_PROD = 23.5, W_QDE = 13, W_UNIT = 13, W_TOTAL = 18.5;
@@ -190,14 +213,17 @@ export async function montarPDF() {
     const prod = it.produto || "";
     const qtdStr = String(it.quantidade || 0);
     const tipo = it.tipo || "KG";
-    const precoNum = parseFloat(it.preco) || 0;
-    const kgUn = (tipo === 'UN') ? parseFloat(it._pesoTotalKg || 0) / (parseFloat(it.quantidade || 0) || 1) || null : null;
-    const pesoTotalKg = it._pesoTotalKg || (kgUn ? (it.quantidade || 0) * kgUn : 0);
-    const totalNum = (tipo === 'UN' && pesoTotalKg) ? (pesoTotalKg * precoNum) : ((it.quantidade || 0) * precoNum);
+    const precoNum = parseFloat(String(it.preco).replace(',', '.')) || 0;
+
+    // Se for UN com peso, total = pesoTotal * preco(kg); senão = quantidade * preco
+    const pesoTotalKg = Number(it._pesoTotalKg || 0);
+    const totalNum = (tipo === 'UN' && pesoTotalKg > 0)
+      ? (pesoTotalKg * precoNum)
+      : ((Number(it.quantidade || 0) * precoNum));
 
     const prodLines = splitToWidth(doc, prod, W_PROD - 2).slice(0, 3);
     const rowHi = Math.max(14, 6 + prodLines.length * 5);
-    ensureSpace(rowHi + (pesoTotalKg ? 6 : 0));
+    ensureSpace(rowHi + (tipo === 'UN' && pesoTotalKg ? 6 : 0));
 
     // células
     doc.rect(margemX, y, W_PROD, rowHi, "S");
@@ -214,12 +240,14 @@ export async function montarPDF() {
     center(margemX + W_PROD / 2, prodLines);
     center(margemX + W_PROD + W_QDE / 2, qtdStr ? [qtdStr, tipo] : [""]);
     if (tipo === 'UN' && pesoTotalKg) {
-      center(margemX + W_PROD + W_QDE + W_UNIT / 2, precoNum ? ["R$/KG", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+      center(margemX + W_PROD + W_QDE + W_UNIT / 2,
+        precoNum ? ["R$/KG", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
     } else {
-      center(margemX + W_PROD + W_QDE + W_UNIT / 2, precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+      center(margemX + W_PROD + W_QDE + W_UNIT / 2,
+        precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
     }
     center(margemX + W_PROD + W_QDE + W_UNIT + W_TOTAL / 2,
-      (precoNum && (it.quantidade || 0)) ? ["R$", totalNum.toFixed(2).replace(".", ",")] : ["—"]);
+      (precoNum && (it.quantidade || pesoTotalKg)) ? ["R$", totalNum.toFixed(2).replace(".", ",")] : ["—"]);
 
     y += rowHi;
 
@@ -332,20 +360,14 @@ async function abrirPDFComFallback(doc, nomeArquivo, baixarSeBloquear = false) {
 }
 
 export async function gerarPDF(apenasSalvar = false, btnEl) {
-  // feedback no botão (se foi passado)
   const originalTxt = btnEl && btnEl.textContent;
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Gerando...'; }
 
   try {
-    // garante frete calculado antes de desenhar
     await ensureFreteBeforePDF();
-
     const { doc, nomeArquivo } = await montarPDF();
-    if (apenasSalvar) {
-      doc.save(nomeArquivo);
-    } else {
-      await abrirPDFComFallback(doc, nomeArquivo, /*baixarSeBloquear*/ true);
-    }
+    if (apenasSalvar) doc.save(nomeArquivo);
+    else await abrirPDFComFallback(doc, nomeArquivo, true);
   } finally {
     if (btnEl) { btnEl.disabled = false; btnEl.textContent = originalTxt || 'Gerar PDF'; }
   }
