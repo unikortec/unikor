@@ -1,164 +1,166 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#1e7f46" />
-  <title>Pedidos — UNIKOR V1.0.1</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <title>Serra Nobre – Pedidos</title>
+  <meta name="theme-color" content="#0ea5a6" />
+  <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
 
-  <!-- libs para exportar -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+
+  <!-- CSS externo -->
+  <link rel="stylesheet" href="css/style.css" />
 </head>
+
 <body>
-  <header class="topbar">
-    <img src="./img/logo-unikor-white.svg" alt="UNIKOR" height="24" />
-    <div class="grow"></div>
-    <a class="link" href="../relatorios/">Relatórios</a>
+  <!-- HEADER -->
+  <header class="hero">
+    <div class="hero-inner">
+      <!-- LOGO maior -->
+      <div class="hero-left">
+        <img class="hero-logo big" src="unikorbranco-logo.svg" alt="UNIKOR" />
+      </div>
+
+      <!-- DIREITA: botão relatórios (abre no link externo na mesma aba) -->
+      <div class="hero-right">
+        <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
+      </div>
+    </div>
   </header>
 
-  <main class="container">
-    <h1>Pedidos</h1>
+  <div id="offlineBanner" class="offline-banner">OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.</div>
 
-    <!-- BLOCO: dados do cliente/entrega (mesmos campos do antigo) -->
-    <section class="card grid grid-2">
-      <div class="span-2">
-        <label>Cliente</label>
-        <input id="cCliente" placeholder="Nome do cliente" />
-      </div>
-
-      <div>
-        <label>CNPJ</label>
-        <input id="cCnpj" inputmode="numeric" placeholder="00.000.000/0000-00" />
-        <small class="muted">Serão salvos apenas dígitos (validação leve).</small>
-      </div>
-      <div>
-        <label>Inscrição Estadual</label>
-        <input id="cIe" placeholder="Ex.: ISENTO ou número" />
-        <small class="muted">Aceita “ISENTO”.</small>
-      </div>
-
-      <div class="span-2">
-        <label>Endereço</label>
-        <input id="cEndereco" placeholder="Rua, nº — bairro — cidade/UF" />
-        <small class="muted">Se for outra cidade, inclua o <b>nome da cidade</b> ao final.</small>
-      </div>
-
-      <div>
-        <label>Contato (tel/WhatsApp)</label>
-        <input id="cContato" placeholder="(00) 00000-0000" />
-      </div>
-      <div>
-        <label>CEP</label>
-        <input id="cCep" inputmode="numeric" placeholder="00000-000" />
-      </div>
-
-      <div>
-        <label>Data de entrega</label>
-        <input id="cData" type="date" />
-      </div>
-      <div>
-        <label>Hora de entrega</label>
-        <input id="cHora" type="time" />
-      </div>
-
-      <div>
-        <label>Entrega/Retirada</label>
-        <select id="cTipo">
-          <option value="ENTREGA">ENTREGA</option>
-          <option value="RETIRADA">RETIRADA</option>
-        </select>
-      </div>
-      <div>
-        <label>Valor do frete (R$)</label>
-        <input id="cFrete" class="right" placeholder="0,00" />
-        <div class="row gap8 mt6">
-          <label class="chk"><input id="cIsentarFrete" type="checkbox" /> Isentar frete</label>
-          <button id="btnCalcularFrete" class="btn ghost sm">Calcular automaticamente</button>
-        </div>
-      </div>
-
-      <div>
-        <label>Forma de pagamento</label>
-        <input id="cPagamento" placeholder="PIX / CRÉDITO / DINHEIRO..." />
-      </div>
-      <div>
-        <label>Nº do cupom fiscal</label>
-        <input id="cCupom" placeholder="ex.: 123456-1/001" />
-      </div>
-
-      <div class="span-2">
-        <label>Observação geral</label>
-        <input id="cObs" placeholder="(opcional)" />
-      </div>
-    </section>
-
-    <!-- ITENS (mesma lógica do antigo) -->
-    <section class="card">
-      <div class="muted">Itens</div>
-      <table class="items">
-        <thead>
-          <tr>
-            <th style="width:36%">Produto/Descrição</th>
-            <th style="width:12%">Tipo</th>
-            <th style="width:12%">Quantidade</th>
-            <th style="width:16%">Preço Unit. (R$)</th>
-            <th style="width:16%">Subtotal</th>
-            <th>Remover</th>
-          </tr>
-        </thead>
-        <tbody id="itensBody"></tbody>
-        <tfoot>
-          <tr>
-            <td colspan="6">
-              <button class="btn ghost" id="btnAddItem">+ Adicionar Item</button>
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="right mt8 totals">
-        <div class="row gap12">
-          <div><b>Itens:</b> <span id="lblTotItens">0</span></div>
-          <div><b>Subtotal:</b> R$ <span id="lblSubtotal">0,00</span></div>
-          <div><b>Frete:</b> R$ <span id="lblFrete">0,00</span></div>
-          <div><b>Total:</b> R$ <span id="lblTotal">0,00</span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- AÇÕES -->
-    <div class="actions">
-      <button class="btn" id="btnSalvar"><span class="lbl">Salvar PDF</span></button>
-      <button class="btn gray" id="btnCompartilhar"><span class="lbl">Compartilhar PDF</span></button>
+  <main id="appMain">
+    <div class="field-group">
+      <label for="cliente">Cliente:</label>
+      <input list="listaClientes" type="text" id="cliente" autocomplete="off" required />
+      <datalist id="listaClientes"></datalist>
     </div>
+
+    <div class="field-group grid-2">
+      <div>
+        <label for="cnpj">CNPJ:</label>
+        <input type="text" id="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
+        <small class="inline-help">Serão salvos apenas dígitos. Validação leve.</small>
+      </div>
+      <div>
+        <label for="ie">Inscrição Estadual:</label>
+        <input type="text" id="ie" placeholder="Ex.: ISENTO ou número" />
+        <small class="inline-help">Aceita “ISENTO”.</small>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label for="endereco">Endereço:</label>
+      <input type="text" id="endereco" autocomplete="off" required />
+      <small class="muted" id="hint-endereco">
+        Se for outra cidade, inclua <b>o nome da cidade</b> no fim do endereço.
+        Sem cidade, será considerado <b>Porto Alegre - RS</b>.
+      </small>
+    </div>
+
+    <div class="field-group grid-2">
+      <div>
+        <label for="contato">Contato (tel/WhatsApp):</label>
+        <input type="text" id="contato" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
+      </div>
+      <div>
+        <label for="cep">CEP:</label>
+        <input type="text" id="cep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label for="entrega">Data de Entrega:</label>
+      <input type="date" id="entrega" required/>
+    </div>
+
+    <div class="field-group">
+      <label for="horaEntrega">Horário de Entrega:</label>
+      <input type="time" id="horaEntrega" required/>
+    </div>
+
+    <div class="field-group switch-box">
+      <label>Entrega/Retirada:</label>
+      <label><input type="radio" name="tipoEntrega" value="ENTREGA" checked> Entrega</label>
+      <label><input type="radio" name="tipoEntrega" value="RETIRADA"> Retirada</label>
+    </div>
+
+    <div class="field-group">
+      <label>Valor do Frete:</label>
+      <div class="frete-row">
+        <div id="freteValor" class="muted">—</div>
+        <label class="inline"><input type="checkbox" id="isentarFrete"/> Isentar frete</label>
+      </div>
+    </div>
+
+    <div id="itens"></div>
+    <button id="adicionarItemBtn">Adicionar Item</button>
+
+    <hr/>
+    <label for="pagamento">Forma de Pagamento:</label>
+    <select id="pagamento">
+      <option value="PIX">PIX</option>
+      <option value="DINHEIRO">DINHEIRO</option>
+      <option value="CARTÃO (LEVAR MAQUINA)">CARTÃO (LEVAR MAQUINA)</option>
+      <option value="OUTRO">OUTRO</option>
+    </select>
+    <input type="text" id="pagamentoOutro" placeholder="Digite outra forma de pagamento" style="display:none"/>
+
+    <hr/>
+    <label for="obsGeral">Observação geral do pedido:</label>
+    <textarea id="obsGeral"></textarea>
+    <hr/>
+
+    <button class="pdf-btn"  id="btnGerarPdf">Gerar PDF</button>
+    <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
+    <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
+
+    <div id="resumo"></div>
   </main>
 
-  <!-- scripts do app -->
-  <script type="module" src="../../js/guard.js"></script>
-  <script type="module" src="./js/firebase.js"></script>
-  <script type="module" src="./js/calcular-entrega.js"></script>
-  <script type="module" src="./js/app.js"></script>
+  <!-- jsPDF (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- SW local -->
+  <!-- Módulos do app -->
+  <script type="module" src="js/firebase.js"></script>
+  <script type="module" src="js/utils.js"></script>
+  <script type="module" src="js/ui.js"></script>
+  <script type="module" src="js/clientes.js"></script>
+  <script type="module" src="js/frete.js"></script>
+  <script type="module" src="js/pdf.js"></script>
+  <script type="module" src="js/app.js"></script>
+
+  <!-- SW registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
           const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+          setInterval(() => reg.update(), 10 * 60 * 1000);
           reg.addEventListener('updatefound', () => {
-            const sw = reg.installing;
-            sw && sw.addEventListener('statechange', () => {
-              if (sw.state === 'installed' && navigator.serviceWorker.controller) reg.waiting?.postMessage('SKIP_WAITING');
+            const nw = reg.installing;
+            nw && nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+              }
             });
           });
-          navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
-        } catch (e) {}
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
+          });
+        } catch {}
       });
     }
   </script>
+
+  <datalist id="listaProdutos"></datalist>
 </body>
 </html>
