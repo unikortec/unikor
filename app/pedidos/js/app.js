@@ -1,4 +1,4 @@
-// js/app.js
+// app/pedidos/js/app.js
 import { atualizarFreteUI } from './frete.js';
 
 // Carrega itens.js com fallback (evita crash se SW servir versão antiga)
@@ -54,13 +54,17 @@ function wirePagamentoOutro(){
   sync();
 }
 
-// Banner offline (ping real ao host)
+// Ping real ao host para confirmar conectividade
 async function isReallyOnline(timeoutMs = 5000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const url = "/app/pedidos/manifest.json?ts=" + Date.now();
-    const r = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
+    // Usa caminho relativo ao <base href="./"> do index
+    const r = await fetch("./manifest.json?ts=" + Date.now(), {
+      method: "HEAD",
+      cache: "no-store",
+      signal: ctrl.signal
+    });
     return r.ok;
   } catch {
     return false;
@@ -68,6 +72,7 @@ async function isReallyOnline(timeoutMs = 5000) {
     clearTimeout(t);
   }
 }
+
 async function updateOfflineBanner(){
   const el = document.getElementById('offlineBanner');
   if (!el) return;
@@ -111,7 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   s && s.addEventListener('click', (ev) => callGerarPDF(true,  ev.target));
   c && c.addEventListener('click', async () => callGerarPDF('share'));
 
-  // offline banner
+  // offline banner (checagem inicial e ao voltar/ficar online/offline)
   updateOfflineBanner();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') updateOfflineBanner();
