@@ -1,31 +1,22 @@
 // portal/api/tenant-clientes/top.js
-import { getDb } from "../_firebase-admin";
+import { tenantCol } from "../_firebase-admin.js";
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-    const tenantId = req.query.tenantId;
-    const n = Math.min(parseInt(req.query.n || "50", 10), 200);
-    if (!tenantId) return res.status(400).json({ error: "tenantId é obrigatório" });
+    const { tenantId, n } = req.query || {};
+    if (!tenantId) return res.status(400).json({ ok:false, error:"tenantId é obrigatório" });
+    const limitN = Math.min(Number(n||50), 200);
 
-    const db = getDb();
-    const qs = await db
-      .collection("tenants").doc(tenantId)
-      .collection("clientes")
-      .orderBy("compras", "desc")
-      .limit(n)
-      .get();
-
-    const out = [];
-    qs.forEach(d => {
-      const x = d.data() || {};
-      const nome = (x.nome || x.nomeUpper || "").toString().trim();
-      if (nome) out.push(nome);
-    });
-
-    return res.status(200).json({ ok: true, itens: out });
+    let out = [];
+    const snap = await tenantCol(tenantId, "clientes").orderBy("compras","desc").limit(limitN).get();
+    if (!snap.empty) {
+      out = snap.docs.map(d => d.data()?.nome || d.data()?.nomeUpper).filter(Boolean);
+    } else {
+      const snap2 = await tenantCol(tenantId, "clientes").orderBy("nomeUpper").limit(limitN).get();
+      out = snap2.docs.map(d => d.data()?.nome || d.data()?.nomeUpper).filter(Boolean);
+    }
+    return res.json({ ok:true, itens: out });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Erro interno", detail: e.message });
+    return res.status(500).json({ ok:false, error:e.message });
   }
 }
