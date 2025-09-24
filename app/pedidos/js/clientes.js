@@ -1,30 +1,59 @@
-// app/pedidos/js/clientes.js
-import { TENANT_ID } from './firebase.js';
+// js/clientes.js
+// Cadastro/lookup de clientes no tenant da Serra Nobre, com IE/RS opcional via API.
 
-const up = (s)=>String(s||"").trim().toUpperCase();
-const digits = (s)=>String(s||"").replace(/\D/g,"");
+import { db, authReady, TENANT_ID } from './firebase.js';
+import {
+  collection, doc, setDoc, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
+  serverTimestamp, increment
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-// ======= BUSCAS =======
+import {
+  up as _up,
+  removeAcentos,
+  normNome as _normNome,
+  digitsOnly as _digitsOnly,
+  maskCNPJ, maskCEP, maskTelefone
+} from './utils.js';
+
+const up = (s)=>_up(s);
+const digitsOnly = (s)=>_digitsOnly(s);
+const normNome = (s)=>_normNome(s);
+
+// ---------- paths helpers ----------
+function colClientes(){ return collection(db, `tenants/${TENANT_ID}/clientes`); }
+function colHistPreco(){ return collection(db, `tenants/${TENANT_ID}/historico_precos`); }
+function colPedidos(){ return collection(db, `tenants/${TENANT_ID}/pedidos`); }
+
+// ---------- lookups ----------
 export async function getClienteDocByNome(nomeInput){
+  await authReady;
+  const alvo = normNome(nomeInput);
+  // 1) nomeNormalizado
   try{
-    const r = await fetch("/api/tenant-clientes/find", {
-      method:"POST",
-      headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ tenantId: TENANT_ID, nome: nomeInput })
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (!j.ok || !j.found) return null;
-    return { id: j.id, data: j.data };
-  }catch(_){
-    return null;
-  }
+    const q1 = query(colClientes(), where("nomeNormalizado","==",alvo), limit(1));
+    const s1 = await getDocs(q1);
+    if (!s1.empty) return { id:s1.docs[0].id, ref:s1.docs[0].ref, data:s1.docs[0].data() };
+  }catch(_){}
+  // 2) exato por nomeUpper
+  try{
+    const q2 = query(colClientes(), where("nomeUpper","==", up(nomeInput)), limit(1));
+    const s2 = await getDocs(q2);
+    if (!s2.empty) return { id:s2.docs[0].id, ref:s2.docs[0].ref, data:s2.docs[0].data() };
+  }catch(_){}
+  // 3) prefixo
+  try{
+    const start = up(nomeInput), end = start + '\uf8ff';
+    const q3 = query(colClientes(), orderBy("nome"), where("nome", ">=", start), where("nome", "<=", end), limit(5));
+    const s3 = await getDocs(q3);
+    if (!s3.empty) return { id:s3.docs[0].id, ref:s3.docs[0].ref, data:s3.docs[0].data() };
+  }catch(_){}
+  return null;
 }
 
 export async function buscarClienteInfo(nomeCliente){
-  const hit = await getClienteDocByNome(nomeCliente);
-  if (!hit) return null;
-  const d = hit.data || {};
+  const found = await getClienteDocByNome(up(nomeCliente));
+  if (!found) return null;
+  const d = found.data || {};
   return {
     endereco: d.endereco || "",
     isentoFrete: !!d.isentoFrete,
@@ -37,114 +66,171 @@ export async function buscarClienteInfo(nomeCliente){
 }
 
 export async function clientesMaisUsados(n=50){
+  await authReady;
+  const out = [];
   try{
-    const r = await fetch(`/api/tenant-clientes/top?tenantId=${encodeURIComponent(TENANT_ID)}&n=${n}`, { cache:"no-store" });
-    if (!r.ok) return [];
-    const j = await r.json();
-    return Array.isArray(j.itens) ? j.itens : [];
+    const qs = await getDocs(query(colClientes(), orderBy("compras","desc"), limit(n)));
+    qs.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }catch(_){
-    return [];
+    const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
+    qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
+  }
+  return out.filter(Boolean);
+}
+
+// ---------- create/update ----------
+export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}){
+  await authReady;
+  const nomeUpper = up(nome);
+  const enderecoUpper = up(endereco);
+  if (!nomeUpper) return;
+
+  const base = {
+    nome: nomeUpper,
+    nomeUpper,
+    nomeNormalizado: normNome(nome),
+    endereco: enderecoUpper,
+    isentoFrete: !!isentoFrete,
+    cnpj: digitsOnly(extras.cnpj)||"",
+    ie: up(extras.ie)||"",
+    cep: digitsOnly(extras.cep)||"",
+    contato: digitsOnly(extras.contato)||"",
+    atualizadoEm: serverTimestamp()
+  };
+
+  const exist = await getClienteDocByNome(nomeUpper);
+  if (exist) {
+    await updateDoc(exist.ref, base);
+  } else {
+    await addDoc(colClientes(), { ...base, compras:0, criadoEm: serverTimestamp() });
   }
 }
 
-// ======= CADASTRO =======
-export async function criarCliente(payload){
-  const body = { tenantId: TENANT_ID, cliente: payload };
-  const r = await fetch("/api/tenant-clientes/create", {
-    method:"POST",
-    headers: { "Content-Type":"application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) throw new Error("Falha ao salvar cliente");
-  return r.json();
+// ---------- histórico de preços (compat) ----------
+export async function buscarUltimoPreco(clienteNome, produtoNome){
+  await authReady;
+  const nomeCli = up(clienteNome);
+  const nomeProd = String(produtoNome||"").trim();
+  if (!nomeCli || !nomeProd) return null;
+  const qs = await getDocs(query(
+    colHistPreco(),
+    where("cliente","==",nomeCli),
+    where("produto","==",nomeProd),
+    orderBy("data","desc"),
+    limit(1)
+  ));
+  if (qs.empty) return null;
+  const v = qs.docs[0].data()?.preco;
+  return typeof v === "number" ? v : parseFloat(v);
 }
 
-// ======= LOOKUP IE (RS) =======
-export async function lookupIEporCNPJ(cnpj){
-  const r = await fetch("/api/rs-ie/lookup", {
-    method:"POST",
-    headers: { "Content-Type":"application/json" },
-    body: JSON.stringify({ cnpj })
+export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
+  await authReady;
+  const nomeCli = up(clienteNome);
+  const nomeProd = String(produtoNome||"").trim();
+  const valor = parseFloat(preco);
+  if (!nomeCli || !nomeProd || isNaN(valor)) return;
+
+  await addDoc(colHistPreco(), {
+    cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
-  if (!r.ok) return { ok:false };
-  return r.json();
+
+  const found = await getClienteDocByNome(nomeCli);
+  if (found) await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
 }
 
-// ======= UI helpers (modal) =======
-export function wireClienteModal(){
-  const modal = document.getElementById("clienteModal");
-  const openBtn = document.getElementById("btnNovoCliente");
-  const closeEls = modal?.querySelectorAll("[data-close]");
-  const salvarBtn = document.getElementById("btnSalvarCliente");
-  const lookupBtn = document.getElementById("btnLookupIE");
+// ---------- UI helpers ----------
+function setMainFormFromCliente(d){
+  if (!d) return;
+  const byId = (id)=>document.getElementById(id);
+  if (d.endereco) byId('endereco') && (byId('endereco').value = d.endereco);
+  if (d.cnpj)     byId('cnpj')     && (byId('cnpj').value     = d.cnpj);
+  if (d.ie)       byId('ie')       && (byId('ie').value       = d.ie);
+  if (d.cep)      byId('cep')      && (byId('cep').value      = d.cep);
+  if (d.contato)  byId('contato')  && (byId('contato').value  = d.contato);
+  const isenta = !!d.isentoFrete;
+  const chk = byId('isentarFrete');
+  if (chk) chk.checked = isenta;
+}
 
-  if (!modal || !openBtn || !salvarBtn) return;
-
-  const open = ()=> modal.hidden = false;
-  const close = ()=> modal.hidden = true;
-
-  openBtn.addEventListener("click", open);
-  closeEls?.forEach(el => el.addEventListener("click", close));
-  modal.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
-
-  // Lookup IE (RS)
-  lookupBtn?.addEventListener("click", async ()=>{
-    const cnpjEl = document.getElementById("cli_cnpj");
-    const ieEl = document.getElementById("cli_ie");
-    const cnpj = digits(cnpjEl.value);
-    if (!cnpj || cnpj.length < 14) { alert("Informe um CNPJ válido primeiro."); return; }
-    lookupBtn.disabled = true; lookupBtn.textContent = "Consultando...";
-    try{
-      const resp = await lookupIEporCNPJ(cnpj);
-      if (resp?.ok) {
-        if (resp.isento || !resp.ie) {
-          ieEl.value = "ISENTO";
-        } else {
-          ieEl.value = resp.ie.toString().toUpperCase();
-        }
-      } else {
-        alert("Não foi possível consultar. Preencha manualmente ou use ISENTO.");
-      }
-    } finally {
-      lookupBtn.disabled = false; lookupBtn.textContent = "Consultar IE";
-    }
-  });
-
-  // Salvar Cliente
-  salvarBtn.addEventListener("click", async ()=>{
-    const nome = up(document.getElementById("cli_nome").value);
-    if (!nome) { alert("Nome é obrigatório."); return; }
-
-    const payload = {
-      nome,
-      cnpj: digits(document.getElementById("cli_cnpj").value),
-      ie: up(document.getElementById("cli_ie").value || ""),
-      cep: digits(document.getElementById("cli_cep").value),
-      endereco: up(document.getElementById("cli_endereco").value),
-      contato: digits(document.getElementById("cli_contato").value),
-      isentoFrete: !!document.getElementById("cli_isentoFrete").checked,
-      compras: 0
-    };
-
-    salvarBtn.disabled = true; salvarBtn.textContent = "Salvando...";
-    try{
-      const resp = await criarCliente(payload);
-      if (!resp?.ok) throw new Error(resp?.error || "Erro ao salvar");
-      alert(resp.reused ? "Cliente atualizado com sucesso." : "Cliente cadastrado com sucesso.");
-      close();
-      // Opcional: preencher o campo de cliente com o nome recém salvo
-      const cli = document.getElementById("cliente");
-      if (cli) cli.value = nome;
-    } catch(e) {
-      alert("Falha ao salvar cliente: " + (e?.message || e));
-    } finally {
-      salvarBtn.disabled = false; salvarBtn.textContent = "Salvar Cliente";
-    }
+// popula datalist
+async function hydrateDatalist(){
+  const list = document.getElementById('listaClientes');
+  if (!list) return;
+  list.innerHTML = '';
+  (await clientesMaisUsados(80)).forEach(n=>{
+    const o = document.createElement('option'); o.value = n; list.appendChild(o);
   });
 }
 
-// Placeholders compat
-export async function buscarUltimoPreco(){ return null; }
-export async function produtosDoCliente(){ return []; }
-export async function registrarPrecoCliente(){ return; }
-export async function updateLastFreteCliente(){ return; }
+// on blur do campo cliente → preenche cadastro se existir
+(function wireClienteBlur(){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const el = document.getElementById('cliente');
+    if (!el) return;
+    el.addEventListener('blur', async ()=>{
+      const nome = el.value.trim();
+      if (!nome) return;
+      const info = await buscarClienteInfo(nome);
+      if (info) setMainFormFromCliente(info);
+    });
+  });
+})();
+
+// ---------- Consulta IE RS (opcional) ----------
+async function consultaIERioGrandeDoSul(cnpjDigits){
+  if (!cnpjDigits) return null;
+  try{
+    const r = await fetch(`/api/ie-rs?cnpj=${encodeURIComponent(cnpjDigits)}`, { cache:'no-store' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    // esperado: { ok:true, ie:"", status:"ATIVA" } | { ok:true, isento:true }
+    if (j?.ok && j.ie) return { ie: up(j.ie) };
+    if (j?.ok && j.isento) return { ie: "ISENTO" };
+    return null;
+  }catch(_){ return null; }
+}
+
+// ---------- Integra o modal “NovoClienteSubmit” ----------
+window.addEventListener('NovoClienteSubmit', async (ev)=>{
+  const p = ev.detail || {};
+  // Normaliza
+  const nome = up(p.nome||"");
+  const endereco = up(p.endereco||"");
+  let ie = up(p.ie||"");
+  const cnpj = digitsOnly(p.cnpj||"");
+  const cep = digitsOnly(p.cep||"");
+  const contato = digitsOnly(p.contato||"");
+  const isentoFrete = !!p.isentoFrete;
+
+  // IE automática se vier CNPJ e o campo IE estiver vazio
+  if (cnpj && !ie){
+    const auto = await consultaIERioGrandeDoSul(cnpj);
+    if (auto?.ie) ie = auto.ie;
+  }
+
+  // Salva no Firestore do tenant
+  await salvarCliente(nome, endereco, isentoFrete, { cnpj, ie, cep, contato });
+
+  // Recarrega datalist
+  hydrateDatalist();
+
+  // Preenche formulário principal se o usuário abriu o modal “do zero”
+  setMainFormFromCliente({ endereco, cnpj, ie, cep, contato, isentoFrete });
+});
+
+// ---------- máscaras leves no modal (se o usuário digitar lá) ----------
+document.addEventListener('DOMContentLoaded', ()=>{
+  const $ = (s)=>document.querySelector(s);
+  const cnpj = $('#mdCliCnpj'), cep = $('#mdCliCEP'), tel = $('#mdCliContato');
+  cnpj && cnpj.addEventListener('input', ()=>maskCNPJ(cnpj));
+  cep  && cep.addEventListener('input', ()=>maskCEP(cep));
+  tel  && tel.addEventListener('input', ()=>maskTelefone(tel));
+  hydrateDatalist();
+});
+
+// ---------- Exposição global (compat) ----------
+window.salvarCliente = salvarCliente;
+window.buscarClienteInfo = buscarClienteInfo;
+window.clientesMaisUsados = clientesMaisUsados;
+window.registrarPrecoCliente = registrarPrecoCliente;
