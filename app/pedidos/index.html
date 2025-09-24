@@ -25,12 +25,14 @@
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
+        <!-- logo global lida do assets/logo da main -->
         <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
 
-      <!-- AÇÕES À DIREITA: novo botão + Relatórios -->
-      <div class="hero-actions">
-        <button id="btnAddCliente" class="btn-add">+ Cliente</button>
+      <div class="hero-right">
+        <!-- Botão redondo verde “+” -->
+        <button id="btnNovoCliente" class="btn-round" title="Novo cliente" aria-label="Adicionar cliente">+</button>
+        <!-- Botão Relatórios (como já estava) -->
         <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
       </div>
     </div>
@@ -127,48 +129,48 @@
     <div id="resumo"></div>
   </main>
 
-  <!-- MODAL: Cadastro Avulso de Cliente -->
-  <div id="modalCliente" class="modal hidden" aria-hidden="true">
-    <div class="modal-backdrop" data-close></div>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mcTitle">
-      <div class="modal-head">
-        <h3 id="mcTitle">Novo Cliente</h3>
-        <button class="modal-close" title="Fechar" data-close>&times;</button>
+  <!-- Modal de novo cliente -->
+  <div id="clienteModal" class="modal" aria-hidden="true">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="clienteModalTitle">
+      <div class="modal-header">
+        <h3 id="clienteModalTitle">Novo Cliente</h3>
+        <button class="modal-close" type="button" aria-label="Fechar" id="clienteModalFechar">×</button>
       </div>
       <div class="modal-body">
         <div class="field-group">
-          <label>Nome do Cliente</label>
-          <input type="text" id="mcNome" autocomplete="off" />
+          <label for="mdCliNome">Nome do Cliente *</label>
+          <input id="mdCliNome" type="text" required />
         </div>
         <div class="field-group">
-          <label>Endereço</label>
-          <input type="text" id="mcEndereco" autocomplete="off" />
+          <label for="mdCliEndereco">Endereço *</label>
+          <input id="mdCliEndereco" type="text" required />
+          <small class="muted">Inclua a cidade ao fim se não for Porto Alegre - RS.</small>
         </div>
         <div class="field-group grid-2">
           <div>
-            <label>CNPJ</label>
-            <input type="text" id="mcCnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
+            <label for="mdCliCnpj">CNPJ</label>
+            <input id="mdCliCnpj" type="text" placeholder="00.000.000/0000-00" />
           </div>
           <div>
-            <label>Inscrição Estadual</label>
-            <input type="text" id="mcIe" placeholder="ISENTO ou número" />
+            <label for="mdCliIE">Inscrição Estadual</label>
+            <input id="mdCliIE" type="text" placeholder="Ex.: ISENTO" />
           </div>
         </div>
         <div class="field-group grid-2">
           <div>
-            <label>CEP</label>
-            <input type="text" id="mcCep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+            <label for="mdCliContato">Contato (tel/WhatsApp)</label>
+            <input id="mdCliContato" type="text" placeholder="(00) 00000-0000" />
           </div>
           <div>
-            <label>Contato</label>
-            <input type="text" id="mcContato" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
+            <label for="mdCliCEP">CEP</label>
+            <input id="mdCliCEP" type="text" placeholder="00000-000" />
           </div>
         </div>
-        <label class="inline"><input type="checkbox" id="mcIsento" /> Isentar frete</label>
+        <label class="inline"><input id="mdCliIsento" type="checkbox" /> Isentar frete por padrão</label>
       </div>
-      <div class="modal-foot">
-        <button id="mcSalvar" class="btn-add w-auto">Salvar Cliente</button>
-        <button class="btn-ghost w-auto" data-close>Fechar</button>
+      <div class="modal-footer">
+        <button id="clienteModalSalvar" class="btn-primary">Salvar</button>
+        <button id="clienteModalCancelar" class="btn-secondary">Cancelar</button>
       </div>
     </div>
   </div>
@@ -214,15 +216,44 @@
       });
     }
 
-    // Mini controlador do modal (apenas abrir/fechar; salvar fica para o módulo clientes.js)
+    // Wiring simples do modal (abrir/fechar/emite evento)
     (function(){
-      const modal = document.getElementById('modalCliente');
-      const openBtn = document.getElementById('btnAddCliente');
-      function open(){ modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false'); }
-      function close(){ modal.classList.add('hidden'); modal.setAttribute('aria-hidden','true'); }
-      openBtn?.addEventListener('click', open);
-      modal?.addEventListener('click', (e)=>{ if (e.target.matches('[data-close]')) close(); });
-      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && !modal.classList.contains('hidden')) close(); });
+      const $ = (s, r=document)=>r.querySelector(s);
+      const modal   = $('#clienteModal');
+      const openBtn = $('#btnNovoCliente');
+      const closeX  = $('#clienteModalFechar');
+      const cancel  = $('#clienteModalCancelar');
+      const salvar  = $('#clienteModalSalvar');
+
+      function open(){ modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); }
+      function close(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); }
+
+      openBtn && openBtn.addEventListener('click', open);
+      closeX  && closeX.addEventListener('click', close);
+      cancel  && cancel.addEventListener('click', close);
+      modal.addEventListener('click', (e)=>{ if(e.target===modal) close(); });
+
+      salvar && salvar.addEventListener('click', () => {
+        const payload = {
+          nome:      $('#mdCliNome')?.value?.trim() || "",
+          endereco:  $('#mdCliEndereco')?.value?.trim() || "",
+          cnpj:      $('#mdCliCnpj')?.value || "",
+          ie:        $('#mdCliIE')?.value || "",
+          contato:   $('#mdCliContato')?.value || "",
+          cep:       $('#mdCliCEP')?.value || "",
+          isentoFrete: !!$('#mdCliIsento')?.checked
+        };
+        // dispara para quem quiser ouvir (clientes.js pode salvar)
+        window.dispatchEvent(new CustomEvent('NovoClienteSubmit', { detail: payload }));
+        // também preenche os campos principais, se vazios
+        if (payload.nome)     { const c=$('#cliente');  if (c && !c.value) c.value = payload.nome; }
+        if (payload.endereco) { const e=$('#endereco'); if (e && !e.value) e.value = payload.endereco; }
+        if (payload.cnpj)     { const n=$('#cnpj');     if (n && !n.value) n.value = payload.cnpj; }
+        if (payload.ie)       { const i=$('#ie');       if (i && !i.value) i.value = payload.ie; }
+        if (payload.cep)      { const p=$('#cep');      if (p && !p.value) p.value = payload.cep; }
+        if (payload.contato)  { const t=$('#contato');  if (t && !t.value) t.value = payload.contato; }
+        close();
+      });
     })();
   </script>
 
