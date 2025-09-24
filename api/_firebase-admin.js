@@ -1,20 +1,26 @@
 // portal/api/_firebase-admin.js
 import admin from "firebase-admin";
 
-function getServiceAccount() {
-  const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!json) throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON ausente no Vercel");
-  return JSON.parse(json);
-}
-
-export function getAdminApp() {
-  if (admin.apps.length) return admin.app();
-  const svc = getServiceAccount();
-  return admin.initializeApp({
-    credential: admin.credential.cert(svc),
+if (!admin.apps.length) {
+  const { FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY } = process.env;
+  if (!FIREBASE_PROJECT_ID || !FIREBASE_CLIENT_EMAIL || !FIREBASE_PRIVATE_KEY) {
+    throw new Error("Faltam envs do Firebase Admin: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY");
+  }
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: FIREBASE_PROJECT_ID,
+      clientEmail: FIREBASE_CLIENT_EMAIL,
+      privateKey: FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    }),
   });
 }
 
-export function getDb() {
-  return getAdminApp().firestore();
+export const db = admin.firestore();
+
+// Retorna ref de coleção sob o tenant
+export function tenantCol(tenantId, col) {
+  if (!tenantId) throw new Error("tenantId obrigatório");
+  return db.collection("tenants").doc(tenantId).collection(col);
 }
+
+export default admin;
