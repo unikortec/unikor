@@ -1,5 +1,5 @@
 // js/clientes.js
-// Cadastro/lookup de clientes no tenant da Serra Nobre, com IE/RS opcional via API.
+// Cadastro/lookup de clientes no tenant Serra Nobre, com IE/RS via /api/rs-ie/lookup.
 
 import { db, authReady, TENANT_ID } from './firebase.js';
 import {
@@ -22,7 +22,6 @@ const normNome = (s)=>_normNome(s);
 // ---------- paths helpers ----------
 function colClientes(){ return collection(db, `tenants/${TENANT_ID}/clientes`); }
 function colHistPreco(){ return collection(db, `tenants/${TENANT_ID}/historico_precos`); }
-function colPedidos(){ return collection(db, `tenants/${TENANT_ID}/pedidos`); }
 
 // ---------- lookups ----------
 export async function getClienteDocByNome(nomeInput){
@@ -149,8 +148,7 @@ function setMainFormFromCliente(d){
   if (d.cep)      byId('cep')      && (byId('cep').value      = d.cep);
   if (d.contato)  byId('contato')  && (byId('contato').value  = d.contato);
   const isenta = !!d.isentoFrete;
-  const chk = byId('isentarFrete');
-  if (chk) chk.checked = isenta;
+  const chk = byId('isentarFrete'); if (chk) chk.checked = isenta;
 }
 
 // popula datalist
@@ -177,14 +175,18 @@ async function hydrateDatalist(){
   });
 })();
 
-// ---------- Consulta IE RS (opcional) ----------
+// ---------- Consulta IE RS (AJUSTADA para seu endpoint) ----------
 async function consultaIERioGrandeDoSul(cnpjDigits){
   if (!cnpjDigits) return null;
   try{
-    const r = await fetch(`/api/ie-rs?cnpj=${encodeURIComponent(cnpjDigits)}`, { cache:'no-store' });
+    const r = await fetch(`/api/rs-ie/lookup`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ cnpj: cnpjDigits })
+    });
     if (!r.ok) return null;
     const j = await r.json();
-    // esperado: { ok:true, ie:"", status:"ATIVA" } | { ok:true, isento:true }
+    // esperado: { ok:true, ie:"...", isento:true/false }
     if (j?.ok && j.ie) return { ie: up(j.ie) };
     if (j?.ok && j.isento) return { ie: "ISENTO" };
     return null;
@@ -215,11 +217,11 @@ window.addEventListener('NovoClienteSubmit', async (ev)=>{
   // Recarrega datalist
   hydrateDatalist();
 
-  // Preenche formulário principal se o usuário abriu o modal “do zero”
+  // Preenche formulário principal também
   setMainFormFromCliente({ endereco, cnpj, ie, cep, contato, isentoFrete });
 });
 
-// ---------- máscaras leves no modal (se o usuário digitar lá) ----------
+// ---------- máscaras leves no modal ----------
 document.addEventListener('DOMContentLoaded', ()=>{
   const $ = (s)=>document.querySelector(s);
   const cnpj = $('#mdCliCnpj'), cep = $('#mdCliCEP'), tel = $('#mdCliContato');
