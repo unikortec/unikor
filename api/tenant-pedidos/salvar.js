@@ -1,34 +1,29 @@
 // portal/api/tenant-pedidos/salvar.js
-import { getDb } from "../../api/_firebase-admin";
+import { tenantCol } from "../_firebase-admin.js";
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-    const { tenantId, payload, idempotencyKey } = req.body || {};
-    if (!tenantId) return res.status(400).json({ error: "tenantId é obrigatório" });
-    if (!payload || typeof payload !== "object") return res.status(400).json({ error: "payload inválido" });
-    if (!idempotencyKey) return res.status(400).json({ error: "idempotencyKey é obrigatório" });
-
-    const db = getDb();
-    const col = db.collection("tenants").doc(tenantId).collection("pedidos");
-
-    // 1) checa idempotência
-    const existing = await col.where("idempotencyKey", "==", idempotencyKey).limit(1).get();
-    if (!existing.empty) {
-      return res.status(200).json({ ok: true, reused: true, id: existing.docs[0].id });
+    if (req.method !== "POST") return res.status(405).json({ ok:false, error:"Method not allowed" });
+    const { tenantId, idempotencyKey, payload } = req.body || {};
+    if (!tenantId || !idempotencyKey || !payload) {
+      return res.status(400).json({ ok:false, error:"tenantId, idempotencyKey e payload são obrigatórios" });
     }
 
-    // 2) cria novo
-    const docRef = await col.add({
+    // já existe?
+    const snap = await tenantCol(tenantId, "pedidos").where("idempotencyKey","==", idempotencyKey).limit(1).get();
+    if (!snap.empty) {
+      return res.json({ ok:true, reused:true, id: snap.docs[0].id });
+    }
+
+    const doc = {
       ...payload,
       idempotencyKey,
-      createdAt: new Date()
-    });
-
-    return res.status(200).json({ ok: true, reused: false, id: docRef.id });
+      dataEntregaDia: payload.dataEntregaISO ? Number(String(payload.dataEntregaISO).replaceAll("-","")) : null,
+      createdAt: new Date(),
+    };
+    const ref = await tenantCol(tenantId, "pedidos").add(doc);
+    return res.json({ ok:true, reused:false, id: ref.id });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Erro interno", detail: e.message });
+    return res.status(500).json({ ok:false, error:e.message });
   }
 }
