@@ -27,7 +27,10 @@
       <div class="hero-left">
         <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
-      <div class="hero-right">
+
+      <!-- AÇÕES À DIREITA: novo botão + Relatórios -->
+      <div class="hero-actions">
+        <button id="btnAddCliente" class="btn-add">+ Cliente</button>
         <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
       </div>
     </div>
@@ -124,6 +127,52 @@
     <div id="resumo"></div>
   </main>
 
+  <!-- MODAL: Cadastro Avulso de Cliente -->
+  <div id="modalCliente" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mcTitle">
+      <div class="modal-head">
+        <h3 id="mcTitle">Novo Cliente</h3>
+        <button class="modal-close" title="Fechar" data-close>&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label>Nome do Cliente</label>
+          <input type="text" id="mcNome" autocomplete="off" />
+        </div>
+        <div class="field-group">
+          <label>Endereço</label>
+          <input type="text" id="mcEndereco" autocomplete="off" />
+        </div>
+        <div class="field-group grid-2">
+          <div>
+            <label>CNPJ</label>
+            <input type="text" id="mcCnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
+          </div>
+          <div>
+            <label>Inscrição Estadual</label>
+            <input type="text" id="mcIe" placeholder="ISENTO ou número" />
+          </div>
+        </div>
+        <div class="field-group grid-2">
+          <div>
+            <label>CEP</label>
+            <input type="text" id="mcCep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+          </div>
+          <div>
+            <label>Contato</label>
+            <input type="text" id="mcContato" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
+          </div>
+        </div>
+        <label class="inline"><input type="checkbox" id="mcIsento" /> Isentar frete</label>
+      </div>
+      <div class="modal-foot">
+        <button id="mcSalvar" class="btn-add w-auto">Salvar Cliente</button>
+        <button class="btn-ghost w-auto" data-close>Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- jsPDF (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
@@ -141,7 +190,7 @@
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          const scope = location.pathname.replace(/[^/]+$/, ''); // ex.: /portal/app/pedidos/
+          const scope = location.pathname.replace(/[^/]+$/, '');
           const reg = await navigator.serviceWorker.register('./sw.js', { scope });
 
           document.addEventListener('visibilitychange', () => {
@@ -164,6 +213,17 @@
         } catch {}
       });
     }
+
+    // Mini controlador do modal (apenas abrir/fechar; salvar fica para o módulo clientes.js)
+    (function(){
+      const modal = document.getElementById('modalCliente');
+      const openBtn = document.getElementById('btnAddCliente');
+      function open(){ modal.classList.remove('hidden'); modal.setAttribute('aria-hidden','false'); }
+      function close(){ modal.classList.add('hidden'); modal.setAttribute('aria-hidden','true'); }
+      openBtn?.addEventListener('click', open);
+      modal?.addEventListener('click', (e)=>{ if (e.target.matches('[data-close]')) close(); });
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape' && !modal.classList.contains('hidden')) close(); });
+    })();
   </script>
 
   <datalist id="listaProdutos"></datalist>
