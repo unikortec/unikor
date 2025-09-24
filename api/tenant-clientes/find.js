@@ -1,30 +1,39 @@
 // portal/api/tenant-clientes/find.js
-import { getDb } from "../_firebase-admin";
+import { tenantCol } from "../_firebase-admin.js";
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (req.method !== "POST") return res.status(405).json({ ok:false, error:"Method not allowed" });
     const { tenantId, nome } = req.body || {};
-    if (!tenantId || !nome) return res.status(400).json({ error: "tenantId e nome são obrigatórios" });
+    if (!tenantId || !nome) return res.status(400).json({ ok:false, error:"tenantId e nome são obrigatórios" });
 
-    const up = (s) => String(s || "").trim().toUpperCase();
-    const removeAcentos = (s) => String(s || "").normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const norm = (s) => removeAcentos(up(s));
+    const alvo = normalize(nome);
+    // busca por nomeNormalizado
+    const snap = await tenantCol(tenantId, "clientes").where("nomeNormalizado", "==", alvo).limit(1).get();
+    if (!snap.empty) {
+      const d = snap.docs[0]; 
+      return res.json({ ok:true, found:true, id:d.id, data:d.data() });
+    }
 
-    const db = getDb();
-    const snap = await db
-      .collection("tenants").doc(tenantId)
-      .collection("clientes")
-      .where("nomeNormalizado", "==", norm(nome))
-      .limit(1)
-      .get();
+    // fallback: prefixo por nome (nomeUpper)
+    const u = upper(nome);
+    const end = u + "\uf8ff";
+    const snap2 = await tenantCol(tenantId, "clientes")
+      .orderBy("nomeUpper")
+      .where("nomeUpper", ">=", u)
+      .where("nomeUpper", "<=", end)
+      .limit(5).get();
 
-    if (snap.empty) return res.status(404).json({ ok: true, found: false });
+    if (!snap2.empty) {
+      const d = snap2.docs[0];
+      return res.json({ ok:true, found:true, id:d.id, data:d.data() });
+    }
 
-    const doc = snap.docs[0];
-    return res.status(200).json({ ok: true, found: true, id: doc.id, data: doc.data() });
+    return res.json({ ok:true, found:false });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Erro interno", detail: e.message });
+    return res.status(500).json({ ok:false, error:e.message });
   }
 }
+
+function upper(s){ return String(s||"").trim().toUpperCase(); }
+function normalize(s){ return upper(s).normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
