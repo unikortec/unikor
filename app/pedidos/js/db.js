@@ -15,10 +15,6 @@ function itemsSig(items){
   ].join(':')).join(';');
 }
 
-/**
- * Gera uma chave determinística para evitar duplicidade.
- * (Mesma regra que usávamos no Firestore client, agora do lado do front.)
- */
 export function buildIdempotencyKey(payload){
   return [
     payload.dataEntregaISO||"",
@@ -36,10 +32,6 @@ export function buildIdempotencyKey(payload){
   ].join("|");
 }
 
-/**
- * Salva o pedido de forma idempotente no tenant.
- * Retorna { ok, reused, id }
- */
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
 
