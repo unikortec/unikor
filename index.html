@@ -68,12 +68,6 @@
   <script type="module">
     import { doLogin, doLogout, doReset, onUser, $ } from "./js/auth.js";
 
-    // Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .catch(err => console.warn('SW:', err));
-    }
-
     // ---------- UI helpers ----------
     const ERRORS_PT = {
       "auth/invalid-email": "E-mail inválido.",
@@ -176,6 +170,50 @@
       scrLogin.style.display = 'none';
       scrDash.style.display  = 'block';
     });
+
+    // =============== Service Worker (auto-update) ===============
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          // (passo 1) registra o SW do PORTAL (raiz do portal)
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+
+          // checa atualização quando volta ao foco
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+          // checagem periódica
+          setInterval(() => reg.update(), 10 * 60 * 1000);
+
+          // (passo 2) quando um novo SW instalar, pede pra assumir e recarrega as abas
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!window.__reloadedBySW) {
+              window.__reloadedBySW = true;
+              location.reload();
+            }
+          });
+
+          // opcional: ouvir o SW avisando que ativou
+          navigator.serviceWorker.addEventListener('message', (ev) => {
+            if (ev.data && ev.data.type === 'SW_ACTIVATED') {
+              // console.log('SW ativado:', ev.data.cache);
+            }
+          });
+        } catch (err) {
+          console.warn('SW:', err);
+        }
+      });
+    }
   </script>
 </body>
 </html>
