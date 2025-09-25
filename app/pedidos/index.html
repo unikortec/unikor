@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <title>Unikor – Pedidos</title>
-  <meta name="theme-color" content="#0ea5a6" />
+  <meta name="theme-color" content="0ea5a6" />
   <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
 
   <!-- garante paths corretos mesmo sem a barra final na URL -->
@@ -151,7 +151,7 @@
           document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') reg.update();
           });
-          setInterval(() => reg.update(), 10 * 60 * 1000);
+          setInterval(() => reg.update(), 10 * 60 * 1000); // Correção: 10 * 60 * 1000
 
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
@@ -163,7 +163,7 @@
           });
 
           navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
+            if (!window.reloadedBySW) { window.reloadedBySW = true; location.reload(); }
           });
         } catch {}
       });
