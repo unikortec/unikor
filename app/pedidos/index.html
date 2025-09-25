@@ -25,12 +25,11 @@
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
-        <!-- logo global lida do assets/logo da main -->
         <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
       <div class="hero-right">
-        <!-- botão verde (novo cliente) + botão relatórios -->
-        <button class="btn-add" id="btnAddCliente" title="Novo cliente">+</button>
+        <!-- Botão redondo verde com “+” -->
+        <a class="btn-add" id="btnAddCliente" title="Novo cliente">+</a>
         <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
       </div>
     </div>
@@ -127,41 +126,6 @@
     <div id="resumo"></div>
   </main>
 
-  <!-- Modal: cadastro rápido de cliente -->
-  <div id="novoClienteModal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <strong>Novo Cliente</strong>
-        <button class="modal-close" id="mdCliClose" aria-label="Fechar">×</button>
-      </div>
-      <div class="modal-body">
-        <form id="mdCliForm">
-          <label>Nome do Cliente</label>
-          <input id="mdCliNome" required />
-
-          <label>CNPJ</label>
-          <input id="mdCliCnpj" inputmode="numeric" placeholder="00.000.000/0000-00" />
-
-          <label>Inscrição Estadual (RS)</label>
-          <input id="mdCliIE" placeholder="ISENTO ou número" />
-
-          <label>Endereço</label>
-          <input id="mdCliEndereco" />
-
-          <label>CEP</label>
-          <input id="mdCliCEP" inputmode="numeric" placeholder="00000-000" />
-
-          <label>Contato (tel/WhatsApp)</label>
-          <input id="mdCliContato" inputmode="numeric" placeholder="(00) 00000-0000" />
-
-          <label class="inline"><input type="checkbox" id="mdCliIsentaFrete" /> Isentar frete</label>
-
-          <button type="submit" class="btn-primary">Salvar</button>
-        </form>
-      </div>
-    </div>
-  </div>
-
   <!-- jsPDF (CDN) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
@@ -172,6 +136,8 @@
   <script type="module" src="./js/clientes.js"></script>
   <script type="module" src="./js/frete.js"></script>
   <script type="module" src="./js/pdf.js"></script>
+  <!-- NOVO: módulo que injeta e controla o modal de cliente -->
+  <script type="module" src="./js/modal-cliente.js"></script>
   <script type="module" src="./js/app.js"></script>
 
   <!-- SW registration -->
@@ -202,40 +168,6 @@
         } catch {}
       });
     }
-  </script>
-
-  <!-- JS do modal (abre/fecha + emite NovoClienteSubmit) -->
-  <script>
-    (function(){
-      const $ = (s)=>document.querySelector(s);
-      const modal   = $('#novoClienteModal');
-      const openBtn = $('#btnAddCliente');
-      const closeBtn= $('#mdCliClose');
-      const form    = $('#mdCliForm');
-
-      function open(){ modal.hidden = false; $('#mdCliNome')?.focus(); }
-      function close(){ modal.hidden = true; }
-
-      openBtn?.addEventListener('click', open);
-      closeBtn?.addEventListener('click', close);
-      modal?.addEventListener('click', (e)=>{ if(e.target === modal) close(); });
-      document.addEventListener('keydown', (e)=>{ if(!modal.hidden && e.key === 'Escape') close(); });
-
-      form?.addEventListener('submit', (e)=>{
-        e.preventDefault();
-        const detail = {
-          nome:      $('#mdCliNome')?.value,
-          cnpj:      $('#mdCliCnpj')?.value,
-          ie:        $('#mdCliIE')?.value,
-          endereco:  $('#mdCliEndereco')?.value,
-          cep:       $('#mdCliCEP')?.value,
-          contato:   $('#mdCliContato')?.value,
-          isentoFrete: !!$('#mdCliIsentaFrete')?.checked
-        };
-        window.dispatchEvent(new CustomEvent('NovoClienteSubmit', { detail }));
-        close();
-      });
-    })();
   </script>
 
   <datalist id="listaProdutos"></datalist>
