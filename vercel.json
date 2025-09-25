@@ -2,7 +2,14 @@
   "version": 2,
   "routes": [
     { "handle": "filesystem" },
+
+    // Garante que chamadas para /api/* vão para funções serverless
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+
+    // Assets estáticos
     { "src": "/[^/]+\\.(js|css|json|png|svg|ico|jpg|jpeg|webp|gif)$", "dest": "/$1" },
+
+    // SPA fallback
     { "src": "/.*", "dest": "/index.html" }
   ]
 }
