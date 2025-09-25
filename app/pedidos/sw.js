@@ -1,20 +1,23 @@
 /* Serra Nobre – Pedidos: Service Worker (Unikor)
- * Versão inicial Unikor:
+Versão inicial Unikor:
  */
 const APP_VERSION = '1.0.4';
-const SW_VERSION  = `pedidos-v${APP_VERSION}`;
-const CACHE_NAME  = `sn-pedidos::${SW_VERSION}`;
+const SW_VERSION = `pedidos-v${APP_VERSION}`; // Correção: template literal
+const CACHE_NAME = `sn-pedidos::${SW_VERSION}`; // Correção: template literal
+
 
 // Escopo real do SW (ex.: https://app.unikor.com.br/app/pedidos/)
 const SCOPE_URL = new URL(self.registration.scope);
 const BASE_PATH = SCOPE_URL.pathname.endsWith('/') ? SCOPE_URL.pathname : SCOPE_URL.pathname + '/';
 const abs = (path) => new URL(path, SCOPE_URL).toString();
 
+
 // Lista de ativos essenciais (relativos ao diretório do app /app/pedidos/)
 const CORE_ASSETS_REL = [
   'index.html',
   'manifest.json',
   'css/style.css',
+
 
   // JS principais
   'js/app.js',
@@ -28,24 +31,30 @@ const CORE_ASSETS_REL = [
   'js/frete.js',
   'js/itens.js',
   'js/legacy-adapter.js',
+  'js/modal-cliente.js', // Adicionado para garantir cache
+
 
   // Ícones do PWA (ajuste se necessário)
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/apple-touch-icon.png',
+  '/assets/logo/icon-192.png', // Correção: path absoluto para assets
+  '/assets/logo/icon-512.png', // Correção: path absoluto para assets
+  '/assets/logo/apple-touch-icon.png', // Correção: path absoluto para assets
+
 
   // O próprio SW
   'sw.js'
 ];
 
+
 // Converte para URLs absolutas respeitando a subpasta/escopo
 const CORE_ASSETS = [ BASE_PATH, ...CORE_ASSETS_REL.map((p) => abs(p)) ];
+
 
 // Pré-cache (best-effort)
 async function cacheCoreAssets(cache) {
   const reqs = CORE_ASSETS.map((u) => new Request(u, { cache: 'reload' }));
   await Promise.allSettled(reqs.map((r) => cache.add(r)));
 }
+
 
 // INSTALL → precache + ativação imediata
 self.addEventListener('install', (event) => {
@@ -55,6 +64,7 @@ self.addEventListener('install', (event) => {
     await self.skipWaiting();
   })());
 });
+
 
 // ACTIVATE → limpa caches antigos + assume abas
 self.addEventListener('activate', (event) => {
@@ -67,13 +77,15 @@ self.addEventListener('activate', (event) => {
     );
     await self.clients.claim();
 
+
     // avisa janelas que novo SW está ativo
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clientsList) {
-      client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
+      client.postMessage({ type: 'SWACTIVATED', version: SW_VERSION });
     }
   })());
 });
+
 
 // Mensagens da página
 self.addEventListener('message', (event) => {
@@ -83,6 +95,7 @@ self.addEventListener('message', (event) => {
   if (type === 'PING') { event.source && event.source.postMessage({ type: 'PONG', version: SW_VERSION }); }
 });
 
+
 // Util: timeout de rede
 function fetchWithTimeout(req, ms = 9000, opts = {}) {
   const ctrl = new AbortController();
@@ -90,12 +103,14 @@ function fetchWithTimeout(req, ms = 9000, opts = {}) {
   return fetch(req, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
 }
 
+
 // Heurísticas
 function isHTMLRequest(req) {
   if (req.mode === 'navigate') return true;
   const accept = req.headers.get('accept') || '';
   return accept.includes('text/html');
 }
+
 
 // Não cachear APIs e domínios dinâmicos (Firebase etc.)
 function isBypassCache(url) {
@@ -112,12 +127,14 @@ function isBypassCache(url) {
   return bypassHosts.has(u.host);
 }
 
+
 // Estáticos same-origin?
 function isStaticSameOrigin(url) {
   const u = new URL(url);
   if (u.origin !== self.location.origin) return false;
   return /\.(png|jpg|jpeg|svg|webp|ico|css|js|json|woff2?)$/i.test(u.pathname);
 }
+
 
 // Fallback offline simples
 function offlineHTML() {
@@ -127,13 +144,16 @@ function offlineHTML() {
   );
 }
 
+
 // Estratégias de fetch
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
+
   // Bypass
   if (isBypassCache(req.url)) return;
+
 
   // Navegação HTML → network-first com fallback
   if (isHTMLRequest(req)) {
@@ -154,6 +174,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+
   // Estáticos same-origin → stale-while-revalidate
   if (isStaticSameOrigin(req.url)) {
     event.respondWith((async () => {
@@ -167,6 +188,7 @@ self.addEventListener('fetch', (event) => {
     })());
     return;
   }
+
 
   // Demais GET same-origin → network com pequeno fallback de cache
   const url = new URL(req.url);
