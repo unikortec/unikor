@@ -2,6 +2,7 @@
 import { salvarCliente, getClienteDocByNome, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 
+// ENDPOINTS: sempre no /api (raiz do domínio)
 const API_ROOT = `${location.origin}/api`;
 
 function el(id){ return document.getElementById(id); }
@@ -67,28 +68,19 @@ function clearForm(){
   setTitleEditing(false);
 }
 function openModal(){
-  injectModal();
-  clearForm();
-  populateDatalist();
+  injectModal(); clearForm(); populateDatalist();
   const m = el('modalCliente');
-  m.classList.remove('hidden');
-  m.setAttribute('aria-hidden','false');
+  m.classList.remove('hidden'); m.setAttribute('aria-hidden','false');
   setTimeout(()=>el('mc_nome')?.focus(),30);
 }
 function closeModal(){
-  const m = el('modalCliente');
-  m?.classList.add('hidden');
-  m?.setAttribute('aria-hidden','true');
+  const m = el('modalCliente'); m?.classList.add('hidden'); m?.setAttribute('aria-hidden','true');
 }
 
 async function populateDatalist(){
   const dl = el('mc_listaClientes'); if (!dl) return;
   dl.innerHTML = '';
-  try{
-    (await clientesMaisUsados(80)).forEach(n=>{
-      const o=document.createElement('option'); o.value=n; dl.appendChild(o);
-    });
-  }catch(_){}
+  try { (await clientesMaisUsados(80)).forEach(n => { const o=document.createElement('option'); o.value=n; dl.appendChild(o); }); } catch {}
 }
 
 async function handleNomeBlurOrChange(){
@@ -104,7 +96,7 @@ async function handleNomeBlurOrChange(){
       if (!el('mc_contato').value)  el('mc_contato').value  = info.contato || '';
       el('mc_isentoFrete').checked  = !!info.isentoFrete;
     } else { setTitleEditing(false); }
-  }catch(_){}
+  }catch{}
 }
 
 async function autoPreencherPorCNPJ(){
@@ -122,11 +114,11 @@ async function autoPreencherPorCNPJ(){
     const j = await r.json();
     if (!j?.ok) return;
 
-    if (j.razao_social && !el('mc_nome').value)      el('mc_nome').value      = j.razao_social.toUpperCase();
-    if (j.endereco && !el('mc_endereco').value)      el('mc_endereco').value  = j.endereco.toUpperCase();
-    if (j.cep && !el('mc_cep').value)                el('mc_cep').value       = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
-    if (j.ie && !el('mc_ie').value)                  el('mc_ie').value        = String(j.ie).toUpperCase();
-  }catch(_){}
+    if (j.razao_social && !el('mc_nome').value)     el('mc_nome').value     = j.razao_social.toUpperCase();
+    if (j.endereco && !el('mc_endereco').value)     el('mc_endereco').value = j.endereco.toUpperCase();
+    if (j.cep && !el('mc_cep').value)               el('mc_cep').value      = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
+    if (j.ie && !el('mc_ie').value)                 el('mc_ie').value       = String(j.ie).toUpperCase();
+  }catch{}
 }
 
 async function saveFromModal(){
@@ -148,7 +140,7 @@ async function saveFromModal(){
   const inputCliente = document.getElementById('cliente');
   if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
-  try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch(_){}
+  try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch{}
   closeModal();
 }
 
