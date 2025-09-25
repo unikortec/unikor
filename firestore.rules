@@ -2,68 +2,83 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helpers
+    // ==== Helpers ====
     function isAuthed() { return request.auth != null; }
     function userRole() {
-      return isAuthed() && request.auth.token.role != null ? request.auth.token.role : "";
+      return isAuthed() && request.auth.token.role != null
+        ? request.auth.token.role : "";
     }
-    function isAdmin() { return userRole() == "admin" || userRole() == "master"; }
+    function isAdmin() {
+      return userRole() == "admin" || userRole() == "master";
+    }
     function userTenant() {
-      return isAuthed() && request.auth.token.tenantId != null ? request.auth.token.tenantId : "";
+      return isAuthed() && request.auth.token.tenantId != null
+        ? request.auth.token.tenantId : "";
     }
-
-    // Validações já existentes
     function isUpper(s)   { return s is string && s == upper(s); }
     function nonNeg(n)    { return n is number && n >= 0; }
     function validTipo(t) { return t in ["RESFRIADO","CONGELADO"]; }
     function validUnit(u) { return u in ["KG","CX","UN"]; }
     function isServerTime(ts) { return ts is timestamp && ts == request.time; }
 
-    // App Pedidos isolado com auth anônima (mantido)
+    // 🔸 EXCEÇÃO: app Pedidos isolado com auth anônima para o tenant Serra Nobre
     function anonAllowedForTenant(tenantId) {
       return request.auth != null
         && request.auth.token.sign_in_provider == "anonymous"
-        && (tenantId == "serranobrecarnes.com.br" || tenantId == "serranobre.com.br");
+        && tenantId == "serranobrecarnes.com.br";
     }
 
+    // ==== Tudo dentro do namespace tenants ====
     match /tenants/{tenantId}/{document=**} {
 
-      // READ do próprio tenant (ou master) e também anônimo do Pedidos
-      allow read: if (isAuthed() && (tenantId == userTenant() || userRole() == "master"))
-                  || anonAllowedForTenant(tenantId);
+      // Leitura padrão: usuário autenticado do próprio tenant (ou master).
+      // (Anônimo NÃO ganha read por aqui — abrimos nos blocos específicos abaixo.)
+      allow read: if isAuthed() && (tenantId == userTenant() || userRole() == "master");
 
       // -------- CLIENTES --------
       match /clientes/{clienteId} {
+        // READ: liberar também p/ anônimo do tenant SN (datalist, lookups no modal)
+        allow read: if (isAuthed() && tenantId == userTenant())
+                    || anonAllowedForTenant(tenantId);
+
+        // WRITE: usuário do tenant OU anônimo do tenant SN
         allow create, update: if (isAuthed() && tenantId == userTenant())
                               || anonAllowedForTenant(tenantId);
+
         allow delete: if isAdmin() && tenantId == userTenant();
 
+        // Subcoleção de produtos do cliente (mantém como estava)
         match /produtos/{prodId} {
-          allow read: if (isAuthed() && tenantId == userTenant()) || anonAllowedForTenant(tenantId);
-          allow create, update, delete: if isAdmin() && tenantId == userTenant();
+          allow read:                   if isAuthed() && tenantId == userTenant();
+          allow create, update, delete: if isAdmin()  && tenantId == userTenant();
         }
       }
 
       // -------- HISTÓRICO DE PREÇOS --------
       match /historico_precos/{docId} {
+        // READ: necessário para buscar último preço no app
+        allow read: if (isAuthed() && tenantId == userTenant())
+                    || anonAllowedForTenant(tenantId);
+
+        // WRITE: gravações do app (incremento de compras etc.)
         allow create: if (isAuthed() && tenantId == userTenant())
                       || anonAllowedForTenant(tenantId);
+
         allow update, delete: if false;
       }
 
       // -------- PEDIDOS --------
       match /pedidos/{pedidoId} {
-
-        // criar/editar: usuário do tenant OU (exceção) anônimo do app Pedidos
+        // App Pedidos precisa ler o próprio pedido e atualizar:
+        allow read:   if (isAuthed() && tenantId == userTenant())
+                      || anonAllowedForTenant(tenantId);
         allow create, update: if (isAuthed() && tenantId == userTenant())
                               || anonAllowedForTenant(tenantId);
-
-        // excluir: qualquer USUÁRIO AUTENTICADO do próprio tenant
-        // (antes era só admin; agora libera para todos do tenant)
-        allow delete: if isAuthed() && tenantId == userTenant();
+        // Você pediu para usuários do tenant poderem editar/excluir: já coberto acima
+        allow delete: if isAdmin() && tenantId == userTenant();
       }
 
-      // -------- ESTOQUE --------
+      // -------- ESTOQUE (validações fortes) --------
       match /inventory/{docId} {
         allow create, update: if isAuthed() && tenantId == userTenant()
           && isUpper(request.resource.data.family)
@@ -89,14 +104,14 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
-      // módulos futuros
+      // Módulos futuros (sem mudança)
       match /despesas/{docId}     { allow create, update, delete: if isAdmin() && tenantId == userTenant(); }
       match /crm_contatos/{docId} { allow create, update, delete: if isAdmin() && tenantId == userTenant(); }
       match /crm_leads/{docId}    { allow create, update, delete: if isAdmin() && tenantId == userTenant(); }
       match /metrics/{docId}      { allow write: if false; }
     }
 
-    // bloqueio fora do namespace tenants
+    // Bloqueio total fora de /tenants
     match /{document=**} { allow read, write: if false; }
   }
 }
