@@ -95,7 +95,7 @@ async function autoPreencherPorCNPJ(){
   if (cnpj.length !== 14) return;
 
   try{
-    const r = await fetch('/api/cnpj/lookup', {
+    const r = await fetch('unikor/api/cnpj/lookup', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ cnpj })
