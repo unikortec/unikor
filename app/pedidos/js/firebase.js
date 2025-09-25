@@ -1,12 +1,36 @@
 // app/pedidos/js/firebase.js
-// Rodando isolado (sem login Unikor) mas salvando/consultando no tenant Serra Nobre.
-// Quando formos plugar no app Unikor, basta trocar para extrair o tenant do token.
+// Firestore + auth anônima, exportando um Firestore REAL (não-Promise).
 
-// 🔒 Tenant alvo (fixo por enquanto)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import {
+  getFirestore, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+/* CONFIG DO PROJETO */
+const firebaseConfig = {
+  apiKey:        "AIzaSyD-XXXXX_SUBSTITUA_AQUI",
+  authDomain:    "unikorapp.firebaseapp.com",
+  projectId:     "unikorapp",
+  storageBucket: "unikorapp.appspot.com",
+  appId:         "1:1234567890:web:abcdef"
+};
+
+// Inicia app e Firestore (db é um Firestore OBJETO)
+export const app = initializeApp(firebaseConfig);
+export const db  = getFirestore(app);
+
+// Auth anônima + sinalização de pronto
+const auth = getAuth(app);
+export const authReady = new Promise((resolve) => {
+  onAuthStateChanged(auth, () => resolve(true));
+});
+signInAnonymously(auth).catch(()=>{ /* silencioso */ });
+
+// Tenant fixo (Serra Nobre) enquanto o módulo roda isolado
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-// Placeholders para manter compatibilidade com imports existentes
-export const authReady = Promise.resolve(null);
-export const db = null;
-export const app = null;
-export const auth = null;
+// Persistência offline (opcional; ignora erro se não suportar)
+enableIndexedDbPersistence(db).catch(()=>{});
