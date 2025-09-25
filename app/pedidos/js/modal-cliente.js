@@ -1,16 +1,17 @@
-// js/modal-cliente.js
+// app/pedidos/js/modal-cliente.js
+// Injeta e controla o modal de cliente. Importa salvarCliente de clientes.js.
+
 import {
   salvarCliente,
-  getClienteDocByNome,
   buscarClienteInfo,
   clientesMaisUsados
 } from './clientes.js';
 
-import { up } from './utils.js';
+import { up, digitsOnly, maskCNPJ, maskCEP, maskTelefone } from './utils.js';
 
-// ====== injeta HTML do modal no body ======
+// ====== Injeta HTML do modal ======
 function injectModal() {
-  if (document.getElementById('modalCliente')) return; // já injetado
+  if (document.getElementById('modalCliente')) return;
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
@@ -73,8 +74,7 @@ function injectModal() {
   document.body.appendChild(wrap.firstElementChild);
 }
 
-// util
-function el(id){ return document.getElementById(id); }
+const el = (id)=>document.getElementById(id);
 
 function setTitleEditing(isEditing){
   el('modalClienteTitulo').textContent = isEditing ? 'Editar Cliente' : 'Novo Cliente';
@@ -98,13 +98,12 @@ function closeModal(){
 function openModal(){
   injectModal();
   clearForm();
-  populateDatalist();      // pré-carrega autocomplete
+  populateDatalist();
   el('modalCliente')?.classList.remove('hidden');
   el('modalCliente')?.setAttribute('aria-hidden','false');
   setTimeout(()=> el('mc_nome')?.focus(), 30);
 }
 
-// carrega datalist do modal com “clientes mais usados”
 async function populateDatalist(){
   const dl = el('mc_listaClientes');
   if (!dl) return;
@@ -119,7 +118,6 @@ async function populateDatalist(){
   }catch(_){}
 }
 
-// ao escolher/confirmar um nome, preenche para edição (se existir)
 async function handleNomeBlurOrChange(){
   const nome = up(el('mc_nome')?.value || '');
   if (!nome) return;
@@ -139,10 +137,10 @@ async function handleNomeBlurOrChange(){
   }catch(_){}
 }
 
-// Lookup I.E. RS ao sair do CNPJ (se campo IE estiver vazio)
+// lookup IE RS se IE estiver vazio
 async function tryLookupIE(){
   const raw = el('mc_cnpj')?.value || '';
-  const cnpj = raw.replace(/\D/g,'');
+  const cnpj = digitsOnly(raw);
   if (cnpj.length !== 14) return;
   if ((el('mc_ie')?.value || '').trim()) return;
 
@@ -172,11 +170,9 @@ async function saveFromModal(){
 
   if (!nome){ alert('Informe o nome do cliente.'); el('mc_nome')?.focus(); return; }
 
-  await salvarCliente(nome, endereco, isentoFre, {
-    cnpj: cnpjMask, ie, cep, contato
-  });
+  await salvarCliente(nome, endereco, isentoFre, { cnpj: cnpjMask, ie, cep, contato });
 
-  // adiciona no datalist global da tela principal (autocomplete do pedido)
+  // adiciona no datalist da tela principal (autocomplete do pedido)
   const mainDL = document.getElementById('listaClientes');
   if (mainDL && !Array.from(mainDL.options).some(o => o.value === up(nome))) {
     const opt = document.createElement('option');
@@ -184,11 +180,10 @@ async function saveFromModal(){
     mainDL.appendChild(opt);
   }
 
-  // se o input Cliente da tela principal estiver vazio, já preenche com o nome criado/atualizado
+  // se o input Cliente estiver vazio, preenche com o nome recém salvo
   const inputCliente = document.getElementById('cliente');
   if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
-  // feedback simples
   try{
     const { toastOk } = await import('./ui.js');
     toastOk && toastOk('Cliente salvo');
@@ -201,24 +196,26 @@ async function saveFromModal(){
 document.addEventListener('DOMContentLoaded', ()=>{
   injectModal();
 
-  document.getElementById('btnAddCliente')?.addEventListener('click', openModal);
-
-  // elementos do modal (podem ainda não existir antes do inject)
-  const root = document.body;
-  root.addEventListener('click', (ev)=>{
-    const t = ev.target;
-    if (t && t.id === 'modalClienteFechar') closeModal();
-    if (t && t.id === 'modalClienteCancelar') closeModal();
-    if (t && t.dataset && t.dataset.close) closeModal();
-    if (t && t.id === 'modalClienteSalvar') saveFromModal();
+  document.getElementById('btnAddCliente')?.addEventListener('click', (ev)=>{
+    ev.preventDefault(); openModal();
   });
 
-  root.addEventListener('blur', (ev)=>{
-    if (ev.target && ev.target.id === 'mc_cnpj') tryLookupIE();
-    if (ev.target && ev.target.id === 'mc_nome') handleNomeBlurOrChange();
+  // clicks dentro do modal
+  document.body.addEventListener('click', (ev)=>{
+    const t = ev.target;
+    if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) closeModal();
+    if (t?.id === 'modalClienteSalvar') saveFromModal();
+  });
+
+  // blur/nome e blur/cnpj
+  document.body.addEventListener('blur', (ev)=>{
+    if (ev.target?.id === 'mc_cnpj') tryLookupIE();
+    if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange();
   }, true);
 
-  root.addEventListener('change', (ev)=>{
-    if (ev.target && ev.target.id === 'mc_nome') handleNomeBlurOrChange();
-  });
+  // masks
+  const cnpj = el('mc_cnpj'), cep = el('mc_cep'), tel = el('mc_contato');
+  cnpj && cnpj.addEventListener('input', ()=>maskCNPJ(cnpj));
+  cep  && cep.addEventListener('input', ()=>maskCEP(cep));
+  tel  && tel.addEventListener('input', ()=>maskTelefone(tel));
 });
