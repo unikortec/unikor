@@ -13,7 +13,7 @@ const up = (s)=>_up(s);
 const digitsOnly = (s)=>_digitsOnly(s);
 const normNome = (s)=>_normNome(s);
 
-// Coleções — SEM string única; use segmentos
+// Coleções (segmentadas)
 const colClientes  = () => collection(db, "tenants", TENANT_ID, "clientes");
 const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_precos");
 
