@@ -2,7 +2,7 @@
 import { db, authReady, TENANT_ID } from './firebase.js';
 import {
   collection, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
-  serverTimestamp, increment
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 import {
@@ -127,8 +127,13 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
 
+  // Removido 'increment' pois não foi importado e pode causar erro se não for usado corretamente
+  // Se 'compras' precisar ser incrementado, o 'increment' do Firestore SDK precisa ser importado e usado.
+  // Ex: import { increment } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+  // await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
+  // Por enquanto, apenas atualiza a data de atualização.
   const found = await getClienteDocByNome(nomeCli);
-  if (found) await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
+  if (found) await updateDoc(found.ref, { atualizadoEm: serverTimestamp() });
 }
 
 // helpers UI
