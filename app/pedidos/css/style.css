@@ -32,16 +32,11 @@ body{
   align-items:center;
   justify-content:space-between;
 }
-.hero-left{ display:flex; align-items:center; gap:12px; }
-.hero-right{ display:flex; align-items:center; gap:12px; }
-
 .hero-logo.big{
   height:50px;
   width:auto;
   display:block;
 }
-
-/* Botão Relatórios (existente) */
 .btn-report{
   background:#fff;
   color:var(--brand);
@@ -57,24 +52,23 @@ body{
 }
 .btn-report:active{ transform:translateY(1px); }
 
-/* Botão round verde “+” */
-.btn-round{
-  width:48px;
-  height:48px;
-  border-radius:999px;
-  border:2px solid #ffffff;
-  background:#16a34a;
+/* Botão redondo “+” */
+.btn-add{
+  background:var(--brand);
   color:#fff;
-  font-size:28px;
-  font-weight:800;
-  line-height:1;
+  font-size:22px;
+  font-weight:700;
+  width:42px; height:42px;
+  border-radius:50%;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  cursor:pointer;
+  margin-right:12px;
   box-shadow:0 1px 0 rgba(0,0,0,.06);
+  border:2px solid #ffffff;
+  cursor:pointer;
 }
-.btn-round:active{ transform:translateY(1px); }
+.btn-add:active{ transform:translateY(1px); }
 
 /* MAIN */
 #appMain{ max-width: 1100px; margin: 14px auto 40px; padding: 0 12px; }
@@ -84,7 +78,6 @@ body{
   .hero-inner{ padding:14px 12px; }
   .hero-logo.big{ height:40px; }
   .btn-report{ padding:8px 14px; font-size:14px; }
-  .btn-round{ width:44px; height:44px; font-size:26px; }
 }
 
 /* Banners */
@@ -139,40 +132,42 @@ button{
 }
 .item .remove:hover{ filter:brightness(0.95); }
 
-/* ======== Modal simples ======== */
+/* ===== Modal de Cliente ===== */
+.modal.hidden{ display:none; }
 .modal{
-  position:fixed; inset:0;
-  background:rgba(0,0,0,.35);
-  display:none;
-  align-items:center;
-  justify-content:center;
-  padding:16px;
-  z-index:1000;
+  position:fixed; inset:0; z-index:1000;
 }
-.modal.show{ display:flex; }
-.modal-dialog{
-  width:min(520px, 100%);
+.modal-backdrop{
+  position:absolute; inset:0; background:rgba(0,0,0,.45);
+}
+.modal-card{
+  position:relative;
+  width:min(640px, 92vw);
+  margin:6vh auto 0;
   background:#fff;
   border-radius:12px;
-  box-shadow:0 10px 30px rgba(0,0,0,.2);
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
   overflow:hidden;
 }
-.modal-header, .modal-footer{
-  padding:12px 14px;
-  background:#f8fafc;
+.modal-header{
   display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--line);
 }
 .modal-header h3{ margin:0; font-size:18px; }
 .modal-close{
-  width:auto; height:auto; border:none; background:transparent; font-size:22px; line-height:1; cursor:pointer; color:#334155;
+  background:transparent; border:none; font-size:22px; line-height:1; cursor:pointer;
+  width:36px; height:36px; border-radius:8px;
 }
-.modal-body{ padding:14px; background:#fff; }
-.btn-primary{
-  background:#16a34a; color:#fff; font-weight:700; border:none; padding:10px 16px; border-radius:8px; cursor:pointer;
-  width:auto;
+.modal-close:hover{ background:#f1f5f9; }
+.modal-body{ padding:14px; }
+.modal-footer{
+  display:flex; gap:10px; justify-content:flex-end;
+  padding:12px 14px; border-top:1px solid var(--line);
 }
 .btn-secondary{
-  background:#e5e7eb; color:#111827; border:none; padding:10px 16px; border-radius:8px; cursor:pointer;
-  width:auto;
+  background:#e2e8f0; color:#111827; font-weight:700;
 }
-.modal .field-group input{ width:100%; }
+.btn-primary{
+  background:var(--brand); color:#fff; font-weight:700;
+}
+.btn-secondary:hover, .btn-primary:hover{ filter:brightness(0.97); }
