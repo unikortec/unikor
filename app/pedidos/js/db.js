@@ -1,7 +1,8 @@
 // app/pedidos/js/db.js
-// Salva pedido *uma única vez* usando idempotencyKey no backend do tenant.
+// Salva pedido uma única vez usando idempotencyKey no backend do tenant.
 import { TENANT_ID } from './firebase.js';
 import { up } from './utils.js';
+
 
 function normalizeEnderecoForKey(str){ return up(str).replace(/\s+/g,' ').trim(); }
 function itemsSig(items){
@@ -14,6 +15,7 @@ function itemsSig(items){
     Number(i.total||0).toFixed(2)
   ].join(':')).join(';');
 }
+
 
 export function buildIdempotencyKey(payload){
   return [
@@ -32,14 +34,17 @@ export function buildIdempotencyKey(payload){
   ].join("|");
 }
 
+
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
+
 
   const r = await fetch("/api/tenant-pedidos/salvar", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
   });
+
 
   if (!r.ok) throw new Error("Falha ao salvar pedido");
   return r.json();
