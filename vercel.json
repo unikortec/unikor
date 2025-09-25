@@ -1,67 +1,8 @@
 {
   "version": 2,
-
-  "headers": [
-    {
-      "source": "/(.*)\\.(js|css|png|svg|ico|jpg|jpeg|webp|gif)$",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/(index\\.html)?",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
-    },
-    {
-      "source": "/manifest.json",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
-    },
-    {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
-    },
-    {
-      "source": "/app/pedidos/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
-    },
-    {
-      "source": "/app/pedidos/manifest.json",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache" }
-      ]
-    }
-  ],
-
-  "redirects": [
-    {
-      "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.app.unikor.com.br" }],
-      "destination": "https://app.unikor.com.br/$1",
-      "permanent": true
-    }
-  ],
-
   "routes": [
     { "handle": "filesystem" },
-
-    /* API (serverless) */
     { "src": "/api/(.*)", "dest": "/api/$1" },
-
-    /* SPA do app de pedidos: qualquer rota vira /app/pedidos/index.html */
-    { "src": "/app/pedidos/(.*)", "dest": "/app/pedidos/index.html" },
-
-    /* Arquivos estáticos diretos */
-    { "src": "/[^/]+\\.(js|css|json|png|svg|ico|jpg|jpeg|webp|gif)$", "dest": "/$1" },
-
-    /* Portal SPA catch-all (por último) */
     { "src": "/.*", "dest": "/index.html" }
   ]
 }
