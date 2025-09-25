@@ -1,6 +1,4 @@
 // app/pedidos/js/modal-cliente.js
-// Injeta e controla o modal de cliente. Importa salvarCliente de clientes.js.
-
 import {
   salvarCliente,
   buscarClienteInfo,
@@ -9,10 +7,8 @@ import {
 
 import { up, digitsOnly, maskCNPJ, maskCEP, maskTelefone } from './utils.js';
 
-// ====== Injeta HTML do modal ======
 function injectModal() {
   if (document.getElementById('modalCliente')) return;
-
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div id="modalCliente" class="modal hidden" aria-hidden="true">
@@ -22,7 +18,6 @@ function injectModal() {
           <h3 id="modalClienteTitulo">Novo Cliente</h3>
           <button class="modal-close" id="modalClienteFechar" aria-label="Fechar">×</button>
         </div>
-
         <div class="modal-body">
           <div class="field-group">
             <label for="mc_nome">Nome/Razão Social:</label>
@@ -30,24 +25,21 @@ function injectModal() {
             <datalist id="mc_listaClientes"></datalist>
             <small class="inline-help">Selecione para editar um cliente existente.</small>
           </div>
-
           <div class="field-group grid-2">
             <div>
               <label for="mc_cnpj">CNPJ:</label>
               <input id="mc_cnpj" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
-              <small class="inline-help">Ao sair do campo, tentamos buscar a I.E. no RS.</small>
+              <small class="inline-help">Ao sair do campo, preenchemos Razão/Endereço/CEP e tentamos a I.E. (RS).</small>
             </div>
             <div>
               <label for="mc_ie">Inscrição Estadual:</label>
               <input id="mc_ie" type="text" placeholder="ISENTO ou número" />
             </div>
           </div>
-
           <div class="field-group">
             <label for="mc_endereco">Endereço (com cidade):</label>
             <input id="mc_endereco" type="text" autocomplete="off" />
           </div>
-
           <div class="field-group grid-2">
             <div>
               <label for="mc_cep">CEP:</label>
@@ -58,12 +50,10 @@ function injectModal() {
               <input id="mc_contato" type="text" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
             </div>
           </div>
-
           <div class="field-group">
             <label><input type="checkbox" id="mc_isentoFrete" /> Isento de frete</label>
           </div>
         </div>
-
         <div class="modal-footer">
           <button class="btn-secondary" id="modalClienteCancelar">Cancelar</button>
           <button class="btn-primary" id="modalClienteSalvar">Salvar</button>
@@ -137,25 +127,29 @@ async function handleNomeBlurOrChange(){
   }catch(_){}
 }
 
-// lookup IE RS se IE estiver vazio
-async function tryLookupIE(){
+// ---- Autofill por CNPJ (BrasilAPI + fallback cnpj.biz + IE RS) ----
+function setIfEmpty(id, v){
+  const e = el(id); if (!e || !v) return;
+  if (!String(e.value||"").trim()) e.value = v;
+}
+async function autoFromCNPJ(){
   const raw = el('mc_cnpj')?.value || '';
   const cnpj = digitsOnly(raw);
   if (cnpj.length !== 14) return;
-  if ((el('mc_ie')?.value || '').trim()) return;
 
   try{
-    const r = await fetch('/api/rs-ie/lookup', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
+    const r = await fetch('/api/cnpj/lookup', {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({ cnpj })
     });
     if (!r.ok) return;
     const j = await r.json();
-    if (j?.ok){
-      if (j.ie) el('mc_ie').value = j.ie.toString().toUpperCase();
-      if (j.isento) el('mc_ie').value = 'ISENTO';
-    }
+    if (!j?.ok) return;
+
+    if (j.razao_social) setIfEmpty('mc_nome', j.razao_social.toUpperCase());
+    if (j.endereco)     setIfEmpty('mc_endereco', j.endereco.toUpperCase());
+    if (j.cep)          setIfEmpty('mc_cep', j.cep.replace(/^(\d{5})(\d{3}).*$/, "$1-$2"));
+    if (j.ie)           setIfEmpty('mc_ie', String(j.ie).toUpperCase());
   }catch(_){}
 }
 
@@ -172,7 +166,7 @@ async function saveFromModal(){
 
   await salvarCliente(nome, endereco, isentoFre, { cnpj: cnpjMask, ie, cep, contato });
 
-  // adiciona no datalist da tela principal (autocomplete do pedido)
+  // adiciona no datalist global da tela principal
   const mainDL = document.getElementById('listaClientes');
   if (mainDL && !Array.from(mainDL.options).some(o => o.value === up(nome))) {
     const opt = document.createElement('option');
@@ -180,7 +174,6 @@ async function saveFromModal(){
     mainDL.appendChild(opt);
   }
 
-  // se o input Cliente estiver vazio, preenche com o nome recém salvo
   const inputCliente = document.getElementById('cliente');
   if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
@@ -192,7 +185,7 @@ async function saveFromModal(){
   closeModal();
 }
 
-// wires
+// Wires
 document.addEventListener('DOMContentLoaded', ()=>{
   injectModal();
 
@@ -200,20 +193,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ev.preventDefault(); openModal();
   });
 
-  // clicks dentro do modal
   document.body.addEventListener('click', (ev)=>{
     const t = ev.target;
     if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) closeModal();
     if (t?.id === 'modalClienteSalvar') saveFromModal();
   });
 
-  // blur/nome e blur/cnpj
+  // blur nome/cnpj
   document.body.addEventListener('blur', (ev)=>{
-    if (ev.target?.id === 'mc_cnpj') tryLookupIE();
     if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange();
+    if (ev.target?.id === 'mc_cnpj') autoFromCNPJ();
   }, true);
 
-  // masks
+  // máscaras
   const cnpj = el('mc_cnpj'), cep = el('mc_cep'), tel = el('mc_contato');
   cnpj && cnpj.addEventListener('input', ()=>maskCNPJ(cnpj));
   cep  && cep.addEventListener('input', ()=>maskCEP(cep));
