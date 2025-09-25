@@ -105,11 +105,11 @@ async function autoPreencherPorCNPJ(){
   if (cnpj.length !== 14) return;
 
   try{
-    const r = await fetch(`${API_ROOT}/cnpj/lookup`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ cnpj })
-    });
+    const r = await fetch('/api/cnpj/lookup', {
+  method:'POST',
+  headers:{ 'Content-Type':'application/json' },
+  body: JSON.stringify({ cnpj })
+});
     if (!r.ok) return;
     const j = await r.json();
     if (!j?.ok) return;
