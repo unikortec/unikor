@@ -1,4 +1,3 @@
-// portal/api/tenant-pedidos/salvar.js
 import { db, tenantCol } from "../_firebase-admin.js";
 
 // CORS simples (libera app.unikor.com.br, produção Vercel e localhost)
