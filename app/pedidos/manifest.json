@@ -7,8 +7,8 @@
   "scope": "/portal/app/pedidos/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#0ea5a6",
+  "background_color": "ffffff",
+  "theme_color": "0ea5a6",
   "icons": [
     { "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
@@ -25,5 +25,5 @@
     }
   ],
   "categories": ["business", "productivity"],
-  "prefer_related_applications": false
+  "preferrelatedapplications": false
 }
