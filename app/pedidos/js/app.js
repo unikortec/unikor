@@ -1,8 +1,7 @@
 // app/pedidos/js/app.js
 import { atualizarFreteUI } from './frete.js';
-import { wireClienteModal } from './clientes.js';
 
-// Carrega itens.js com fallback
+// Carrega itens.js com fallback (evita crash se SW servir versão antiga)
 let initItens, adicionarItem, atualizarFreteAoEditarItem;
 async function loadItensModule(){
   const m = await import('./itens.js');
@@ -17,28 +16,45 @@ async function loadItensModule(){
   return true;
 }
 
-// PDF on-demand
+// PDF com fallback de tipos de export
 async function callGerarPDF(mode, btn) {
   try {
     const m = await import('./pdf.js');
-    let fn = m.gerarPDF || (typeof m.default === 'function' ? m.default : m.default?.gerarPDF);
-    if (!fn) { alert('Módulo de PDF indisponível.'); return; }
+    let fn = null;
+    if (typeof m.gerarPDF === 'function') fn = m.gerarPDF;
+    else if (typeof m.default === 'function') fn = m.default;
+    else if (m.default && typeof m.default.gerarPDF === 'function') fn = m.default.gerarPDF;
+    if (!fn) { alert('Módulo de PDF indisponível'); return; }
     await fn(mode, btn);
   } catch (err) {
-    console.error('[PDF] Falha ao carregar:', err);
-    alert('Não consegui carregar o módulo de PDF.');
+    console.error('[PDF] Falha ao carregar módulo:', err);
+    alert('Não consegui carregar o módulo de PDF. Tente recarregar a página.');
   }
 }
 
-// Offline banner (ping simples)
+// UI: mostra/oculta campo "pagamentoOutro"
+function wirePagamentoOutro(){
+  const sel = document.getElementById('pagamento');
+  const outro = document.getElementById('pagamentoOutro');
+  if (!sel || !outro) return;
+  const sync = () => { outro.style.display = (sel.value === 'OUTRO') ? '' : 'none'; };
+  sel.addEventListener('change', sync);
+  sync();
+}
+
+// Banner offline (ping real)
 async function isReallyOnline(timeoutMs = 5000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const url = "./manifest.json?ts=" + Date.now();
+    const url = "/app/pedidos/manifest.json?ts=" + Date.now();
     const r = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
     return r.ok;
-  } catch { return false; } finally { clearTimeout(t); }
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
 }
 async function updateOfflineBanner(){
   const el = document.getElementById('offlineBanner');
@@ -47,15 +63,11 @@ async function updateOfflineBanner(){
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // === NOVO: modal de cliente
-  wireClienteModal();
-
-  // itens
   const ok = await loadItensModule();
   if (!ok) return;
+
   initItens();
 
-  // add item
   const addBtn = document.getElementById('adicionarItemBtn');
   if (addBtn){
     addBtn.addEventListener('click', () => {
@@ -64,14 +76,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // eventos de frete
   const end = document.getElementById('endereco');
   const chkIsentar = document.getElementById('isentarFrete');
   end && end.addEventListener('blur', atualizarFreteUI);
   chkIsentar && chkIsentar.addEventListener('change', atualizarFreteUI);
+
   atualizarFreteAoEditarItem(() => atualizarFreteUI());
 
-  // Botões PDF
+  wirePagamentoOutro();
+
   const g = document.getElementById('btnGerarPdf');
   const s = document.getElementById('btnSalvarPdf');
   const c = document.getElementById('btnCompartilharPdf');
@@ -79,7 +92,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   s && s.addEventListener('click', (ev) => callGerarPDF(true,  ev.target));
   c && c.addEventListener('click', async () => callGerarPDF('share'));
 
-  // offline banner
   updateOfflineBanner();
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') updateOfflineBanner();
