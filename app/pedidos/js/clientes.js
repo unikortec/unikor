@@ -1,51 +1,40 @@
 // app/pedidos/js/clientes.js
-// Cadastro/lookup de clientes no tenant (Serra Nobre) + utilitários.
-
 import { db, authReady, TENANT_ID } from './firebase.js';
 import {
-  collection, doc, setDoc, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
+  collection, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
   serverTimestamp, increment
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 import {
-  up as _up,
-  removeAcentos,
-  normNome as _normNome,
-  digitsOnly as _digitsOnly,
+  up as _up, normNome as _normNome, digitsOnly as _digitsOnly
 } from './utils.js';
 
 const up = (s)=>_up(s);
 const digitsOnly = (s)=>_digitsOnly(s);
 const normNome = (s)=>_normNome(s);
 
-/* ---------- paths helpers (SEM string única) ---------- */
-const colClientes = () => collection(db, "tenants", TENANT_ID, "clientes");
+// Coleções — SEM string única; use segmentos
+const colClientes  = () => collection(db, "tenants", TENANT_ID, "clientes");
 const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_precos");
 
-/* ---------- lookups ---------- */
+// Lookups
 export async function getClienteDocByNome(nomeInput){
   await authReady;
   const alvo = normNome(nomeInput);
 
-  // 1) nomeNormalizado
   try{
-    const q1 = query(colClientes(), where("nomeNormalizado","==",alvo), limit(1));
-    const s1 = await getDocs(q1);
+    const s1 = await getDocs(query(colClientes(), where("nomeNormalizado","==",alvo), limit(1)));
     if (!s1.empty) return { id:s1.docs[0].id, ref:s1.docs[0].ref, data:s1.docs[0].data() };
   }catch(_){}
 
-  // 2) exato por nomeUpper
   try{
-    const q2 = query(colClientes(), where("nomeUpper","==", up(nomeInput)), limit(1));
-    const s2 = await getDocs(q2);
+    const s2 = await getDocs(query(colClientes(), where("nomeUpper","==", up(nomeInput)), limit(1)));
     if (!s2.empty) return { id:s2.docs[0].id, ref:s2.docs[0].ref, data:s2.docs[0].data() };
   }catch(_){}
 
-  // 3) prefixo
   try{
     const start = up(nomeInput), end = start + '\uf8ff';
-    const q3 = query(colClientes(), orderBy("nome"), where("nome", ">=", start), where("nome", "<=", end), limit(5));
-    const s3 = await getDocs(q3);
+    const s3 = await getDocs(query(colClientes(), orderBy("nome"), where("nome",">=",start), where("nome","<=",end), limit(5)));
     if (!s3.empty) return { id:s3.docs[0].id, ref:s3.docs[0].ref, data:s3.docs[0].data() };
   }catch(_){}
 
@@ -80,7 +69,7 @@ export async function clientesMaisUsados(n=50){
   return out.filter(Boolean);
 }
 
-/* ---------- create/update ---------- */
+// Create/Update
 export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}){
   await authReady;
   const nomeUpper = up(nome);
@@ -108,12 +97,13 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   }
 }
 
-/* ---------- histórico de preços ---------- */
+// Histórico de preços
 export async function buscarUltimoPreco(clienteNome, produtoNome){
   await authReady;
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   if (!nomeCli || !nomeProd) return null;
+
   const qs = await getDocs(query(
     colHistPreco(),
     where("cliente","==",nomeCli),
@@ -141,7 +131,7 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
   if (found) await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
 }
 
-/* ---------- helpers tela principal ---------- */
+// Helpers de UI (tela principal)
 function setMainFormFromCliente(d){
   if (!d) return;
   const byId = (id)=>document.getElementById(id);
@@ -163,7 +153,6 @@ async function hydrateDatalist(){
   });
 }
 
-// Preenche o form principal ao sair do campo Cliente
 (function wireClienteBlur(){
   document.addEventListener('DOMContentLoaded', ()=>{
     const el = document.getElementById('cliente');
@@ -178,7 +167,7 @@ async function hydrateDatalist(){
   });
 })();
 
-// Exposição (se outras partes quiserem usar diretamente)
+// Exposição opcional
 window.salvarCliente = salvarCliente;
 window.buscarClienteInfo = buscarClienteInfo;
 window.clientesMaisUsados = clientesMaisUsados;
