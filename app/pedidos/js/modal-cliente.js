@@ -2,9 +2,6 @@
 import { salvarCliente, getClienteDocByNome, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 
-// ENDPOINTS: sempre no /api (raiz do domínio)
-const API_ROOT = `${location.origin}/api`;
-
 function el(id){ return document.getElementById(id); }
 function setTitleEditing(isEditing){ el('modalClienteTitulo').textContent = isEditing ? 'Editar Cliente' : 'Novo Cliente'; }
 
@@ -67,20 +64,13 @@ function clearForm(){
   const chk = el('mc_isentoFrete'); if (chk) chk.checked = false;
   setTitleEditing(false);
 }
-function openModal(){
-  injectModal(); clearForm(); populateDatalist();
-  const m = el('modalCliente');
-  m.classList.remove('hidden'); m.setAttribute('aria-hidden','false');
-  setTimeout(()=>el('mc_nome')?.focus(),30);
-}
-function closeModal(){
-  const m = el('modalCliente'); m?.classList.add('hidden'); m?.setAttribute('aria-hidden','true');
-}
+function openModal(){ injectModal(); clearForm(); populateDatalist(); el('modalCliente').classList.remove('hidden'); el('modalCliente').setAttribute('aria-hidden','false'); setTimeout(()=>el('mc_nome')?.focus(),30); }
+function closeModal(){ el('modalCliente')?.classList.add('hidden'); el('modalCliente')?.setAttribute('aria-hidden','true'); }
 
 async function populateDatalist(){
   const dl = el('mc_listaClientes'); if (!dl) return;
   dl.innerHTML = '';
-  try { (await clientesMaisUsados(80)).forEach(n => { const o=document.createElement('option'); o.value=n; dl.appendChild(o); }); } catch {}
+  try{ (await clientesMaisUsados(80)).forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); }); }catch(_){}
 }
 
 async function handleNomeBlurOrChange(){
@@ -96,7 +86,7 @@ async function handleNomeBlurOrChange(){
       if (!el('mc_contato').value)  el('mc_contato').value  = info.contato || '';
       el('mc_isentoFrete').checked  = !!info.isentoFrete;
     } else { setTitleEditing(false); }
-  }catch{}
+  }catch(_){}
 }
 
 async function autoPreencherPorCNPJ(){
@@ -106,28 +96,28 @@ async function autoPreencherPorCNPJ(){
 
   try{
     const r = await fetch('/api/cnpj/lookup', {
-  method:'POST',
-  headers:{ 'Content-Type':'application/json' },
-  body: JSON.stringify({ cnpj })
-});
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ cnpj })
+    });
     if (!r.ok) return;
     const j = await r.json();
     if (!j?.ok) return;
 
-    if (j.razao_social && !el('mc_nome').value)     el('mc_nome').value     = j.razao_social.toUpperCase();
-    if (j.endereco && !el('mc_endereco').value)     el('mc_endereco').value = j.endereco.toUpperCase();
-    if (j.cep && !el('mc_cep').value)               el('mc_cep').value      = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
-    if (j.ie && !el('mc_ie').value)                 el('mc_ie').value       = String(j.ie).toUpperCase();
-  }catch{}
+    if (j.razao_social && !el('mc_nome').value)      el('mc_nome').value = j.razao_social.toUpperCase();
+    if (j.endereco && !el('mc_endereco').value)      el('mc_endereco').value = j.endereco.toUpperCase();
+    if (j.cep && !el('mc_cep').value)                el('mc_cep').value = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
+    if (j.ie && !el('mc_ie').value)                  el('mc_ie').value = String(j.ie).toUpperCase();
+  }catch(_){}
 }
 
 async function saveFromModal(){
-  const nome      = (el('mc_nome')?.value || '').trim();
-  const cnpjMask  = el('mc_cnpj')?.value || '';
-  const ie        = (el('mc_ie')?.value || '').trim();
-  const endereco  = (el('mc_endereco')?.value || '').trim();
-  const cep       = el('mc_cep')?.value || '';
-  const contato   = el('mc_contato')?.value || '';
+  const nome = (el('mc_nome')?.value || '').trim();
+  const cnpjMask = el('mc_cnpj')?.value || '';
+  const ie = (el('mc_ie')?.value || '').trim();
+  const endereco = (el('mc_endereco')?.value || '').trim();
+  const cep = el('mc_cep')?.value || '';
+  const contato = el('mc_contato')?.value || '';
   const isentoFre = !!el('mc_isentoFrete')?.checked;
   if (!nome){ alert('Informe o nome do cliente.'); el('mc_nome')?.focus(); return; }
 
@@ -140,16 +130,13 @@ async function saveFromModal(){
   const inputCliente = document.getElementById('cliente');
   if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
-  try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch{}
+  try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch(_){}
   closeModal();
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
   injectModal();
-
-  document.getElementById('btnAddCliente')?.addEventListener('click', (e)=>{
-    e.preventDefault(); openModal();
-  });
+  document.getElementById('btnAddCliente')?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
 
   const root = document.body;
   root.addEventListener('click', (ev)=>{
@@ -164,7 +151,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   tel  && tel.addEventListener('input', ()=>maskTelefone(tel));
   cnpj && cnpj.addEventListener('blur', autoPreencherPorCNPJ);
 
-  root.addEventListener('blur',   (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); }, true);
+  root.addEventListener('blur', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); }, true);
   root.addEventListener('change', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); });
 
   populateDatalist();
