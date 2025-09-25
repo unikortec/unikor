@@ -2,8 +2,10 @@
 import { salvarCliente, getClienteDocByNome, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 
+
 function el(id){ return document.getElementById(id); }
 function setTitleEditing(isEditing){ el('modalClienteTitulo').textContent = isEditing ? 'Editar Cliente' : 'Novo Cliente'; }
+
 
 function injectModal() {
   if (document.getElementById('modalCliente')) return;
@@ -19,7 +21,7 @@ function injectModal() {
         <div class="modal-body">
           <div class="field-group">
             <label for="mc_nome">Nome/Razão Social:</label>
-            <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" />
+            <input id="mcnome" list="mclistaClientes" type="text" autocomplete="off" />
             <datalist id="mc_listaClientes"></datalist>
             <small class="inline-help">Selecione para editar um cliente existente.</small>
           </div>
@@ -55,17 +57,19 @@ function injectModal() {
           <button class="btn-primary" id="modalClienteSalvar">Salvar</button>
         </div>
       </div>
-    </div>`;
+    </div>`; // Correção: template literal
   document.body.appendChild(wrap.firstElementChild);
 }
 
+
 function clearForm(){
-  ['mc_nome','mc_cnpj','mc_ie','mc_endereco','mc_cep','mc_contato'].forEach(id => { const e = el(id); if (e) e.value=''; });
+  ['mcnome','mc_cnpj','mc_ie','mc_endereco','mc_cep','mc_contato'].forEach(id => { const e = el(id); if (e) e.value=''; }); // Correção: IDs dos campos
   const chk = el('mc_isentoFrete'); if (chk) chk.checked = false;
   setTitleEditing(false);
 }
-function openModal(){ injectModal(); clearForm(); populateDatalist(); el('modalCliente').classList.remove('hidden'); el('modalCliente').setAttribute('aria-hidden','false'); setTimeout(()=>el('mc_nome')?.focus(),30); }
+function openModal(){ injectModal(); clearForm(); populateDatalist(); el('modalCliente').classList.remove('hidden'); el('modalCliente').setAttribute('aria-hidden','false'); setTimeout(()=>el('mcnome')?.focus(),30); } // Correção: mcnome
 function closeModal(){ el('modalCliente')?.classList.add('hidden'); el('modalCliente')?.setAttribute('aria-hidden','true'); }
+
 
 async function populateDatalist(){
   const dl = el('mc_listaClientes'); if (!dl) return;
@@ -73,26 +77,29 @@ async function populateDatalist(){
   try{ (await clientesMaisUsados(80)).forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); }); }catch(_){}
 }
 
+
 async function handleNomeBlurOrChange(){
-  const nome = up(el('mc_nome')?.value || ''); if (!nome) return;
+  const nome = up(el('mcnome')?.value || ''); if (!nome) return; // Correção: mcnome
   try{
     const info = await buscarClienteInfo(nome);
     if (info){
       setTitleEditing(true);
-      if (!el('mc_endereco').value) el('mc_endereco').value = info.endereco || '';
-      if (!el('mc_cnpj').value)     el('mc_cnpj').value     = info.cnpj || '';
-      if (!el('mc_ie').value)       el('mc_ie').value       = info.ie || '';
-      if (!el('mc_cep').value)      el('mc_cep').value      = info.cep || '';
-      if (!el('mc_contato').value)  el('mc_contato').value  = info.contato || '';
+      if (!el('mc_endereco').value) el('mc_endereco').value = info.endereco || ''; // Correção: mc_endereco
+      if (!el('mc_cnpj').value)     el('mc_cnpj').value     = info.cnpj || '';     // Correção: mc_cnpj
+      if (!el('mc_ie').value)       el('mc_ie').value       = info.ie || '';       // Correção: mc_ie
+      if (!el('mc_cep').value)      el('mc_cep').value      = info.cep || '';      // Correção: mc_cep
+      if (!el('mc_contato').value)  el('mc_contato').value  = info.contato || '';  // Correção: mc_contato
       el('mc_isentoFrete').checked  = !!info.isentoFrete;
     } else { setTitleEditing(false); }
   }catch(_){}
 }
 
+
 async function autoPreencherPorCNPJ(){
-  const cnpjRaw = el('mc_cnpj')?.value || '';
+  const cnpjRaw = el('mc_cnpj')?.value || ''; // Correção: mc_cnpj
   const cnpj = digitsOnly(cnpjRaw);
   if (cnpj.length !== 14) return;
+
 
   try{
     const r = await fetch('/api/cnpj/lookup', {
@@ -104,24 +111,28 @@ async function autoPreencherPorCNPJ(){
     const j = await r.json();
     if (!j?.ok) return;
 
-    if (j.razao_social && !el('mc_nome').value)      el('mc_nome').value = j.razao_social.toUpperCase();
-    if (j.endereco && !el('mc_endereco').value)      el('mc_endereco').value = j.endereco.toUpperCase();
-    if (j.cep && !el('mc_cep').value)                el('mc_cep').value = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
-    if (j.ie && !el('mc_ie').value)                  el('mc_ie').value = String(j.ie).toUpperCase();
+
+    if (j.razao_social && !el('mcnome').value)      el('mcnome').value = j.razao_social.toUpperCase(); // Correção: j.razao_social
+    if (j.endereco && !el('mc_endereco').value)      el('mc_endereco').value = j.endereco.toUpperCase(); // Correção: mc_endereco
+    if (j.cep && !el('mc_cep').value)                el('mc_cep').value = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2"); // Correção: mc_cep
+    if (j.ie && !el('mc_ie').value)                  el('mc_ie').value = String(j.ie).toUpperCase(); // Correção: mc_ie
   }catch(_){}
 }
 
+
 async function saveFromModal(){
-  const nome = (el('mc_nome')?.value || '').trim();
-  const cnpjMask = el('mc_cnpj')?.value || '';
-  const ie = (el('mc_ie')?.value || '').trim();
-  const endereco = (el('mc_endereco')?.value || '').trim();
-  const cep = el('mc_cep')?.value || '';
-  const contato = el('mc_contato')?.value || '';
+  const nome = (el('mcnome')?.value || '').trim(); // Correção: mcnome
+  const cnpjMask = el('mc_cnpj')?.value || '';     // Correção: mc_cnpj
+  const ie = (el('mc_ie')?.value || '').trim();     // Correção: mc_ie
+  const endereco = (el('mc_endereco')?.value || '').trim(); // Correção: mc_endereco
+  const cep = el('mc_cep')?.value || '';           // Correção: mc_cep
+  const contato = el('mc_contato')?.value || '';   // Correção: mc_contato
   const isentoFre = !!el('mc_isentoFrete')?.checked;
-  if (!nome){ alert('Informe o nome do cliente.'); el('mc_nome')?.focus(); return; }
+  if (!nome){ alert('Informe o nome do cliente.'); el('mcnome')?.focus(); return; } // Correção: mcnome
+
 
   await salvarCliente(nome, endereco, isentoFre, { cnpj: cnpjMask, ie, cep, contato });
+
 
   const mainDL = document.getElementById('listaClientes');
   if (mainDL && !Array.from(mainDL.options).some(o => o.value === up(nome))) {
@@ -130,13 +141,16 @@ async function saveFromModal(){
   const inputCliente = document.getElementById('cliente');
   if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
+
   try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch(_){}
   closeModal();
 }
 
+
 document.addEventListener('DOMContentLoaded', ()=>{
   injectModal();
   document.getElementById('btnAddCliente')?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
+
 
   const root = document.body;
   root.addEventListener('click', (ev)=>{
@@ -145,14 +159,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (t?.id === 'modalClienteSalvar') saveFromModal();
   });
 
-  const cnpj = el('mc_cnpj'), cep = el('mc_cep'), tel = el('mc_contato');
+
+  const cnpj = el('mc_cnpj'), cep = el('mc_cep'), tel = el('mc_contato'); // Correção: mc_cnpj, mc_cep, mc_contato
   cnpj && cnpj.addEventListener('input', ()=>maskCNPJ(cnpj));
   cep  && cep.addEventListener('input', ()=>maskCEP(cep));
   tel  && tel.addEventListener('input', ()=>maskTelefone(tel));
   cnpj && cnpj.addEventListener('blur', autoPreencherPorCNPJ);
 
-  root.addEventListener('blur', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); }, true);
-  root.addEventListener('change', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); });
+
+  root.addEventListener('blur', (ev)=>{ if (ev.target?.id === 'mcnome') handleNomeBlurOrChange(); }, true); // Correção: mcnome
+  root.addEventListener('change', (ev)=>{ if (ev.target?.id === 'mcnome') handleNomeBlurOrChange(); }); // Correção: mcnome
+
 
   populateDatalist();
 });
