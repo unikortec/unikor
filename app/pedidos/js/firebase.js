@@ -20,11 +20,17 @@ export const db  = getFirestore(app);
 
 // Auth anônima
 const auth = getAuth(app);
-export const authReady = new Promise((resolve) => onAuthStateChanged(auth, () => resolve(true)));
-signInAnonymously(auth).catch(()=>{});
+
+// Só considera "pronto" quando já existir usuário (evita rodar queries sem credencial)
+export const authReady = new Promise((resolve) => {
+  onAuthStateChanged(auth, (u) => { if (u) resolve(true); });
+});
+
+// dispara o login anônimo
+signInAnonymously(auth).catch(() => { /* silencioso */ });
 
 // Tenant fixo (rodando isolado)
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-// Persistência offline
-enableIndexedDbPersistence(db).catch(()=>{});
+// Persistência offline do Firestore (ignora se o navegador não suportar)
+enableIndexedDbPersistence(db).catch(() => {});
