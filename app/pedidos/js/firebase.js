@@ -1,36 +1,39 @@
 // app/pedidos/js/firebase.js
-// Firestore + auth anônima, exportando um Firestore REAL (não-Promise).
+// Firestore + auth anônima (tenant Serra Nobre) para rodar o módulo isolado.
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import {
-  getAuth, signInAnonymously, onAuthStateChanged
+  getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-/* CONFIG DO PROJETO */
+/* CONFIG DO PROJETO (seu print) */
 const firebaseConfig = {
-  apiKey:        "AIzaSyD-XXXXX_SUBSTITUA_AQUI",
-  authDomain:    "unikorapp.firebaseapp.com",
-  projectId:     "unikorapp",
-  storageBucket: "unikorapp.appspot.com",
-  appId:         "1:1234567890:web:abcdef"
+  apiKey: "AIzaSyC12s4PvUWtNxOlShPc7zXlzq4XWqlVo2w",
+  authDomain: "unikorapp.firebaseapp.com",
+  projectId: "unikorapp",
+  storageBucket: "unikorapp.firebasestorage.app",
+  messagingSenderId: "329806123621",
+  appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c",
+  measurementId: "G-WLXV3YK3EN"
 };
 
-// Inicia app e Firestore (db é um Firestore OBJETO)
 export const app = initializeApp(firebaseConfig);
 export const db  = getFirestore(app);
 
-// Auth anônima + sinalização de pronto
 const auth = getAuth(app);
+await setPersistence(auth, browserLocalPersistence);
+
+// Resolve quando tiver um usuário (se não tiver, entra anônimo)
 export const authReady = new Promise((resolve) => {
-  onAuthStateChanged(auth, () => resolve(true));
+  onAuthStateChanged(auth, (u) => resolve(!!u));
 });
 signInAnonymously(auth).catch(()=>{ /* silencioso */ });
 
-// Tenant fixo (Serra Nobre) enquanto o módulo roda isolado
+// Tenant fixo durante o piloto isolado
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-// Persistência offline (opcional; ignora erro se não suportar)
+// Offline
 enableIndexedDbPersistence(db).catch(()=>{});
