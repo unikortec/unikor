@@ -4,7 +4,9 @@ export const removeAcentos = (s) => (s ?? "").toString()
 export const normNome = (s) => removeAcentos(up(s));
 export const digitsOnly = (v) => String(v||"").replace(/\D/g,"");
 
+
 export function debounce(fn, ms){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
+
 
 export function forcarUppercase(el){ if(!el || !el.value) return; el.value = up(el.value); }
 export function maskCNPJ(el){
@@ -22,15 +24,22 @@ export function maskCEP(el){
   el.value = d.length>5 ? d.slice(0,5)+'-'+d.slice(5) : d;
 }
 export function normalizeCEP(el){ el.value = digitsOnly(el.value).slice(0,8); }
-export function maskTelefone(el){
+export function maskTelefone(el){ // Correção: reescrita da função para evitar erro de template literal
   const d = digitsOnly(el.value).slice(0,11);
-  if (d.length<=10){
-    el.value = d.replace(/^(\d{0,2})(\d{0,4})(\d{0,4}).*$/, (_,a,b,c)=> (a?`(${a}`:'')+(a&&a.length===2?`) `:'')+(b||'')+(c?'-'+c:'')); 
-  } else {
-    el.value = d.replace(/^(\d{2})(\d{5})(\d{0,4}).*$/, "($1) $2-$3");
+  let formatted = '';
+  if (d.length <= 2) {
+    formatted = d;
+  } else if (d.length <= 6) {
+    formatted = `(${d.slice(0,2)}) ${d.slice(2)}`;
+  } else if (d.length <= 10) { // Telefone fixo ou celular sem 9º dígito
+    formatted = `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  } else { // Celular com 9º dígito
+    formatted = `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7,11)}`;
   }
+  el.value = formatted;
 }
 export function normalizeTelefone(el){ el.value = digitsOnly(el.value).slice(0,11); }
+
 
 export function fmtCNPJ(d){ d = digitsOnly(d).slice(0,14);
   return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*$/, "$1.$2.$3/$4-$5"); }
@@ -41,19 +50,22 @@ export function fmtTel(d){ d = digitsOnly(d).slice(0,11);
     ? d.replace(/^(\d{2})(\d{4})(\d{0,4}).*$/, "($1) $2-$3")
     : d.replace(/^(\d{2})(\d{5})(\d{0,4}).*$/, "($1) $2-$3"); }
 
-export function formatarData(iso){ if(!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; }
+
+export function formatarData(iso){ if(!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; } // Correção: template literal
 export function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
 export function splitToWidth(doc,t,w){ return doc.splitTextToSize(t||"", w); }
+
 
 // Endereço → garante POA quando não houver cidade
 export function appendPOA(str){
   const t = String(str||"").trim();
   if (!t) return t;
   if (/porto\s*alegre/i.test(t)) return t;
-  const TEM_CIDADE = /,\s*([A-Za-zÀ-ÿ'.\-\s]{2,})(?:\s*-\s*[A-Za-z]{2})?(?:\s*,\s*Brasil)?\s*$/i;
+  const TEM_CIDADE = /,\s([A-Za-zÀ-ÿ'.\-\s]{2,})(?:\s-\s[A-Za-z]{2})?(?:\s,\sBrasil)?\s$/i;
   if (TEM_CIDADE.test(t)) return t;
-  return `${t}, Porto Alegre - RS`;
+  return `${t}, Porto Alegre - RS`; // Correção: template literal
 }
+
 
 // Peso no nome do produto (ex.: "COSTELA 1.2KG")
 export function parsePesoFromProduto(nome){
