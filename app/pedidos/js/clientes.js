@@ -13,11 +13,11 @@ const up = (s)=>_up(s);
 const digitsOnly = (s)=>_digitsOnly(s);
 const normNome = (s)=>_normNome(s);
 
-// Coleções (segmentadas)
+// coleções segmentadas
 const colClientes  = () => collection(db, "tenants", TENANT_ID, "clientes");
 const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_precos");
 
-// Lookups
+// lookups
 export async function getClienteDocByNome(nomeInput){
   await authReady;
   const alvo = normNome(nomeInput);
@@ -25,18 +25,18 @@ export async function getClienteDocByNome(nomeInput){
   try{
     const s1 = await getDocs(query(colClientes(), where("nomeNormalizado","==",alvo), limit(1)));
     if (!s1.empty) return { id:s1.docs[0].id, ref:s1.docs[0].ref, data:s1.docs[0].data() };
-  }catch(_){}
+  }catch{}
 
   try{
     const s2 = await getDocs(query(colClientes(), where("nomeUpper","==", up(nomeInput)), limit(1)));
     if (!s2.empty) return { id:s2.docs[0].id, ref:s2.docs[0].ref, data:s2.docs[0].data() };
-  }catch(_){}
+  }catch{}
 
   try{
     const start = up(nomeInput), end = start + '\uf8ff';
     const s3 = await getDocs(query(colClientes(), orderBy("nome"), where("nome",">=",start), where("nome","<=",end), limit(5)));
     if (!s3.empty) return { id:s3.docs[0].id, ref:s3.docs[0].ref, data:s3.docs[0].data() };
-  }catch(_){}
+  }catch{}
 
   return null;
 }
@@ -62,14 +62,14 @@ export async function clientesMaisUsados(n=50){
   try{
     const qs = await getDocs(query(colClientes(), orderBy("compras","desc"), limit(n)));
     qs.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
-  }catch(_){
+  }catch{
     const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
     qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }
   return out.filter(Boolean);
 }
 
-// Create/Update
+// create/update
 export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}){
   await authReady;
   const nomeUpper = up(nome);
@@ -97,7 +97,7 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   }
 }
 
-// Histórico de preços
+// histórico de preços
 export async function buscarUltimoPreco(clienteNome, produtoNome){
   await authReady;
   const nomeCli = up(clienteNome);
@@ -131,7 +131,7 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
   if (found) await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
 }
 
-// Helpers de UI (tela principal)
+// helpers UI
 function setMainFormFromCliente(d){
   if (!d) return;
   const byId = (id)=>document.getElementById(id);
@@ -167,7 +167,7 @@ async function hydrateDatalist(){
   });
 })();
 
-// Exposição opcional
+// exposição opcional
 window.salvarCliente = salvarCliente;
 window.buscarClienteInfo = buscarClienteInfo;
 window.clientesMaisUsados = clientesMaisUsados;
