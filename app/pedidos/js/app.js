@@ -1,6 +1,7 @@
 // app/pedidos/js/app.js
 import { atualizarFreteUI } from './frete.js';
 
+
 // Carrega itens.js com fallback (evita crash se SW servir versão antiga)
 let initItens, adicionarItem, atualizarFreteAoEditarItem;
 async function loadItensModule(){
@@ -15,6 +16,7 @@ async function loadItensModule(){
   }
   return true;
 }
+
 
 // PDF com fallback de tipos de export
 async function callGerarPDF(mode, btn) {
@@ -32,6 +34,7 @@ async function callGerarPDF(mode, btn) {
   }
 }
 
+
 // UI: mostra/oculta campo "pagamentoOutro"
 function wirePagamentoOutro(){
   const sel = document.getElementById('pagamento');
@@ -42,12 +45,13 @@ function wirePagamentoOutro(){
   sync();
 }
 
+
 // Banner offline (ping real)
 async function isReallyOnline(timeoutMs = 5000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const url = "/app/pedidos/manifest.json?ts=" + Date.now();
+    const url = `/app/pedidos/manifest.json?ts=${Date.now()}`; // Correção: template literal
     const r = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
     return r.ok;
   } catch {
@@ -62,11 +66,14 @@ async function updateOfflineBanner(){
   el.style.display = (await isReallyOnline()) ? 'none' : 'block';
 }
 
+
 document.addEventListener('DOMContentLoaded', async () => {
   const ok = await loadItensModule();
   if (!ok) return;
 
+
   initItens();
+
 
   const addBtn = document.getElementById('adicionarItemBtn');
   if (addBtn){
@@ -76,14 +83,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+
   const end = document.getElementById('endereco');
   const chkIsentar = document.getElementById('isentarFrete');
   end && end.addEventListener('blur', atualizarFreteUI);
   chkIsentar && chkIsentar.addEventListener('change', atualizarFreteUI);
 
+
   atualizarFreteAoEditarItem(() => atualizarFreteUI());
 
+
   wirePagamentoOutro();
+
 
   const g = document.getElementById('btnGerarPdf');
   const s = document.getElementById('btnSalvarPdf');
@@ -91,6 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   g && g.addEventListener('click', (ev) => callGerarPDF(false, ev.target));
   s && s.addEventListener('click', (ev) => callGerarPDF(true,  ev.target));
   c && c.addEventListener('click', async () => callGerarPDF('share'));
+
 
   updateOfflineBanner();
   document.addEventListener('visibilitychange', () => {
