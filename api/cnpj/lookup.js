@@ -1,7 +1,5 @@
 // portal/api/cnpj/lookup.js
-// Coleta dados do https://cnpj.biz/{cnpj} (apenas essa fonte neste cenário).
-// Se IE não aparecer na página, NÃO define (deixe o campo em branco no modal).
-//
+// Coleta dados do https://cnpj.biz/{cnpj}. Se IE não aparecer na página, não define.
 // Retorna: { ok, cnpj, razao_social, nome_fantasia, cep, endereco, bairro, municipio, uf, ie?, fonte:"cnpj.biz" }
 
 function digits(s){ return String(s||"").replace(/\D/g,''); }
@@ -17,11 +15,9 @@ export default async function handler(req, res){
     if (!r.ok) return res.status(404).json({ ok:false, error:'Não encontrado no cnpj.biz' });
     const html = await r.text();
 
-    // Razão social / fantasia
-    const razao = html.match(/Raz[aã]o Social:\s*<\/?[^>]*>\s*([^<\n]+)/i)?.[1]?.trim() || '';
+    const razao    = html.match(/Raz[aã]o Social:\s*<\/?[^>]*>\s*([^<\n]+)/i)?.[1]?.trim() || '';
     const fantasia = html.match(/Nome Fantasia:\s*<\/?[^>]*>\s*([^<\n]+)/i)?.[1]?.trim() || '';
 
-    // Bloco de endereço (heurística simples)
     const reEndBloco = /Qual o endere[^?]+\?\s*<\/h[1-6]>[^]+?<\/section>/i;
     const bloco = html.match(reEndBloco)?.[0] || html;
 
@@ -54,7 +50,6 @@ export default async function handler(req, res){
     if (bairro) endereco = `${endereco} - ${bairro}`;
     if (municipio || uf) endereco = `${endereco}, ${municipio}${uf?` - ${uf}`:''}`;
 
-    // IE (se constar na página; pode não existir)
     const ie = html.match(/Inscriç[aã]o Estadual:\s*<\/?[^>]*>\s*([^<\n]+)/i)?.[1]?.trim() || null;
 
     return res.json({
