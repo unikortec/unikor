@@ -173,7 +173,7 @@ button{
 .btn-secondary:hover, .btn-primary:hover{ filter:brightness(0.97); }
 /* Botão de consulta (lupa) */
 .btn-consultar {
-  background: var(--brand);
+  background: #e2e8f0;
   color: #111827;
   border: none;
   border-radius: 8px;
@@ -186,6 +186,15 @@ button{
   font-size: 14px;
   flex-shrink: 0;
 }
+
+.btn-consultar:hover {
+  filter: brightness(0.97);
+}
+
+.btn-consultar:active {
+  transform: translateY(1px);
+}
+
 
 .btn-consultar:hover {
   filter: brightness(0.95);
