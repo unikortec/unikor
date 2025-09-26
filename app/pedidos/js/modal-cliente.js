@@ -1,14 +1,15 @@
 // js/modal-cliente.js
-import { salvarCliente, getClienteDocByNome, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
+import { salvarCliente, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 
-function el(id){ return document.getElementById(id); }
-function setTitleEditing(isEditing){ el('modalClienteTitulo').textContent = isEditing ? 'Editar Cliente' : 'Novo Cliente'; }
+console.log('Modal cliente carregado'); // DEBUG
+
+let modalInjected = false;
 
 function injectModal() {
-  if (document.getElementById('modalCliente')) return;
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
+  if (modalInjected || document.getElementById('modalCliente')) return;
+  
+  const modalHTML = `
     <div id="modalCliente" class="modal hidden" aria-hidden="true">
       <div class="modal-backdrop" data-close="1"></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalClienteTitulo">
@@ -48,7 +49,9 @@ function injectModal() {
               <input id="mc_contato" type="text" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
             </div>
           </div>
-          <div class="field-group"><label><input type="checkbox" id="mc_isentoFrete" /> Isento de frete</label></div>
+          <div class="field-group">
+            <label><input type="checkbox" id="mc_isentoFrete" /> Isento de frete</label>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" id="modalClienteCancelar">Cancelar</button>
@@ -56,95 +59,275 @@ function injectModal() {
         </div>
       </div>
     </div>`;
-  document.body.appendChild(wrap.firstElementChild);
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  modalInjected = true;
+  console.log('Modal injetado no DOM'); // DEBUG
 }
 
-function clearForm(){
-  ['mc_nome','mc_cnpj','mc_ie','mc_endereco','mc_cep','mc_contato'].forEach(id => { const e = el(id); if (e) e.value=''; });
-  const chk = el('mc_isentoFrete'); if (chk) chk.checked = false;
-  setTitleEditing(false);
+function clearForm() {
+  const fields = ['mc_nome', 'mc_cnpj', 'mc_ie', 'mc_endereco', 'mc_cep', 'mc_contato'];
+  fields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  
+  const checkbox = document.getElementById('mc_isentoFrete');
+  if (checkbox) checkbox.checked = false;
+  
+  const titulo = document.getElementById('modalClienteTitulo');
+  if (titulo) titulo.textContent = 'Novo Cliente';
 }
 
-function openModal(){ injectModal(); clearForm(); populateDatalist(); el('modalCliente').classList.remove('hidden'); el('modalCliente').setAttribute('aria-hidden','false'); setTimeout(()=>el('mc_nome')?.focus(),30); }
-function closeModal(){ el('modalCliente')?.classList.add('hidden'); el('modalCliente')?.setAttribute('aria-hidden','true'); }
-
-async function populateDatalist(){
-  const dl = el('mc_listaClientes'); if (!dl) return;
-  dl.innerHTML = '';
-  try{ (await clientesMaisUsados(80)).forEach(n=>{ const o=document.createElement('option'); o.value=n; dl.appendChild(o); }); }catch(_){}
+function openModal() {
+  console.log('Tentando abrir modal'); // DEBUG
+  injectModal();
+  clearForm();
+  populateDatalist();
+  
+  const modal = document.getElementById('modalCliente');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    setTimeout(() => {
+      const nomeInput = document.getElementById('mc_nome');
+      if (nomeInput) nomeInput.focus();
+    }, 100);
+    console.log('Modal aberto'); // DEBUG
+  } else {
+    console.error('Modal não encontrado no DOM'); // DEBUG
+  }
 }
 
-async function handleNomeBlurOrChange(){
-  const nome = up(el('mc_nome')?.value || ''); if (!nome) return;
-  try{
+function closeModal() {
+  const modal = document.getElementById('modalCliente');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    console.log('Modal fechado'); // DEBUG
+  }
+}
+
+async function populateDatalist() {
+  const datalist = document.getElementById('mc_listaClientes');
+  if (!datalist) return;
+  
+  datalist.innerHTML = '';
+  try {
+    const clientes = await clientesMaisUsados(80);
+    clientes.forEach(nome => {
+      const option = document.createElement('option');
+      option.value = nome;
+      datalist.appendChild(option);
+    });
+    console.log(`Carregados ${clientes.length} clientes no datalist`); // DEBUG
+  } catch (error) {
+    console.error('Erro ao carregar clientes:', error); // DEBUG
+  }
+}
+
+async function handleNomeChange() {
+  const nomeInput = document.getElementById('mc_nome');
+  if (!nomeInput) return;
+  
+  const nome = up(nomeInput.value || '');
+  if (!nome) return;
+  
+  try {
     const info = await buscarClienteInfo(nome);
-    if (info){
-      setTitleEditing(true);
-      if (!el('mc_endereco').value) el('mc_endereco').value = info.endereco || '';
-      if (!el('mc_cnpj').value)     el('mc_cnpj').value     = info.cnpj || '';
-      if (!el('mc_ie').value)       el('mc_ie').value       = info.ie || '';
-      if (!el('mc_cep').value)      el('mc_cep').value      = info.cep || '';
-      if (!el('mc_contato').value)  el('mc_contato').value  = info.contato || '';
-      el('mc_isentoFrete').checked  = !!info.isentoFrete;
-    } else { setTitleEditing(false); }
-  }catch(_){}
+    if (info) {
+      const titulo = document.getElementById('modalClienteTitulo');
+      if (titulo) titulo.textContent = 'Editar Cliente';
+      
+      // Preenche os campos apenas se estiverem vazios
+      const endereco = document.getElementById('mc_endereco');
+      if (endereco && !endereco.value) endereco.value = info.endereco || '';
+      
+      const cnpj = document.getElementById('mc_cnpj');
+      if (cnpj && !cnpj.value) cnpj.value = info.cnpj || '';
+      
+      const ie = document.getElementById('mc_ie');
+      if (ie && !ie.value) ie.value = info.ie || '';
+      
+      const cep = document.getElementById('mc_cep');
+      if (cep && !cep.value) cep.value = info.cep || '';
+      
+      const contato = document.getElementById('mc_contato');
+      if (contato && !contato.value) contato.value = info.contato || '';
+      
+      const checkbox = document.getElementById('mc_isentoFrete');
+      if (checkbox) checkbox.checked = !!info.isentoFrete;
+      
+      console.log('Dados do cliente carregados:', info); // DEBUG
+    } else {
+      const titulo = document.getElementById('modalClienteTitulo');
+      if (titulo) titulo.textContent = 'Novo Cliente';
+    }
+  } catch (error) {
+    console.error('Erro ao buscar cliente:', error); // DEBUG
+  }
 }
 
-async function autoPreencherPorCNPJ(){
-  const cnpjRaw = el('mc_cnpj')?.value || '';
+async function autoPreencherPorCNPJ() {
+  const cnpjInput = document.getElementById('mc_cnpj');
+  if (!cnpjInput) return;
+  
+  const cnpjRaw = cnpjInput.value || '';
   const cnpj = digitsOnly(cnpjRaw);
   if (cnpj.length !== 14) return;
-  try{
-    const r = await fetch('/api/cnpj/lookup', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
+  
+  try {
+    const response = await fetch('/api/cnpj/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cnpj })
     });
-    if (!r.ok) return;
-    const j = await r.json();
-    if (!j?.ok) return;
-    if (j.razao_social && !el('mc_nome').value)      el('mc_nome').value = j.razao_social.toUpperCase();
-    if (j.endereco && !el('mc_endereco').value)      el('mc_endereco').value = j.endereco.toUpperCase();
-    if (j.cep && !el('mc_cep').value)                el('mc_cep').value = j.cep.replace(/^(\d{5})(\d{3}).*$/,"$1-$2");
-    if (j.ie && !el('mc_ie').value)                  el('mc_ie').value = String(j.ie).toUpperCase();
-  }catch(_){}
-}
-
-async function saveFromModal(){
-  const nome = (el('mc_nome')?.value || '').trim();
-  const cnpjMask = el('mc_cnpj')?.value || '';
-  const ie = (el('mc_ie')?.value || '').trim();
-  const endereco = (el('mc_endereco')?.value || '').trim();
-  const cep = el('mc_cep')?.value || '';
-  const contato = el('mc_contato')?.value || '';
-  const isentoFre = !!el('mc_isentoFrete')?.checked;
-  if (!nome){ alert('Informe o nome do cliente.'); el('mc_nome')?.focus(); return; }
-  await salvarCliente(nome, endereco, isentoFre, { cnpj: cnpjMask, ie, cep, contato });
-  const mainDL = document.getElementById('listaClientes');
-  if (mainDL && !Array.from(mainDL.options).some(o => o.value === up(nome))) {
-    const opt = document.createElement('option'); opt.value = up(nome); mainDL.appendChild(opt);
+    
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    if (!data?.ok) return;
+    
+    // Preenche apenas campos vazios
+    const nome = document.getElementById('mc_nome');
+    if (nome && !nome.value && data.razao_social) {
+      nome.value = data.razao_social.toUpperCase();
+    }
+    
+    const endereco = document.getElementById('mc_endereco');
+    if (endereco && !endereco.value && data.endereco) {
+      endereco.value = data.endereco.toUpperCase();
+    }
+    
+    const cep = document.getElementById('mc_cep');
+    if (cep && !cep.value && data.cep) {
+      cep.value = data.cep.replace(/^(\d{5})(\d{3}).*$/, "$1-$2");
+    }
+    
+    const ie = document.getElementById('mc_ie');
+    if (ie && !ie.value && data.ie) {
+      ie.value = String(data.ie).toUpperCase();
+    }
+    
+    console.log('Dados preenchidos via CNPJ:', data); // DEBUG
+  } catch (error) {
+    console.error('Erro ao buscar CNPJ:', error); // DEBUG
   }
-  const inputCliente = document.getElementById('cliente');
-  if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
-  try{ const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo'); }catch(_){}
-  closeModal();
 }
 
-document.addEventListener('DOMContentLoaded', ()=>{
+async function saveFromModal() {
+  const nome = (document.getElementById('mc_nome')?.value || '').trim();
+  const endereco = (document.getElementById('mc_endereco')?.value || '').trim();
+  const cnpjMask = document.getElementById('mc_cnpj')?.value || '';
+  const ie = (document.getElementById('mc_ie')?.value || '').trim();
+  const cep = document.getElementById('mc_cep')?.value || '';
+  const contato = document.getElementById('mc_contato')?.value || '';
+  const isentoFrete = !!document.getElementById('mc_isentoFrete')?.checked;
+  
+  if (!nome) {
+    alert('Informe o nome do cliente.');
+    document.getElementById('mc_nome')?.focus();
+    return;
+  }
+  
+  try {
+    await salvarCliente(nome, endereco, isentoFrete, { cnpj: cnpjMask, ie, cep, contato });
+    
+    // Atualiza a lista principal
+    const mainDatalist = document.getElementById('listaClientes');
+    if (mainDatalist && !Array.from(mainDatalist.options).some(o => o.value === up(nome))) {
+      const option = document.createElement('option');
+      option.value = up(nome);
+      mainDatalist.appendChild(option);
+    }
+    
+    // Preenche o campo cliente principal se estiver vazio
+    const inputCliente = document.getElementById('cliente');
+    if (inputCliente && !inputCliente.value) {
+      inputCliente.value = up(nome);
+    }
+    
+    // Toast de sucesso
+    try {
+      const { toastOk } = await import('./ui.js');
+      if (toastOk) toastOk('Cliente salvo com sucesso!');
+    } catch (error) {
+      console.log('Cliente salvo com sucesso!'); // Fallback
+    }
+    
+    closeModal();
+    console.log('Cliente salvo:', nome); // DEBUG
+  } catch (error) {
+    console.error('Erro ao salvar cliente:', error); // DEBUG
+    alert('Erro ao salvar cliente: ' + error.message);
+  }
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM carregado, inicializando modal cliente'); // DEBUG
+  
+  // Injeta o modal
   injectModal();
-  document.getElementById('btnAddCliente')?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
-  const root = document.body;
-  root.addEventListener('click', (ev)=>{
-    const t = ev.target;
-    if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) closeModal();
-    if (t?.id === 'modalClienteSalvar') saveFromModal();
+  
+  // Event listener para o botão de adicionar cliente
+  const btnAddCliente = document.getElementById('btnAddCliente');
+  if (btnAddCliente) {
+    btnAddCliente.addEventListener('click', (e) => {
+      e.preventDefault();
+      console.log('Botão + clicado'); // DEBUG
+      openModal();
+    });
+  } else {
+    console.error('Botão btnAddCliente não encontrado'); // DEBUG
+  }
+  
+  // Event listeners globais
+  document.body.addEventListener('click', (event) => {
+    const target = event.target;
+    
+    if (target?.id === 'modalClienteFechar' || 
+        target?.id === 'modalClienteCancelar' || 
+        target?.dataset?.close) {
+      closeModal();
+    }
+    
+    if (target?.id === 'modalClienteSalvar') {
+      saveFromModal();
+    }
   });
-  const cnpj = el('mc_cnpj'), cep = el('mc_cep'), tel = el('mc_contato');
-  cnpj && cnpj.addEventListener('input', ()=>maskCNPJ(cnpj));
-  cep  && cep.addEventListener('input', ()=>maskCEP(cep));
-  tel  && tel.addEventListener('input', ()=>maskTelefone(tel));
-  cnpj && cnpj.addEventListener('blur', autoPreencherPorCNPJ);
-  root.addEventListener('blur', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); }, true);
-  root.addEventListener('change', (ev)=>{ if (ev.target?.id === 'mc_nome') handleNomeBlurOrChange(); });
+  
+  // Máscaras de input
+  document.body.addEventListener('input', (event) => {
+    const target = event.target;
+    
+    if (target?.id === 'mc_cnpj') {
+      maskCNPJ(target);
+    } else if (target?.id === 'mc_cep') {
+      maskCEP(target);
+    } else if (target?.id === 'mc_contato') {
+      maskTelefone(target);
+    }
+  });
+  
+  // Blur events
+  document.body.addEventListener('blur', (event) => {
+    const target = event.target;
+    
+    if (target?.id === 'mc_nome') {
+      handleNomeChange();
+    } else if (target?.id === 'mc_cnpj') {
+      autoPreencherPorCNPJ();
+    }
+  }, true);
+  
+  // Change events
+  document.body.addEventListener('change', (event) => {
+    if (event.target?.id === 'mc_nome') {
+      handleNomeChange();
+    }
+  });
+  
+  // Popula a lista inicial
   populateDatalist();
 });
