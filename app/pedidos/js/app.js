@@ -69,38 +69,30 @@ async function updateOfflineBanner(){
     el.style.display = (await isReallyOnline()) ? 'none' : 'block';
 }
 
-// Verificar acesso ao tenant
+// Verificar acesso ao tenant - ADICIONADO
 async function checkTenantAccess() {
-    const hasAccess = await hasAccessToTenant();
-    if (!hasAccess) {
-        alert('Usuário não tem permissão para acessar este módulo.');
-        window.location.href = '/';
-        return false;
-    }
-    return true;
-}
-
-// Atualizar informações do usuário no header
-function updateUserInfo() {
-    const user = getCurrentUser();
-    const userDisplayName = document.getElementById('userDisplayName');
-    if (user && userDisplayName) {
-        userDisplayName.textContent = user.email;
+    try {
+        const hasAccess = await hasAccessToTenant();
+        if (!hasAccess) {
+            alert('Usuário não tem permissão para acessar este módulo.');
+            window.location.href = '/';
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('Erro ao verificar acesso ao tenant:', error);
+        return true; // Em caso de erro, permite continuar
     }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // O auth-guard.js já vai garantir que o usuário esteja logado
-    // Aguardar um pouco para garantir que a autenticação foi carregada
+    // Aguardar um pouco para garantir que a autenticação foi carregada pelo auth-guard
     setTimeout(async () => {
         // Verificar se tem acesso ao tenant
         const hasAccess = await checkTenantAccess();
         if (!hasAccess) return;
         
-        // Atualizar info do usuário
-        updateUserInfo();
-        
-        // Carregar módulos do app
+        // Carregar módulos do app (mantém a lógica original)
         const ok = await loadItensModule();
         if (!ok) return;
         
@@ -123,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         wirePagamentoOutro();
         
+        // Botões PDF (mantém IDs originais)
         const g = document.getElementById('btnGerarPdf');
         const s = document.getElementById('btnSalvarPdf');
         const c = document.getElementById('btnCompartilharPdf');
