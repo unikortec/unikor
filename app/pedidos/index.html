@@ -1,146 +1,151 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UNIKOR - Pedidos</title>
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
-    <meta name="theme-color" content="#0ea5a6">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unikor – Pedidos</title>
+  <meta name="theme-color" content="0ea5a6" />
+  <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
+  <!-- garante paths corretos mesmo sem a barra final na URL -->
+  <base href="./">
+  <!-- Manifest e ícones globais (assets/logo/ na main) -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
+  <!-- CSS -->
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-    <header>
-        <h1>UNIKOR</h1>
-        <div class="header-actions">
-            <span>+ Pedidos</span>
-            <div class="user-info">
-                <span id="userDisplayName"></span>
-                <a href="/" class="portal-link">Portal</a>
-            </div>
-        </div>
-        <div id="offlineBanner" class="offline-banner" style="display: none;">
-            OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.
-        </div>
-    </header>
-
-    <main>
-        <div class="form-section">
-            <h2>Cliente:</h2>
-            <div class="input-group">
-                <label for="cliente">Nome:</label>
-                <input type="text" id="cliente" list="clientesList" autocomplete="off">
-                <datalist id="clientesList"></datalist>
-                <button type="button" id="addClienteBtn" class="add-btn" title="Adicionar novo cliente">+</button>
-            </div>
-
-            <div class="input-group">
-                <label for="cnpj">CNPJ:</label>
-                <input type="text" id="cnpj" placeholder="00.000.000/0000-00" maxlength="18">
-                <small>Serão salvos apenas dígitos. Validação leve.</small>
-            </div>
-
-            <div class="input-group">
-                <label for="ie">Inscrição Estadual:</label>
-                <input type="text" id="ie" placeholder="Ex.: ISENTO ou número">
-                <small>Aceita "ISENTO".</small>
-            </div>
-
-            <div class="input-group">
-                <label for="endereco">Endereço:</label>
-                <input type="text" id="endereco">
-                <small>Se for outra cidade, inclua o nome da cidade no fim do endereço. Sem cidade, será considerado Porto Alegre - RS.</small>
-            </div>
-
-            <div class="input-group">
-                <label for="contato">Contato (tel/WhatsApp):</label>
-                <input type="text" id="contato" placeholder="(00) 00000-0000">
-            </div>
-
-            <div class="input-group">
-                <label for="cep">CEP:</label>
-                <input type="text" id="cep" placeholder="00000-000" maxlength="9">
-            </div>
-        </div>
-
-        <div class="form-section">
-            <div class="input-group">
-                <label for="dataEntrega">Data de Entrega:</label>
-                <input type="date" id="dataEntrega">
-            </div>
-
-            <div class="input-group">
-                <label for="horarioEntrega">Horário de Entrega:</label>
-                <input type="time" id="horarioEntrega">
-            </div>
-
-            <div class="input-group">
-                <label>Entrega/Retirada:</label>
-                <div class="radio-group">
-                    <label><input type="radio" name="tipoEntrega" value="entrega" checked> Entrega</label>
-                    <label><input type="radio" name="tipoEntrega" value="retirada"> Retirada</label>
-                </div>
-            </div>
-
-            <div class="input-group">
-                <label for="valorFrete">Valor do Frete:</label>
-                <div class="frete-group">
-                    <input type="text" id="valorFrete" placeholder="—" readonly>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="isentarFrete"> Isentar frete
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <div class="form-section">
-            <div class="items-header">
-                <h2>Itens:</h2>
-                <button type="button" id="adicionarItemBtn" class="add-btn">Adicionar Item</button>
-            </div>
-            <div id="itensContainer"></div>
-        </div>
-
-        <div class="form-section">
-            <div class="input-group">
-                <label for="pagamento">Forma de Pagamento:</label>
-                <select id="pagamento">
-                    <option value="PIX">PIX</option>
-                    <option value="DINHEIRO">Dinheiro</option>
-                    <option value="CARTAO">Cartão</option>
-                    <option value="CHEQUE">Cheque</option>
-                    <option value="PRAZO">A Prazo</option>
-                    <option value="OUTRO">Outro</option>
-                </select>
-            </div>
-
-            <div class="input-group" id="pagamentoOutro" style="display: none;">
-                <label for="pagamentoOutroTexto">Especificar:</label>
-                <input type="text" id="pagamentoOutroTexto" placeholder="Descreva a forma de pagamento">
-            </div>
-
-            <div class="input-group">
-                <label for="observacao">Observação geral do pedido:</label>
-                <textarea id="observacao" rows="3"></textarea>
-            </div>
-        </div>
-
-        <div class="actions">
-            <button type="button" id="btnGerarPdf" class="action-btn">Gerar PDF</button>
-            <button type="button" id="btnSalvarPdf" class="action-btn">Salvar PDF</button>
-            <button type="button" id="btnCompartilharPdf" class="action-btn">Compartilhar PDF</button>
-        </div>
-    </main>
-
-    <!-- Modal para adicionar cliente (será inserido via JS) -->
-    <div id="modalCliente" class="modal" style="display: none;">
-        <!-- Conteúdo do modal será inserido pelo modal-cliente.js -->
+  <!-- HEADER -->
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-left">
+        <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+      </div>
+      <div class="hero-right">
+        <!-- Botão redondo verde com "+" -->
+        <a class="btn-add" id="btnAddCliente" title="Novo cliente">+</a>
+        <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
+      </div>
     </div>
-
-    <script type="module" src="/shared/js/auth-guard.js"></script>
-    <script type="module" src="js/app.js"></script>
+  </header>
+  <div id="offlineBanner" class="offline-banner">OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.</div>
+  <main id="appMain">
+    <div class="field-group">
+      <label for="cliente">Cliente:</label>
+      <input list="listaClientes" type="text" id="cliente" autocomplete="off" required />
+      <datalist id="listaClientes"></datalist>
+    </div>
+    <div class="field-group grid-2">
+      <div>
+        <label for="cnpj">CNPJ:</label>
+        <input type="text" id="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
+        <small class="inline-help">Serão salvos apenas dígitos. Validação leve.</small>
+      </div>
+      <div>
+        <label for="ie">Inscrição Estadual:</label>
+        <input type="text" id="ie" placeholder="Ex.: ISENTO ou número" />
+        <small class="inline-help">Aceita "ISENTO".</small>
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="endereco">Endereço:</label>
+      <input type="text" id="endereco" autocomplete="off" required />
+      <small class="muted" id="hint-endereco">
+        Se for outra cidade, inclua <b>o nome da cidade</b> no fim do endereço.
+        Sem cidade, será considerado <b>Porto Alegre - RS</b>.
+      </small>
+    </div>
+    <div class="field-group grid-2">
+      <div>
+        <label for="contato">Contato (tel/WhatsApp):</label>
+        <input type="text" id="contato" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
+      </div>
+      <div>
+        <label for="cep">CEP:</label>
+        <input type="text" id="cep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+      </div>
+    </div>
+    <div class="field-group">
+      <label for="entrega">Data de Entrega:</label>
+      <input type="date" id="entrega" required/>
+    </div>
+    <div class="field-group">
+      <label for="horaEntrega">Horário de Entrega:</label>
+      <input type="time" id="horaEntrega" required/>
+    </div>
+    <div class="field-group switch-box">
+      <label>Entrega/Retirada:</label>
+      <label><input type="radio" name="tipoEntrega" value="ENTREGA" checked> Entrega</label>
+      <label><input type="radio" name="tipoEntrega" value="RETIRADA"> Retirada</label>
+    </div>
+    <div class="field-group">
+      <label>Valor do Frete:</label>
+      <div class="frete-row">
+        <div id="freteValor" class="muted">—</div>
+        <label class="inline"><input type="checkbox" id="isentarFrete"/> Isentar frete</label>
+      </div>
+    </div>
+    <div id="itens"></div>
+    <button id="adicionarItemBtn">Adicionar Item</button>
+    <hr/>
+    <label for="pagamento">Forma de Pagamento:</label>
+    <select id="pagamento">
+      <option value="PIX">PIX</option>
+      <option value="DINHEIRO">DINHEIRO</option>
+      <option value="CARTÃO (LEVAR MAQUINA)">CARTÃO (LEVAR MAQUINA)</option>
+      <option value="OUTRO">OUTRO</option>
+    </select>
+    <input type="text" id="pagamentoOutro" placeholder="Digite outra forma de pagamento" style="display:none"/>
+    <hr/>
+    <label for="obsGeral">Observação geral do pedido:</label>
+    <textarea id="obsGeral"></textarea>
+    <hr/>
+    <button class="pdf-btn"  id="btnGerarPdf">Gerar PDF</button>
+    <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
+    <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
+    <div id="resumo"></div>
+  </main>
+  <!-- jsPDF (CDN) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- AUTH GUARD - ADICIONADO APENAS ESTA LINHA -->
+  <script type="module" src="/shared/js/auth-guard.js"></script>
+  <!-- Módulos do app -->
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/utils.js"></script>
+  <script type="module" src="./js/ui.js"></script>
+  <script type="module" src="./js/clientes.js"></script>
+  <script type="module" src="./js/frete.js"></script>
+  <script type="module" src="./js/pdf.js"></script>
+  <!-- NOVO: módulo que injeta e controla o modal de cliente -->
+  <script type="module" src="./js/modal-cliente.js"></script>
+  <script type="module" src="./js/app.js"></script>
+  <!-- SW registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const scope = location.pathname.replace(/[^/]+$/, '');
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope });
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+          setInterval(() => reg.update(), 10 * 60 * 1000); // Correção: 10 * 60 * 1000
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            nw && nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!window.reloadedBySW) { window.reloadedBySW = true; location.reload(); }
+          });
+        } catch {}
+      });
+    }
+  </script>
+  <datalist id="listaProdutos"></datalist>
 </body>
 </html>
