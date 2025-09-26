@@ -1,6 +1,6 @@
 // app/pedidos/js/firebase.js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import { 
   getFirestore, 
   collection, 
@@ -25,17 +25,36 @@ const firebaseConfig = {
   appId: "1:484386062712:web:c8e5b6b4e7e9a3a7c8a6e7"
 };
 
-const app = initializeApp(firebaseConfig);
+// Evita duplicação do Firebase App
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // Tenant ID fixo para app pedidos
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-// Cache para evitar consultas desnecessárias
+// Cache e controles
 let clientesCache = null;
 let produtosCache = null;
 let pedidoAtualId = null;
+let authInitialized = false;
+
+// Promise para aguardar autenticação
+export const authReady = new Promise((resolve) => {
+  if (authInitialized) {
+    resolve(auth.currentUser);
+    return;
+  }
+
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!authInitialized) {
+      authInitialized = true;
+      console.log("Firebase Auth inicializado:", user ? "Logado" : "Não logado");
+      resolve(user);
+      unsubscribe();
+    }
+  });
+});
 
 // Funções para acessar dados do usuário logado
 export function getCurrentUser() {
@@ -65,30 +84,26 @@ export async function hasAccessToTenant() {
 
 // ===== HELPERS PARA CAMINHOS CORRETOS =====
 
-// Retorna a referência correta para a coleção dentro do tenant
 function getTenantCollection(collectionName) {
   return collection(db, `tenants/${TENANT_ID}/${collectionName}`);
 }
 
-// Retorna a referência correta para um documento dentro do tenant
 function getTenantDoc(collectionName, docId) {
   return doc(db, `tenants/${TENANT_ID}/${collectionName}`, docId);
 }
 
-// Gerar ID único normalizado
 function gerarIdNormalizado(nome) {
   return nome
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-    .replace(/[^a-z0-9]/g, "_") // Substitui caracteres especiais por _
-    .replace(/_+/g, "_") // Remove _ duplicados
-    .replace(/^_|_$/g, ""); // Remove _ do início e fim
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 // ===== FUNÇÕES DE CLIENTES =====
 
-// Salvar/atualizar cliente (dentro de /tenants/{tenantId}/clientes/)
 export async function salvarCliente(dadosCliente) {
   try {
     const user = getCurrentUser();
@@ -99,10 +114,9 @@ export async function salvarCliente(dadosCliente) {
     const clienteId = gerarIdNormalizado(dadosCliente.nome);
     const clienteRef = getTenantDoc("clientes", clienteId);
     
-    // Verifica se cliente já existe
     const clienteExistente = await getDoc(clienteRef);
-    
     const agora = serverTimestamp();
+    
     const clienteComMetadata = {
       ...dadosCliente,
       atualizadoEm: agora,
@@ -110,20 +124,16 @@ export async function salvarCliente(dadosCliente) {
     };
 
     if (clienteExistente.exists()) {
-      // Cliente existe - apenas atualiza dados
       await setDoc(clienteRef, clienteComMetadata, { merge: true });
       console.log("Cliente atualizado:", clienteId);
     } else {
-      // Cliente novo - adiciona metadata de criação
       clienteComMetadata.criadoEm = agora;
       clienteComMetadata.criadoPor = user.uid;
       await setDoc(clienteRef, clienteComMetadata);
       console.log("Cliente criado:", clienteId);
     }
 
-    // Limpa cache para recarregar na próxima consulta
     clientesCache = null;
-    
     return clienteId;
   } catch (error) {
     console.error("Erro ao salvar cliente:", error);
@@ -131,7 +141,6 @@ export async function salvarCliente(dadosCliente) {
   }
 }
 
-// Buscar clientes do tenant
 export async function buscarClientes(forceReload = false) {
   try {
     if (clientesCache && !forceReload) {
@@ -152,7 +161,7 @@ export async function buscarClientes(forceReload = false) {
     });
     
     clientesCache = clientes;
-    console.log(`${clientes.length} clientes carregados do tenant ${TENANT_ID}`);
+    console.log(`${clientes.length} clientes carregados`);
     return clientes;
   } catch (error) {
     console.error("Erro ao buscar clientes:", error);
@@ -162,79 +171,6 @@ export async function buscarClientes(forceReload = false) {
 
 // ===== FUNÇÕES DE PRODUTOS =====
 
-// Salvar/atualizar produto com histórico de preços
-export async function salvarProduto(dadosProduto) {
-  try {
-    const user = getCurrentUser();
-    if (!user) {
-      throw new Error("Usuário não autenticado");
-    }
-
-    const produtoId = gerarIdNormalizado(dadosProduto.nome);
-    const produtoRef = getTenantDoc("clientes", "produtos"); // Como está dentro de clientes nas regras
-    
-    // Para produtos, vamos usar a subcoleção produtos dentro de um cliente "geral"
-    // Ou criar uma coleção separada se as regras permitem
-    const produtoGeralRef = doc(db, `tenants/${TENANT_ID}/clientes/produtos/produtos`, produtoId);
-    
-    const produtoExistente = await getDoc(produtoGeralRef);
-    const agora = serverTimestamp();
-    
-    let produtoComMetadata = {
-      nome: dadosProduto.nome,
-      ultimoPreco: dadosProduto.preco || 0,
-      atualizadoEm: agora,
-      atualizadoPor: user.uid
-    };
-
-    if (produtoExistente.exists()) {
-      const dados = produtoExistente.data();
-      produtoComMetadata = {
-        ...dados,
-        ...produtoComMetadata
-      };
-      
-      // Salva histórico de preços
-      if (dadosProduto.preco && dadosProduto.preco !== dados.ultimoPreco) {
-        // Salva no histórico de preços (coleção separada conforme regras)
-        await salvarHistoricoPreco(dadosProduto.nome, dadosProduto.preco, dados.ultimoPreco);
-      }
-      
-      await setDoc(produtoGeralRef, produtoComMetadata, { merge: true });
-      console.log("Produto atualizado:", produtoId);
-    } else {
-      produtoComMetadata.criadoEm = agora;
-      produtoComMetadata.criadoPor = user.uid;
-      await setDoc(produtoGeralRef, produtoComMetadata);
-      console.log("Produto criado:", produtoId);
-    }
-
-    produtosCache = null;
-    return produtoId;
-  } catch (error) {
-    console.error("Erro ao salvar produto:", error);
-    // Se der erro com subcoleção, vamos usar uma abordagem mais simples
-    return await salvarProdutoSimples(dadosProduto);
-  }
-}
-
-// Versão simplificada que salva produtos no histórico de preços
-async function salvarProdutoSimples(dadosProduto) {
-  try {
-    const user = getCurrentUser();
-    if (!user) throw new Error("Usuário não autenticado");
-
-    // Salva no histórico de preços diretamente
-    await salvarHistoricoPreco(dadosProduto.nome, dadosProduto.preco);
-    
-    return gerarIdNormalizado(dadosProduto.nome);
-  } catch (error) {
-    console.error("Erro ao salvar produto simples:", error);
-    throw error;
-  }
-}
-
-// Salvar no histórico de preços (conforme regras)
 async function salvarHistoricoPreco(nomeProduto, precoNovo, precoAnterior = null) {
   try {
     const user = getCurrentUser();
@@ -251,13 +187,29 @@ async function salvarHistoricoPreco(nomeProduto, precoNovo, precoAnterior = null
     };
 
     await addDoc(historicoRef, dadosHistorico);
-    console.log("Histórico de preço salvo para:", nomeProduto);
+    console.log("Histórico de preço salvo:", nomeProduto, "R$", precoNovo);
   } catch (error) {
     console.error("Erro ao salvar histórico de preço:", error);
   }
 }
 
-// Buscar produtos únicos do histórico de preços
+export async function salvarProduto(dadosProduto) {
+  try {
+    const user = getCurrentUser();
+    if (!user) {
+      throw new Error("Usuário não autenticado");
+    }
+
+    await salvarHistoricoPreco(dadosProduto.nome, dadosProduto.preco);
+    produtosCache = null;
+    
+    return gerarIdNormalizado(dadosProduto.nome);
+  } catch (error) {
+    console.error("Erro ao salvar produto:", error);
+    throw error;
+  }
+}
+
 export async function buscarProdutos(forceReload = false) {
   try {
     if (produtosCache && !forceReload) {
@@ -274,7 +226,6 @@ export async function buscarProdutos(forceReload = false) {
       const data = doc.data();
       const produto = data.produto;
       
-      // Mantém apenas o mais recente de cada produto
       if (!produtosMap.has(produto)) {
         produtosMap.set(produto, {
           id: gerarIdNormalizado(produto),
@@ -296,7 +247,6 @@ export async function buscarProdutos(forceReload = false) {
 
 // ===== FUNÇÕES DE PEDIDOS =====
 
-// Gerar hash único do pedido
 function gerarHashPedido(dadosPedido) {
   const chave = JSON.stringify({
     cliente: dadosPedido.cliente?.nome,
@@ -314,7 +264,6 @@ function gerarHashPedido(dadosPedido) {
   return Math.abs(hash).toString(36);
 }
 
-// Salvar pedido na estrutura correta
 export async function salvarPedido(dadosPedido) {
   try {
     const user = getCurrentUser();
@@ -366,13 +315,11 @@ export async function salvarPedido(dadosPedido) {
   }
 }
 
-// Resetar pedido atual
 export function resetarPedidoAtual() {
   pedidoAtualId = null;
   console.log("Pedido atual resetado");
 }
 
-// Buscar pedidos do cliente
 export async function buscarPedidosCliente(nomeCliente, limiteResultados = 5) {
   try {
     const pedidosCollection = getTenantCollection("pedidos");
@@ -400,7 +347,6 @@ export async function buscarPedidosCliente(nomeCliente, limiteResultados = 5) {
   }
 }
 
-// Verificar conexão
 export async function verificarConexao() {
   try {
     const clientesCollection = getTenantCollection("clientes");
@@ -413,9 +359,26 @@ export async function verificarConexao() {
   }
 }
 
-// Limpar caches
 export function limparCaches() {
   clientesCache = null;
   produtosCache = null;
   console.log("Caches limpos");
 }
+
+// Detectar mudanças no estado de autenticação
+onAuthStateChanged(auth, (user) => {
+  if (user) {
+    console.log("Usuário logado:", user.email);
+    // Remove banner offline se estiver online
+    verificarConexao().then(online => {
+      const banner = document.querySelector('.offline-banner');
+      if (banner && online) {
+        banner.style.display = 'none';
+      }
+    });
+  } else {
+    console.log("Usuário não logado");
+    // Limpa caches quando deslogado
+    limparCaches();
+  }
+});
