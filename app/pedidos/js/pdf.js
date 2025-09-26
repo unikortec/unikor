@@ -1,4 +1,3 @@
-// app/pedidos/js/pdf.js
 import { ensureFreteBeforePDF, getFreteAtual } from './frete.js';
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 
@@ -21,27 +20,13 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_${hh}-${mm}.pdf`;
 }
 
-// Função atualizada para compatibilidade com app.js
+// Lê itens do estado (expõe via window.getItens em itens.js) com fallback ao DOM
 function lerItensDaTela(){
   if (typeof window.getItens === 'function') {
     return window.getItens();
   }
-  
-  // Fallback ao DOM (caso ainda use a estrutura antiga)
-  const blocks = document.querySelectorAll('#itens .item');
-  const out = [];
-  blocks.forEach((el)=>{
-    const produto = el.querySelector('.produto')?.value || '';
-    const tipo = el.querySelector('.tipo-select')?.value || 'KG';
-    const quantidade = parseFloat(el.querySelector('.quantidade')?.value || '0') || 0;
-    const preco = parseFloat(el.querySelector('.preco')?.value || '0') || 0;
-    const obs = el.querySelector('.obsItem')?.value || '';
-    const pesoTotalKg = parseFloat(el.getAttribute('data-peso-total-kg') || '0') || 0;
-    let total = quantidade * preco;
-    if (tipo === 'UN' && pesoTotalKg > 0) total = pesoTotalKg * preco;
-    out.push({ produto, tipo, quantidade, preco, obs, total, _pesoTotalKg: pesoTotalKg });
-  });
-  return out.length ? out : [{ produto:'', tipo:'KG', quantidade:0, preco:0, obs:'', total:0 }];
+  // Fallback caso não encontre a função
+  return [{ produto:'', tipo:'KG', quantidade:0, preco:0, obs:'', total:0 }];
 }
 
 /* ===================== Desenho do PDF ====================== */
@@ -79,16 +64,16 @@ export async function montarPDF(){
   
   const margemX=2, larguraCaixa=68;
   const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
-  const SAFE_BOTTOM=280; // Reduzido para dar mais margem
-  let y=12;
+  const SAFE_BOTTOM=280;
   
+  let y=12;
   function ensureSpace(h){ 
     if (y+h>SAFE_BOTTOM){ 
       doc.addPage([72,297],"portrait"); 
       y=10; 
     } 
   }
-  
+
   // Campos UI
   const cliente = document.getElementById("cliente")?.value?.trim()?.toUpperCase() || "";
   const endereco = document.getElementById("endereco")?.value?.trim()?.toUpperCase() || "";
@@ -101,18 +86,18 @@ export async function montarPDF(){
   const pagamento = document.getElementById("pagamento")?.value || "";
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
-  
+
   // Cliente
   ensureSpace(14);
   y += drawKeyValueBox(doc, margemX, y, larguraCaixa, "CLIENTE", cliente, { rowH:12, titleSize:8, valueSize:8 }) + 1;
-  
+
   // CNPJ / IE
   const gap1=1; const halfW=(larguraCaixa-gap1)/2;
   ensureSpace(12);
   drawCenteredKeyValueBox(doc, margemX, y, halfW, "CNPJ", cnpj, { rowH:10, titleSize:7, valueSize:8 });
   drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "I.E.", ie, { rowH:10, titleSize:7, valueSize:8 });
   y += 11;
-  
+
   // Endereço
   const pad=3, innerW=larguraCaixa-pad*2;
   const linhasEnd = splitToWidth(doc, endereco, innerW);
@@ -123,13 +108,13 @@ export async function montarPDF(){
   doc.setFont("helvetica","normal"); doc.setFontSize(8);
   const baseY = y+9; linhasEnd.forEach((ln,i)=>doc.text(ln, margemX+pad, baseY+i*5));
   y += rowH + 1;
-  
+
   // Contato/CEP
   ensureSpace(12);
   drawCenteredKeyValueBox(doc, margemX, y, halfW, "CONTATO", contato, { rowH:10, titleSize:7, valueSize:8 });
   drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "CEP", cep, { rowH:10, titleSize:7, valueSize:8 });
   y += 11;
-  
+
   // Dia/Data/Hora
   ensureSpace(12);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
@@ -137,7 +122,7 @@ export async function montarPDF(){
   doc.text("DIA DA SEMANA:", margemX+3, y+6);
   doc.text(diaDaSemanaExtenso(entregaISO), margemX+larguraCaixa/2+12, y+6, {align:"center"});
   y += 11;
-  
+
   const halfW2 = (larguraCaixa-1)/2;
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
   doc.rect(margemX, y, halfW2, 10, "S");
@@ -148,7 +133,7 @@ export async function montarPDF(){
   doc.text(formatarData(entregaISO), margemX+halfW2/2, y+8, {align:"center"});
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
-  
+
   // Tabela itens
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
@@ -163,34 +148,38 @@ export async function montarPDF(){
   doc.text("VALOR", valorX, y+4, {align:"center"});
   doc.text("PRODUTO", valorX, y+8.5, {align:"center"});
   y += 12;
-  
+
   const itens = lerItensDaTela();
   let subtotal = 0;
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  
+
   itens.forEach((it, idx)=>{
     const prod = it.produto || "";
     const qtdStr = String(it.quantidade || 0);
     const tipo = it.tipo || "KG";
     const precoNum = parseFloat(it.preco) || 0;
     
-    // Cálculo correto para UN (preço por kg)
+    // cálculo correto p/ UN (preço por kg)
     const kgUn = (tipo === 'UN') ? ( (parseFloat(it._pesoTotalKg||0) / (parseFloat(it.quantidade||0)||1)) || null ) : null;
     const pesoTotalKg = it._pesoTotalKg || (kgUn ? (it.quantidade||0) * kgUn : 0);
     const totalNum = (tipo === 'UN' && pesoTotalKg) ? (pesoTotalKg * precoNum) : ((it.quantidade||0) * precoNum);
     
     const prodLines = splitToWidth(doc, prod, W_PROD-2).slice(0,3);
     const rowHi = Math.max(14, 6 + prodLines.length*5);
+    ensureSpace(rowHi + (pesoTotalKg ? 6 : 0));
     
-    ensureSpace(rowHi + (pesoTotalKg ? 8 : 0) + (it.obs ? 15 : 0)); // Melhor cálculo do espaço
-    
-    // Células
+    // células
     doc.rect(margemX, y, W_PROD, rowHi, "S");
     doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
     doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
     doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, rowHi, "S");
     
-    const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
+    const center=(cx, lines)=>{ 
+      const block=(lines.length-1)*5; 
+      const base=y+(rowHi-block)/2; 
+      lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); 
+    };
+    
     center(margemX+W_PROD/2, prodLines);
     center(margemX+W_PROD+W_QDE/2, qtdStr ? [qtdStr, tipo] : [""]);
     
@@ -199,6 +188,7 @@ export async function montarPDF(){
     } else {
       center(margemX+W_PROD+W_QDE+W_UNIT/2, precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
     }
+    
     center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2,
       (precoNum && (it.quantidade||0)) ? ["R$", totalNum.toFixed(2).replace(".", ",")] : ["—"]);
     
@@ -208,7 +198,7 @@ export async function montarPDF(){
       doc.setFontSize(7); doc.setFont("helvetica","italic");
       doc.text(`(*) Peso total: ${pesoTotalKg.toFixed(3)} kg`, margemX+3, y+4);
       doc.setFont("helvetica","normal"); doc.setFontSize(9);
-      y += 6;
+      y += 5;
     }
     
     const obs = (it.obs||"").trim();
@@ -228,14 +218,14 @@ export async function montarPDF(){
     subtotal += totalNum;
     if (idx < itens.length-1) y += 2;
   });
-  
+
   // Soma produtos
   const w2tercos = Math.round(larguraCaixa*(2/3));
   const somaX = margemX + larguraCaixa - w2tercos;
   ensureSpace(11);
   drawKeyValueBox(doc, somaX, y, w2tercos, "SOMA PRODUTOS", "R$ " + subtotal.toFixed(2), { rowH:10, titleSize:7, valueSize:7 });
   y += 12;
-  
+
   // Entrega / Frete
   const gap2=2; const entregaW=Math.round(larguraCaixa*(2/3)); const freteW=larguraCaixa-entregaW-gap2;
   ensureSpace(12); doc.setLineWidth(1.1);
@@ -256,7 +246,7 @@ export async function montarPDF(){
   doc.text(fretePreview, freteX+freteW/2, y+8.2, {align:"center"});
   doc.setLineWidth(0.2);
   y += 12;
-  
+
   // TOTAL
   const freteCobravelParaTotal = (isentoMan ? 0 : Number(frete.valorCobravel||0));
   const totalGeral = subtotal + freteCobravelParaTotal;
@@ -266,80 +256,20 @@ export async function montarPDF(){
   doc.text("TOTAL DO PEDIDO:", margemX+3, y+5.5);
   doc.text("R$ " + totalGeral.toFixed(2), margemX+larguraCaixa-3, y+5.5, {align:"right"});
   y += 12;
-  
+
   if (obsG){
     const corpoLines = splitToWidth(doc, obsG.toUpperCase(), larguraCaixa-6);
-    const h = 9 + corpoLines.length*5;
-    ensureSpace(h+2);
-    doc.rect(margemX, y, larguraCaixa, h, "S");
+    const obsH = 9 + corpoLines.length*5;
+    ensureSpace(obsH);
+    doc.rect(margemX, y, larguraCaixa, obsH, "S");
     doc.setFont("helvetica","bold"); doc.setFontSize(9);
     const titulo="OBSERVAÇÕES GERAIS:"; const tx=margemX+3, ty=y+6;
     doc.text(titulo, tx, ty); doc.line(tx, ty+.8, tx+doc.getTextWidth(titulo), ty+.8);
     doc.setFont("helvetica","normal");
-    let baseY3=y+12; corpoLines.forEach((ln,jx)=>doc.text(ln, margemX+3, baseY3+jx*5));
-    y += h;
+    let baseY2=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY2+ix*5));
+    y += obsH;
   }
-  
-  ensureSpace(12);
-  doc.setFont("helvetica","bold"); doc.setFontSize(9);
-  doc.text("FORMA DE PAGAMENTO:", margemX+3, y+6);
-  doc.setFont("helvetica","normal");
-  doc.text((pagamento||"NÃO INFORMADO").toUpperCase(), margemX+larguraCaixa-3, y+6, {align:"right"});
-  
-  return doc;
-}
 
-export async function gerarPDF(dados){
-  try {
-    const doc = await montarPDF();
-    const cliente = document.getElementById("cliente")?.value?.trim() || "Cliente";
-    const entregaISO = document.getElementById("entrega")?.value || "";
-    const hora = document.getElementById("horaEntrega")?.value || "";
-    const filename = nomeArquivoPedido(cliente, entregaISO, hora);
-    doc.save(filename);
-  } catch (error) {
-    console.error('[PDF] Erro ao gerar:', error);
-    throw error;
-  }
+  const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
+  doc.save(nomeArq);
 }
-
-export async function compartilharPDF(dados){
-  try {
-    if (!navigator.share) {
-      await gerarPDF(dados);
-      return;
-    }
-    const doc = await montarPDF();
-    const cliente = document.getElementById("cliente")?.value?.trim() || "Cliente";
-    const entregaISO = document.getElementById("entrega")?.value || "";
-    const hora = document.getElementById("horaEntrega")?.value || "";
-    const filename = nomeArquivoPedido(cliente, entregaISO, hora);
-    const pdfBlob = doc.output('blob');
-    const file = new File([pdfBlob], filename, { type: 'application/pdf' });
-    await navigator.share({ files: [file], title: 'Pedido Serra Nobre' });
-  } catch (error) {
-    console.error('[PDF] Erro ao compartilhar:', error);
-    await gerarPDF(dados);
-  }
-}
-
-export async function salvarPedidoCompleto(dados) {
-  try {
-    await ensureFreteBeforePDF();
-    const doc = await montarPDF();
-    const cliente = document.getElementById("cliente")?.value?.trim() || "Cliente";
-    const entregaISO = document.getElementById("entrega")?.value || "";
-    const hora = document.getElementById("horaEntrega")?.value || "";
-    const filename = nomeArquivoPedido(cliente, entregaISO, hora);
-    const pdfBlob = doc.output('blob');
-    const pedidoCompleto = { ...dados, pdfBlob, filename };
-    const key = buildIdempotencyKey(dados);
-    await savePedidoIdempotente(key, pedidoCompleto);
-    return pedidoCompleto;
-  } catch (error) {
-    console.error('[PDF] Erro ao salvar pedido completo:', error);
-    throw error;
-  }
-}
-
-export { montarPDF as gerarPDFCompleto };
