@@ -2,10 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-
     // ---- Helpers ----
     function isAuthed() { return request.auth != null; }
-
 
     function userRole() {
       return isAuthed() && request.auth.token.role != null
@@ -13,11 +11,9 @@ service cloud.firestore {
         : "";
     }
 
-
     function isAdmin() {
       return userRole() == "admin" || userRole() == "master";
     }
-
 
     function userTenant() {
       return isAuthed() && request.auth.token.tenantId != null
@@ -25,29 +21,24 @@ service cloud.firestore {
         : "";
     }
 
-
     function isUpper(s)   { return s is string && s == upper(s); }
     function nonNeg(n)    { return n is number && n >= 0; }
     function validTipo(t) { return t in ["RESFRIADO","CONGELADO"]; }
     function validUnit(u) { return u in ["KG","CX","UN"]; }
     function isServerTime(ts) { return ts is timestamp && ts == request.time; }
 
-
     // App Pedidos anônimo (tenant Serra Nobre)
     function anonAllowedForTenant(tenantId) {
       return request.auth != null
-        && request.auth.token.sign_in_provider == "anonymous"
+        && request.auth.token.sign_in_provider == "anonymous" // CORREÇÃO: sign_in_provider
         && tenantId == "serranobrecarnes.com.br";
     }
 
-
     // ====== TUDO dentro de tenants ======
-    match /tenants/{tenantId}/{document=} {
-
+    match /tenants/{tenantId}/{document=**} { // CORREÇÃO: Usando {document=**} para recursividade
 
       // Leitura padrão: user do próprio tenant ou master
       allow read: if isAuthed() && (tenantId == userTenant() || userRole() == "master");
-
 
       // ---- CLIENTES ----
       match /clientes/{clienteId} {
@@ -57,10 +48,88 @@ service cloud.firestore {
         // excluir clientes: somente admin/master
         allow delete:  if isAdmin() && tenantId == userTenant();
 
-
         // subcoleção produtos (apenas admin para escrita)
         match /produtos/{prodId} {
           allow read: if isAuthed() && tenantId == userTenant();
+          allow create, update, delete: if isAdmin() && tenantId == userTenant();
+        }
+      }
+
+      // ---- HISTÓRICO DE PREÇOS ----
+      match /historico_precos/{docId} {
+        allow read:   if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+        allow create: if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+        allow update, delete: if false; // somente append
+      }
+
+      // ---- PEDIDOS ---- (todos podem criar/editar/excluir dentro do tenant + anônimo SN)
+      match /pedidos/{pedidoId} {
+        allow read:   if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+        allow create: if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+        allow update: if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+        allow delete: if (isAuthed() && tenantId == userTenant()) || isAdmin() || anonAllowedForTenant(tenantId);
+      }
+
+      // ---- ESTOQUE ---- (user do tenant pode criar/editar; delete só admin)
+      match /inventory/{docId} {
+        allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        allow create, update: if isAuthed() && (tenantId == userTenant() || isAdmin())
+          && isUpper(request.resource.data.family)
+          && isUpper(request.resource.data.product)
+          && nonNeg(request.resource.data.resfriado_kg)
+          && nonNeg(request.resource.data.resfriado_cx)
+          && nonNeg(request.resource.data.resfriado_un)
+          && nonNeg(request.resource.data.congelado_kg)
+          && nonNeg(request.resource.data.congelado_cx)
+          && nonNeg(request.resource.data.congelado_un)
+          && ("updatedat" in request.resource.data ? isServerTime(request.resource.data.updatedat) : true);
+        allow delete: if isAdmin() && tenantId == userTenant();
+      }
+
+      // movimentações de estoque
+      match /history/{docId} {
+        allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        allow create: if isAuthed() && (tenantId == userTenant() || isAdmin())
+          && isUpper(request.resource.data.family)
+          && isUpper(request.resource.data.product)
+          && validTipo(request.resource.data.tipo)
+          && validUnit(request.resource.data.unit)
+          && (request.resource.data.qty is number && request.resource.data.qty >= 0)
+          && ("at" in request.resource.data ? isServerTime(request.resource.data.at) : true);
+        allow update, delete: if false;
+      }
+
+      // ---- DESPESAS ---- (user do tenant pode criar/editar; delete só admin)
+      match /despesas/{docId} {
+        allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        allow create, update: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        allow delete: if isAdmin() && tenantId == userTenant();
+      }
+
+      // ---- RELATÓRIOS ---- (somente leitura)
+      match /relatorios/{docId} {
+        allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        allow write: if false;
+      }
+
+      // ---- CRM (somente admin/master) ----
+      match /crm_contatos/{docId} {
+        allow read, create, update, delete: if isAdmin() && tenantId == userTenant();
+      }
+      match /crm_leads/{docId} {
+        allow read, create, update, delete: if isAdmin() && tenantId == userTenant();
+      }
+
+      // ---- DASHBOARD (somente admin/master) ----
+      match /metrics/{docId} {
+        allow read, write: if isAdmin() && tenantId == userTenant();
+      }
+    } // Fecha o match /tenants/{tenantId}/{document=**}
+
+    // Bloqueio geral fora de /tenants
+    match /{document=**} { allow read, write: if false; } // CORREÇÃO: Usando {document=**} para recursividade
+  }
+}
           allow create, update, delete: if isAdmin() && tenantId == userTenant();
         }
       }
