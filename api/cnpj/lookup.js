@@ -2,18 +2,42 @@
 // Coleta dados do https://cnpj.biz/{cnpj}. Se IE não aparecer na página, não define.
 // Retorna: { ok, cnpj, razaosocial, nomefantasia, cep, endereco, bairro, municipio, uf, ie?, fonte:"cnpj.biz" }
 
+// CORS simples (libera app.unikor.com.br, produção Vercel e localhost)
+const ALLOW_ORIGINS = new Set([
+  "https://app.unikor.com.br",
+  "https://unikor.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]);
+
+function withCORS(res, origin) {
+  if (origin && ALLOW_ORIGINS.has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
 
 function digits(s){ return String(s||"").replace(/\D/g,''); }
 
 
 export default async function handler(req, res){
+  withCORS(res, req.headers.origin); // Adicionado: Habilita CORS
+
+  if (req.method === "OPTIONS") { // Adicionado: Responde a requisições OPTIONS (preflight)
+    return res.status(200).end();
+  }
+
   try{
     if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Method not allowed' });
     const cnpj = digits(req.body?.cnpj);
     if (cnpj.length !== 14) return res.status(400).json({ ok:false, error:'CNPJ inválido' });
 
 
-    const url = `https://cnpj.biz/${cnpj}`; // Correção: template literal
+    const url = `https://cnpj.biz/${cnpj}`; // Correção: template literal (já feita, mas garantindo)
     const r = await fetch(url, { headers:{ 'Accept':'text/html' } });
     if (!r.ok) return res.status(404).json({ ok:false, error:'Não encontrado no cnpj.biz' });
     const html = await r.text();
@@ -59,8 +83,8 @@ export default async function handler(req, res){
 
 
     let endereco = logradouro;
-    if (bairro) endereco = `${endereco} - ${bairro}`; // Correção: template literal
-    if (municipio || uf) endereco = `${endereco}, ${municipio}${uf? ` - ${uf}`:''}`; // Correção: template literal
+    if (bairro) endereco = `${endereco} - ${bairro}`; // Correção: template literal (já feita, mas garantindo)
+    if (municipio || uf) endereco = `${endereco}, ${municipio}${uf? ` - ${uf}`:''}`; // Correção: template literal (já feita, mas garantindo)
 
 
     const ie = html.match(/Inscriç[aã]o Estadual:\s<\/?[^>]>\s*([^<\n]+)/i)?.[1]?.trim() || null;
@@ -78,6 +102,8 @@ export default async function handler(req, res){
       ...(ie ? { ie } : {})
     });
   }catch(e){
+    console.error("Erro na API /cnpj/lookup:", e); // Adicionado log de erro no backend
     return res.status(500).json({ ok:false, error: e.message });
   }
 }
+
