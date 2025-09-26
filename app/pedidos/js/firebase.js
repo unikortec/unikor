@@ -1,11 +1,6 @@
 // app/pedidos/js/firebase.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -24,98 +19,28 @@ export const db = getFirestore(app);
 // Tenant ID fixo para app pedidos
 export const TENANT_ID = "serranobrecarnes.com.br";
 
-// Estado de autenticação
-let currentUser = null;
-let userTenantId = null;
-let userRole = null;
-
-// Login por e-mail/senha
-export async function loginWithEmailPassword(email, password) {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    // Obter claims customizados
-    const tokenResult = await user.getIdTokenResult(true);
-    userTenantId = tokenResult.claims.tenantId;
-    userRole = tokenResult.claims.role;
-    
-    // Verificar se o usuário tem acesso ao tenant correto
-    if (userTenantId !== TENANT_ID && userRole !== "master") {
-      await signOut(auth);
-      throw new Error("Usuário não tem permissão para acessar este tenant.");
-    }
-    
-    currentUser = user;
-    return { success: true, user };
-  } catch (error) {
-    console.error("Erro no login:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Logout
-export async function logout() {
-  try {
-    await signOut(auth);
-    currentUser = null;
-    userTenantId = null;
-    userRole = null;
-    return { success: true };
-  } catch (error) {
-    console.error("Erro no logout:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Verificar se está logado
-export function isLoggedIn() {
-  return currentUser !== null;
-}
-
-// Obter usuário atual
+// Funções para acessar dados do usuário logado (vêm do auth-guard)
 export function getCurrentUser() {
-  return currentUser;
+  return auth.currentUser;
 }
 
-// Obter tenant do usuário
-export function getUserTenant() {
-  return userTenantId;
+export function isLoggedIn() {
+  return auth.currentUser !== null;
 }
 
-// Obter role do usuário
-export function getUserRole() {
-  return userRole;
-}
-
-// Listener de mudanças de autenticação
-onAuthStateChanged(auth, async (user) => {
-  if (user && !user.isAnonymous) {
+// Verificar se usuário tem acesso ao tenant
+export async function hasAccessToTenant() {
+  const user = getCurrentUser();
+  if (!user) return false;
+  
+  try {
     const tokenResult = await user.getIdTokenResult(true);
-    userTenantId = tokenResult.claims.tenantId;
-    userRole = tokenResult.claims.role;
+    const userTenantId = tokenResult.claims.tenantId;
+    const userRole = tokenResult.claims.role;
     
-    // Verificar se tem acesso ao tenant
-    if (userTenantId === TENANT_ID || userRole === "master") {
-      currentUser = user;
-      document.dispatchEvent(new CustomEvent('authStateChanged', { 
-        detail: { user, loggedIn: true } 
-      }));
-    } else {
-      await signOut(auth);
-      currentUser = null;
-      userTenantId = null;
-      userRole = null;
-      document.dispatchEvent(new CustomEvent('authStateChanged', { 
-        detail: { user: null, loggedIn: false } 
-      }));
-    }
-  } else {
-    currentUser = null;
-    userTenantId = null;
-    userRole = null;
-    document.dispatchEvent(new CustomEvent('authStateChanged', { 
-      detail: { user: null, loggedIn: false } 
-    }));
+    return (userTenantId === TENANT_ID || userRole === "master");
+  } catch (error) {
+    console.error("Erro ao verificar acesso ao tenant:", error);
+    return false;
   }
-});
+}
