@@ -8,6 +8,25 @@ window.appState = {
   itens: []
 };
 
+// Função global para o PDF.js acessar os dados
+window.getItens = function() {
+  return window.appState.itens.map(item => {
+    const pesoNumerico = parseKg(item.peso) || calcularPesoTotal(item);
+    const valorNumerico = parseMoney(item.valor) || 0;
+    const qtd = parseFloat(item.quantidade) || 0;
+    
+    return {
+      produto: item.descricao || '',
+      tipo: pesoNumerico > 0 ? 'UN' : 'KG',
+      quantidade: qtd,
+      preco: valorNumerico,
+      obs: '',
+      total: calcularSubtotal(item),
+      _pesoTotalKg: pesoNumerico
+    };
+  });
+};
+
 // Utilitários para formatação
 function formatarNome(input) {
   if (!input) return;
@@ -36,12 +55,10 @@ function calcularPesoTotal(item) {
   if (pesoIndividual > 0) {
     return pesoIndividual;
   }
-  
   // Se tem gramatura, calcula: (quantidade * gramatura) / 1000
   if (gramatura > 0) {
     return (qtd * gramatura) / 1000;
   }
-  
   return 0;
 }
 
@@ -170,15 +187,14 @@ function renderizarItens() {
 async function gerarPDF() {
   const botao = document.getElementById('gerarPdfBtn');
   if (!botao) return;
-
+  
   // Adiciona loading
   const textoOriginal = botao.textContent;
   botao.disabled = true;
   botao.innerHTML = '⏳ Gerando PDF...';
-
+  
   try {
     console.log('Iniciando geração de PDF...');
-    
     const { gerarPDF: gerarPDFModule } = await import('./js/pdf.js');
     
     // Coleta dados do formulário
@@ -196,7 +212,6 @@ async function gerarPDF() {
     
     await gerarPDFModule(dados);
     console.log('PDF gerado com sucesso');
-    
   } catch (error) {
     console.error('[PDF] Erro ao gerar:', error);
     alert('Erro ao gerar PDF: ' + error.message);
@@ -210,15 +225,14 @@ async function gerarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('compartilharBtn');
   if (!botao) return;
-
+  
   // Adiciona loading
   const textoOriginal = botao.textContent;
   botao.disabled = true;
   botao.innerHTML = '⏳ Compartilhando...';
-
+  
   try {
     console.log('Iniciando compartilhamento de PDF...');
-    
     const { compartilharPDF: compartilharPDFModule } = await import('./js/pdf.js');
     
     // Coleta dados do formulário
@@ -236,7 +250,6 @@ async function compartilharPDF() {
     
     await compartilharPDFModule(dados);
     console.log('PDF compartilhado com sucesso');
-    
   } catch (error) {
     console.error('[PDF] Erro ao compartilhar:', error);
     alert('Erro ao compartilhar PDF: ' + error.message);
@@ -257,8 +270,8 @@ function coletarDadosFormulario() {
       descricao: item.descricao,
       quantidade: parseFloat(item.quantidade) || 0,
       gramatura: parseFloat(item.gramatura) || 0,
-      peso: item.peso, // Mantém como string formatada
-      pesoNumerico: parseKg(item.peso) || calcularPesoTotal(item), // Peso numérico para cálculos
+      peso: item.peso,
+      pesoNumerico: parseKg(item.peso) || calcularPesoTotal(item),
       valor: item.valor,
       valorNumerico: parseMoney(item.valor) || 0,
       subtotal: item.subtotal
