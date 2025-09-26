@@ -20,18 +20,18 @@ function injectModal() {
         <div class="modal-body">
           <div class="field-group">
             <label for="mc_nome">Nome/Razão Social:</label>
-            <div style="display: flex; gap: 8px;">
-              <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" style="flex: 1;" />
-              <button type="button" id="mc_consultarBtn" class="btn-consultar" title="Consultar cliente">🔍</button>
-            </div>
+            <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" />
             <datalist id="mc_listaClientes"></datalist>
-            <small class="inline-help">Selecione para editar um cliente existente ou clique na lupa para consultar.</small>
+            <small class="inline-help">Selecione para editar um cliente existente.</small>
           </div>
           <div class="field-group grid-2">
             <div>
               <label for="mc_cnpj">CNPJ:</label>
-              <input id="mc_cnpj" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
-              <small class="inline-help">Preenchimento automático desabilitado.</small>
+              <div style="display: flex; gap: 8px;">
+                <input id="mc_cnpj" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" style="flex: 1;" />
+                <button type="button" id="mc_consultarCNPJ" class="btn-consultar" title="Consultar CNPJ na SEFAZ-RS">🔍</button>
+              </div>
+              <small class="inline-help">Digite o CNPJ e clique na lupa para consultar na SEFAZ-RS.</small>
             </div>
             <div>
               <label for="mc_ie">Inscrição Estadual:</label>
@@ -115,21 +115,54 @@ function closeModal() {
   }
 }
 
-function consultarCliente() {
-  const nomeInput = document.getElementById('mc_nome');
-  if (!nomeInput) return;
+function consultarCNPJSefaz() {
+  const cnpjInput = document.getElementById('mc_cnpj');
+  if (!cnpjInput) return;
   
-  const nome = (nomeInput.value || '').trim();
-  if (!nome) {
-    alert('Digite o nome do cliente para consultar.');
-    nomeInput.focus();
+  const cnpjValue = cnpjInput.value || '';
+  const cnpjDigits = digitsOnly(cnpjValue);
+  
+  if (!cnpjValue.trim()) {
+    alert('Digite o CNPJ antes de consultar.');
+    cnpjInput.focus();
     return;
   }
   
-  // Abre uma nova aba com a consulta do cliente
-  const url = `https://app.unikor.com.br/app/clientes/?q=${encodeURIComponent(nome)}`;
-  window.open(url, '_blank');
-  console.log('Consultando cliente:', nome);
+  if (cnpjDigits.length !== 14) {
+    alert('CNPJ deve ter 14 dígitos. Verifique se está completo.');
+    cnpjInput.focus();
+    return;
+  }
+  
+  // URL da SEFAZ-RS para consulta de contribuinte
+  const sefazURL = 'https://www.sefaz.rs.gov.br/consultas/contribuinte';
+  
+  // Abre popup centralizado
+  const width = 1000;
+  const height = 700;
+  const left = (screen.width - width) / 2;
+  const top = (screen.height - height) / 2;
+  
+  const popup = window.open(
+    sefazURL,
+    'consultaSEFAZ',
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no`
+  );
+  
+  if (popup) {
+    // Tenta focar no popup
+    popup.focus();
+    console.log(`Consultando CNPJ ${cnpjValue} na SEFAZ-RS`);
+    
+    // Mostra instrução para o usuário
+    setTimeout(() => {
+      if (!popup.closed) {
+        console.log('Popup da SEFAZ aberto - usuário deve digitar o CNPJ manualmente');
+      }
+    }, 1000);
+  } else {
+    alert('Não foi possível abrir o popup. Verifique se o bloqueador de pop-ups está desabilitado.');
+  }
 }
 
 async function populateDatalist() {
@@ -193,18 +226,6 @@ async function handleNomeChange() {
   } catch (error) {
     console.error('Erro ao buscar cliente:', error);
   }
-}
-
-async function autoPreencherPorCNPJ() {
-  const cnpjInput = document.getElementById('mc_cnpj');
-  if (!cnpjInput) return;
-  
-  const cnpjRaw = cnpjInput.value || '';
-  const cnpj = digitsOnly(cnpjRaw);
-  if (cnpj.length !== 14) return;
-  
-  console.log('CNPJ lookup temporariamente desabilitado');
-  return; // TEMPORARIAMENTE DESABILITADO
 }
 
 function handleFreteChange() {
@@ -313,8 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
       saveFromModal();
     }
     
-    if (target?.id === 'mc_consultarBtn') {
-      consultarCliente();
+    if (target?.id === 'mc_consultarCNPJ') {
+      consultarCNPJSefaz();
     }
   });
   
@@ -337,8 +358,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (target?.id === 'mc_nome') {
       handleNomeChange();
-    } else if (target?.id === 'mc_cnpj') {
-      autoPreencherPorCNPJ();
     }
   }, true);
   
