@@ -4,7 +4,6 @@ import {
   collection, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-
 import {
   up as _up, normNome as _normNome, digitsOnly as _digitsOnly
 } from './utils.js';
@@ -21,23 +20,19 @@ const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_preco
 export async function getClienteDocByNome(nomeInput){
   await authReady;
   const alvo = normNome(nomeInput);
-
   try{
     const s1 = await getDocs(query(colClientes(), where("nomeNormalizado","==",alvo), limit(1)));
     if (!s1.empty) return { id:s1.docs[0].id, ref:s1.docs[0].ref, data:s1.docs[0].data() };
   }catch{}
-
   try{
     const s2 = await getDocs(query(colClientes(), where("nomeUpper","==", up(nomeInput)), limit(1)));
     if (!s2.empty) return { id:s2.docs[0].id, ref:s2.docs[0].ref, data:s2.docs[0].data() };
   }catch{}
-
   try{
     const start = up(nomeInput), end = start + '\uf8ff';
     const s3 = await getDocs(query(colClientes(), orderBy("nome"), where("nome",">=",start), where("nome","<=",end), limit(5)));
     if (!s3.empty) return { id:s3.docs[0].id, ref:s3.docs[0].ref, data:s3.docs[0].data() };
   }catch{}
-
   return null;
 }
 
@@ -75,7 +70,6 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   const nomeUpper = up(nome);
   const enderecoUpper = up(endereco);
   if (!nomeUpper) return;
-
   const base = {
     nome: nomeUpper,
     nomeUpper,
@@ -88,7 +82,6 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
     contato: digitsOnly(extras.contato)||"",
     atualizadoEm: serverTimestamp()
   };
-
   const exist = await getClienteDocByNome(nomeUpper);
   if (exist) {
     await updateDoc(exist.ref, base);
@@ -103,7 +96,6 @@ export async function buscarUltimoPreco(clienteNome, produtoNome){
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   if (!nomeCli || !nomeProd) return null;
-
   const qs = await getDocs(query(
     colHistPreco(),
     where("cliente","==",nomeCli),
@@ -122,16 +114,9 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
   const nomeProd = String(produtoNome||"").trim();
   const valor = parseFloat(preco);
   if (!nomeCli || !nomeProd || isNaN(valor)) return;
-
   await addDoc(colHistPreco(), {
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
-
-  // Removido 'increment' pois não foi importado e pode causar erro se não for usado corretamente
-  // Se 'compras' precisar ser incrementado, o 'increment' do Firestore SDK precisa ser importado e usado.
-  // Ex: import { increment } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-  // await updateDoc(found.ref, { compras: increment(1), atualizadoEm: serverTimestamp() });
-  // Por enquanto, apenas atualiza a data de atualização.
   const found = await getClienteDocByNome(nomeCli);
   if (found) await updateDoc(found.ref, { atualizadoEm: serverTimestamp() });
 }
