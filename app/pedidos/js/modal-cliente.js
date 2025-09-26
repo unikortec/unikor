@@ -20,9 +20,12 @@ function injectModal() {
         <div class="modal-body">
           <div class="field-group">
             <label for="mc_nome">Nome/Razão Social:</label>
-            <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" />
+            <div style="display: flex; gap: 8px;">
+              <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" style="flex: 1;" />
+              <button type="button" id="mc_consultarBtn" class="btn-consultar" title="Consultar cliente">🔍</button>
+            </div>
             <datalist id="mc_listaClientes"></datalist>
-            <small class="inline-help">Selecione para editar um cliente existente.</small>
+            <small class="inline-help">Selecione para editar um cliente existente ou clique na lupa para consultar.</small>
           </div>
           <div class="field-group grid-2">
             <div>
@@ -50,7 +53,14 @@ function injectModal() {
             </div>
           </div>
           <div class="field-group">
-            <label><input type="checkbox" id="mc_isentoFrete" /> Isento de frete</label>
+            <div class="frete-row">
+              <label for="mc_frete">Frete:</label>
+              <input id="mc_frete" type="text" inputmode="decimal" placeholder="0,00" style="flex: 1;" />
+              <div class="switch-box" style="margin-left: 12px;">
+                <input type="checkbox" id="mc_isentoFrete" />
+                <label for="mc_isentoFrete">Isento</label>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -66,7 +76,7 @@ function injectModal() {
 }
 
 function clearForm() {
-  const fields = ['mc_nome', 'mc_cnpj', 'mc_ie', 'mc_endereco', 'mc_cep', 'mc_contato'];
+  const fields = ['mc_nome', 'mc_cnpj', 'mc_ie', 'mc_endereco', 'mc_cep', 'mc_contato', 'mc_frete'];
   fields.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -103,6 +113,23 @@ function closeModal() {
     modal.classList.add('hidden');
     console.log('Modal fechado');
   }
+}
+
+function consultarCliente() {
+  const nomeInput = document.getElementById('mc_nome');
+  if (!nomeInput) return;
+  
+  const nome = (nomeInput.value || '').trim();
+  if (!nome) {
+    alert('Digite o nome do cliente para consultar.');
+    nomeInput.focus();
+    return;
+  }
+  
+  // Abre uma nova aba com a consulta do cliente
+  const url = `https://app.unikor.com.br/app/clientes/?q=${encodeURIComponent(nome)}`;
+  window.open(url, '_blank');
+  console.log('Consultando cliente:', nome);
 }
 
 async function populateDatalist() {
@@ -152,6 +179,9 @@ async function handleNomeChange() {
       const contato = document.getElementById('mc_contato');
       if (contato && !contato.value) contato.value = info.contato || '';
       
+      const frete = document.getElementById('mc_frete');
+      if (frete && !frete.value && info.frete) frete.value = info.frete;
+      
       const checkbox = document.getElementById('mc_isentoFrete');
       if (checkbox) checkbox.checked = !!info.isentoFrete;
       
@@ -177,6 +207,23 @@ async function autoPreencherPorCNPJ() {
   return; // TEMPORARIAMENTE DESABILITADO
 }
 
+function handleFreteChange() {
+  const freteInput = document.getElementById('mc_frete');
+  const checkbox = document.getElementById('mc_isentoFrete');
+  
+  if (!freteInput || !checkbox) return;
+  
+  if (checkbox.checked) {
+    freteInput.value = '0,00';
+    freteInput.disabled = true;
+  } else {
+    freteInput.disabled = false;
+    if (freteInput.value === '0,00') {
+      freteInput.value = '';
+    }
+  }
+}
+
 async function saveFromModal() {
   const nome = (document.getElementById('mc_nome')?.value || '').trim();
   const endereco = (document.getElementById('mc_endereco')?.value || '').trim();
@@ -184,6 +231,7 @@ async function saveFromModal() {
   const ie = (document.getElementById('mc_ie')?.value || '').trim();
   const cep = document.getElementById('mc_cep')?.value || '';
   const contato = document.getElementById('mc_contato')?.value || '';
+  const freteStr = document.getElementById('mc_frete')?.value || '';
   const isentoFrete = !!document.getElementById('mc_isentoFrete')?.checked;
   
   if (!nome) {
@@ -193,7 +241,13 @@ async function saveFromModal() {
   }
   
   try {
-    await salvarCliente(nome, endereco, isentoFrete, { cnpj: cnpjMask, ie, cep, contato });
+    await salvarCliente(nome, endereco, isentoFrete, { 
+      cnpj: cnpjMask, 
+      ie, 
+      cep, 
+      contato,
+      frete: freteStr
+    });
     
     // Atualiza a lista principal
     const mainDatalist = document.getElementById('listaClientes');
@@ -258,6 +312,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target?.id === 'modalClienteSalvar') {
       saveFromModal();
     }
+    
+    if (target?.id === 'mc_consultarBtn') {
+      consultarCliente();
+    }
   });
   
   // Máscaras de input
@@ -286,8 +344,12 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Change events
   document.body.addEventListener('change', (event) => {
-    if (event.target?.id === 'mc_nome') {
+    const target = event.target;
+    
+    if (target?.id === 'mc_nome') {
       handleNomeChange();
+    } else if (target?.id === 'mc_isentoFrete') {
+      handleFreteChange();
     }
   });
   
