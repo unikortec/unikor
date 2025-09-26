@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unikor-pedidos-v1.2.2'; // INCREMENTEI A VERSÃO
+const CACHE_NAME = 'unikor-pedidos-v1.2.3'; // INCREMENTEI A VERSÃO
 const urlsToCache = [
   './',
   './index.html',
