@@ -176,44 +176,10 @@ async function autoPreencherPorCNPJ() {
   const cnpj = digitsOnly(cnpjRaw);
   if (cnpj.length !== 14) return;
   
-  try {
-    const response = await fetch('/api/cnpj/lookup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cnpj })
-    });
-    
-    if (!response.ok) return;
-    
-    const data = await response.json();
-    if (!data?.ok) return;
-    
-    // Preenche apenas campos vazios
-    const nome = document.getElementById('mc_nome');
-    if (nome && !nome.value && data.razao_social) {
-      nome.value = data.razao_social.toUpperCase();
-    }
-    
-    const endereco = document.getElementById('mc_endereco');
-    if (endereco && !endereco.value && data.endereco) {
-      endereco.value = data.endereco.toUpperCase();
-    }
-    
-    const cep = document.getElementById('mc_cep');
-    if (cep && !cep.value && data.cep) {
-      cep.value = data.cep.replace(/^(\d{5})(\d{3}).*$/, "$1-$2");
-    }
-    
-    const ie = document.getElementById('mc_ie');
-    if (ie && !ie.value && data.ie) {
-      ie.value = String(data.ie).toUpperCase();
-    }
-    
-    console.log('Dados preenchidos via CNPJ:', data); // DEBUG
-  } catch (error) {
-    console.error('Erro ao buscar CNPJ:', error); // DEBUG
-  }
+  console.log('CNPJ lookup temporariamente desabilitado'); // DEBUG
+  return; // TEMPORARIAMENTE DESABILITADO
 }
+
 
 async function saveFromModal() {
   const nome = (document.getElementById('mc_nome')?.value || '').trim();
