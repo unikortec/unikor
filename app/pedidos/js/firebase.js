@@ -35,9 +35,9 @@ export const TENANT_ID = "serranobrecarnes.com.br";
 // Cache para evitar consultas desnecessárias
 let clientesCache = null;
 let produtosCache = null;
-let pedidoAtualId = null; // Para evitar salvar o mesmo pedido múltiplas vezes
+let pedidoAtualId = null;
 
-// Funções para acessar dados do usuário logado (vêm do auth-guard)
+// Funções para acessar dados do usuário logado
 export function getCurrentUser() {
   return auth.currentUser;
 }
@@ -63,11 +63,21 @@ export async function hasAccessToTenant() {
   }
 }
 
-// ===== FUNÇÕES DE CLIENTES =====
+// ===== HELPERS PARA CAMINHOS CORRETOS =====
 
-// Gerar ID único para cliente baseado no nome (normalizado)
-function gerarIdCliente(nomeCliente) {
-  return nomeCliente
+// Retorna a referência correta para a coleção dentro do tenant
+function getTenantCollection(collectionName) {
+  return collection(db, `tenants/${TENANT_ID}/${collectionName}`);
+}
+
+// Retorna a referência correta para um documento dentro do tenant
+function getTenantDoc(collectionName, docId) {
+  return doc(db, `tenants/${TENANT_ID}/${collectionName}`, docId);
+}
+
+// Gerar ID único normalizado
+function gerarIdNormalizado(nome) {
+  return nome
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Remove acentos
@@ -76,7 +86,9 @@ function gerarIdCliente(nomeCliente) {
     .replace(/^_|_$/g, ""); // Remove _ do início e fim
 }
 
-// Salvar/atualizar cliente (evita duplicatas)
+// ===== FUNÇÕES DE CLIENTES =====
+
+// Salvar/atualizar cliente (dentro de /tenants/{tenantId}/clientes/)
 export async function salvarCliente(dadosCliente) {
   try {
     const user = getCurrentUser();
@@ -84,8 +96,8 @@ export async function salvarCliente(dadosCliente) {
       throw new Error("Usuário não autenticado");
     }
 
-    const clienteId = `${TENANT_ID}_${gerarIdCliente(dadosCliente.nome)}`;
-    const clienteRef = doc(db, "clientes", clienteId);
+    const clienteId = gerarIdNormalizado(dadosCliente.nome);
+    const clienteRef = getTenantDoc("clientes", clienteId);
     
     // Verifica se cliente já existe
     const clienteExistente = await getDoc(clienteRef);
@@ -93,7 +105,6 @@ export async function salvarCliente(dadosCliente) {
     const agora = serverTimestamp();
     const clienteComMetadata = {
       ...dadosCliente,
-      tenantId: TENANT_ID,
       atualizadoEm: agora,
       atualizadoPor: user.uid
     };
@@ -120,18 +131,15 @@ export async function salvarCliente(dadosCliente) {
   }
 }
 
-// Buscar clientes do tenant (com cache)
+// Buscar clientes do tenant
 export async function buscarClientes(forceReload = false) {
   try {
     if (clientesCache && !forceReload) {
       return clientesCache;
     }
 
-    const q = query(
-      collection(db, "clientes"),
-      where("tenantId", "==", TENANT_ID),
-      orderBy("atualizadoEm", "desc")
-    );
+    const clientesCollection = getTenantCollection("clientes");
+    const q = query(clientesCollection, orderBy("atualizadoEm", "desc"));
     
     const querySnapshot = await getDocs(q);
     const clientes = [];
@@ -144,6 +152,7 @@ export async function buscarClientes(forceReload = false) {
     });
     
     clientesCache = clientes;
+    console.log(`${clientes.length} clientes carregados do tenant ${TENANT_ID}`);
     return clientes;
   } catch (error) {
     console.error("Erro ao buscar clientes:", error);
@@ -153,7 +162,7 @@ export async function buscarClientes(forceReload = false) {
 
 // ===== FUNÇÕES DE PRODUTOS =====
 
-// Salvar/atualizar produto com preço mais recente
+// Salvar/atualizar produto com histórico de preços
 export async function salvarProduto(dadosProduto) {
   try {
     const user = getCurrentUser();
@@ -161,92 +170,124 @@ export async function salvarProduto(dadosProduto) {
       throw new Error("Usuário não autenticado");
     }
 
-    // ID único baseado no nome do produto
-    const produtoId = `${TENANT_ID}_${gerarIdCliente(dadosProduto.nome)}`;
-    const produtoRef = doc(db, "produtos", produtoId);
+    const produtoId = gerarIdNormalizado(dadosProduto.nome);
+    const produtoRef = getTenantDoc("clientes", "produtos"); // Como está dentro de clientes nas regras
     
-    const produtoExistente = await getDoc(produtoRef);
+    // Para produtos, vamos usar a subcoleção produtos dentro de um cliente "geral"
+    // Ou criar uma coleção separada se as regras permitem
+    const produtoGeralRef = doc(db, `tenants/${TENANT_ID}/clientes/produtos/produtos`, produtoId);
+    
+    const produtoExistente = await getDoc(produtoGeralRef);
     const agora = serverTimestamp();
     
     let produtoComMetadata = {
       nome: dadosProduto.nome,
       ultimoPreco: dadosProduto.preco || 0,
-      tenantId: TENANT_ID,
       atualizadoEm: agora,
       atualizadoPor: user.uid
     };
 
     if (produtoExistente.exists()) {
-      // Produto existe - atualiza apenas o último preço se fornecido
       const dados = produtoExistente.data();
       produtoComMetadata = {
         ...dados,
         ...produtoComMetadata
       };
       
-      // Mantém histórico de preços
+      // Salva histórico de preços
       if (dadosProduto.preco && dadosProduto.preco !== dados.ultimoPreco) {
-        produtoComMetadata.historicoPrecos = dados.historicoPrecos || [];
-        produtoComMetadata.historicoPrecos.push({
-          preco: dados.ultimoPreco,
-          data: dados.atualizadoEm
-        });
-        // Mantém apenas os últimos 10 preços
-        if (produtoComMetadata.historicoPrecos.length > 10) {
-          produtoComMetadata.historicoPrecos = produtoComMetadata.historicoPrecos.slice(-10);
-        }
+        // Salva no histórico de preços (coleção separada conforme regras)
+        await salvarHistoricoPreco(dadosProduto.nome, dadosProduto.preco, dados.ultimoPreco);
       }
       
-      await setDoc(produtoRef, produtoComMetadata, { merge: true });
+      await setDoc(produtoGeralRef, produtoComMetadata, { merge: true });
       console.log("Produto atualizado:", produtoId);
     } else {
-      // Produto novo
       produtoComMetadata.criadoEm = agora;
       produtoComMetadata.criadoPor = user.uid;
-      produtoComMetadata.historicoPrecos = [];
-      await setDoc(produtoRef, produtoComMetadata);
+      await setDoc(produtoGeralRef, produtoComMetadata);
       console.log("Produto criado:", produtoId);
     }
 
-    // Limpa cache
     produtosCache = null;
-    
     return produtoId;
   } catch (error) {
     console.error("Erro ao salvar produto:", error);
+    // Se der erro com subcoleção, vamos usar uma abordagem mais simples
+    return await salvarProdutoSimples(dadosProduto);
+  }
+}
+
+// Versão simplificada que salva produtos no histórico de preços
+async function salvarProdutoSimples(dadosProduto) {
+  try {
+    const user = getCurrentUser();
+    if (!user) throw new Error("Usuário não autenticado");
+
+    // Salva no histórico de preços diretamente
+    await salvarHistoricoPreco(dadosProduto.nome, dadosProduto.preco);
+    
+    return gerarIdNormalizado(dadosProduto.nome);
+  } catch (error) {
+    console.error("Erro ao salvar produto simples:", error);
     throw error;
   }
 }
 
-// Buscar produtos do tenant (com cache e últimos preços)
+// Salvar no histórico de preços (conforme regras)
+async function salvarHistoricoPreco(nomeProduto, precoNovo, precoAnterior = null) {
+  try {
+    const user = getCurrentUser();
+    if (!user) return;
+
+    const historicoRef = getTenantCollection("historico_precos");
+    
+    const dadosHistorico = {
+      produto: nomeProduto,
+      preco: precoNovo,
+      precoAnterior: precoAnterior,
+      criadoEm: serverTimestamp(),
+      criadoPor: user.uid
+    };
+
+    await addDoc(historicoRef, dadosHistorico);
+    console.log("Histórico de preço salvo para:", nomeProduto);
+  } catch (error) {
+    console.error("Erro ao salvar histórico de preço:", error);
+  }
+}
+
+// Buscar produtos únicos do histórico de preços
 export async function buscarProdutos(forceReload = false) {
   try {
     if (produtosCache && !forceReload) {
       return produtosCache;
     }
 
-    const q = query(
-      collection(db, "produtos"),
-      where("tenantId", "==", TENANT_ID),
-      orderBy("atualizadoEm", "desc")
-    );
+    const historicoCollection = getTenantCollection("historico_precos");
+    const q = query(historicoCollection, orderBy("criadoEm", "desc"));
     
     const querySnapshot = await getDocs(q);
-    const produtos = [];
+    const produtosMap = new Map();
     
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      produtos.push({
-        id: doc.id,
-        nome: data.nome,
-        ultimoPreco: data.ultimoPreco || 0,
-        historicoPrecos: data.historicoPrecos || [],
-        ...data
-      });
+      const produto = data.produto;
+      
+      // Mantém apenas o mais recente de cada produto
+      if (!produtosMap.has(produto)) {
+        produtosMap.set(produto, {
+          id: gerarIdNormalizado(produto),
+          nome: produto,
+          ultimoPreco: data.preco || 0,
+          ultimaAtualizacao: data.criadoEm
+        });
+      }
     });
     
-    produtosCache = produtos;
-    return produtos;
+    produtosCache = Array.from(produtosMap.values());
+    console.log(`${produtosCache.length} produtos únicos carregados`);
+    return produtosCache;
   } catch (error) {
     console.error("Erro ao buscar produtos:", error);
     return produtosCache || [];
@@ -255,7 +296,7 @@ export async function buscarProdutos(forceReload = false) {
 
 // ===== FUNÇÕES DE PEDIDOS =====
 
-// Gerar hash único do pedido para evitar duplicatas
+// Gerar hash único do pedido
 function gerarHashPedido(dadosPedido) {
   const chave = JSON.stringify({
     cliente: dadosPedido.cliente?.nome,
@@ -264,17 +305,16 @@ function gerarHashPedido(dadosPedido) {
     entrega: dadosPedido.entrega
   });
   
-  // Hash simples baseado no conteúdo
   let hash = 0;
   for (let i = 0; i < chave.length; i++) {
     const char = chave.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Converte para 32bit integer
+    hash = hash & hash;
   }
   return Math.abs(hash).toString(36);
 }
 
-// Salvar pedido (evita duplicatas)
+// Salvar pedido na estrutura correta
 export async function salvarPedido(dadosPedido) {
   try {
     const user = getCurrentUser();
@@ -282,10 +322,8 @@ export async function salvarPedido(dadosPedido) {
       throw new Error("Usuário não autenticado");
     }
 
-    // Gera hash único do pedido
     const hashPedido = gerarHashPedido(dadosPedido);
     
-    // Se já salvou este pedido na sessão atual, não salva novamente
     if (pedidoAtualId === hashPedido) {
       console.log("Pedido já foi salvo nesta sessão:", hashPedido);
       return pedidoAtualId;
@@ -294,24 +332,22 @@ export async function salvarPedido(dadosPedido) {
     const pedidoComMetadata = {
       ...dadosPedido,
       hashPedido,
-      tenantId: TENANT_ID,
       criadoPor: user.uid,
       criadoEm: serverTimestamp(),
       status: "novo"
     };
 
-    const docRef = await addDoc(collection(db, "pedidos"), pedidoComMetadata);
+    const pedidosCollection = getTenantCollection("pedidos");
+    const docRef = await addDoc(pedidosCollection, pedidoComMetadata);
     console.log("Pedido salvo com ID:", docRef.id);
     
-    // Armazena o hash para evitar duplicatas na sessão
     pedidoAtualId = hashPedido;
     
-    // Salva/atualiza dados do cliente automaticamente
+    // Salva cliente e produtos automaticamente
     if (dadosPedido.cliente) {
       await salvarCliente(dadosPedido.cliente);
     }
     
-    // Salva/atualiza produtos automaticamente
     if (dadosPedido.itens) {
       for (const item of dadosPedido.itens) {
         if (item.produto && item.preco) {
@@ -330,18 +366,18 @@ export async function salvarPedido(dadosPedido) {
   }
 }
 
-// Resetar pedido atual (chamar ao iniciar novo pedido)
+// Resetar pedido atual
 export function resetarPedidoAtual() {
   pedidoAtualId = null;
-  console.log("Pedido atual resetado - próximo será salvo normalmente");
+  console.log("Pedido atual resetado");
 }
 
 // Buscar pedidos do cliente
 export async function buscarPedidosCliente(nomeCliente, limiteResultados = 5) {
   try {
+    const pedidosCollection = getTenantCollection("pedidos");
     const q = query(
-      collection(db, "pedidos"),
-      where("tenantId", "==", TENANT_ID),
+      pedidosCollection,
       where("cliente.nome", "==", nomeCliente),
       orderBy("criadoEm", "desc"),
       limit(limiteResultados)
@@ -364,10 +400,11 @@ export async function buscarPedidosCliente(nomeCliente, limiteResultados = 5) {
   }
 }
 
-// Verificar se está online (para mostrar/ocultar banner offline)
+// Verificar conexão
 export async function verificarConexao() {
   try {
-    const q = query(collection(db, "clientes"), limit(1));
+    const clientesCollection = getTenantCollection("clientes");
+    const q = query(clientesCollection, limit(1));
     await getDocs(q);
     return true;
   } catch (error) {
@@ -376,7 +413,7 @@ export async function verificarConexao() {
   }
 }
 
-// Limpar caches (útil para forçar reload)
+// Limpar caches
 export function limparCaches() {
   clientesCache = null;
   produtosCache = null;
