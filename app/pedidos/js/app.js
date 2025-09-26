@@ -1,4 +1,4 @@
-import { up, formatMoney, parseMoney, formatKg, parseKg } from './utils.js';
+import { up } from './utils.js';
 import { initItens, adicionarItem, getItens } from './itens.js';
 
 console.log('App inicializado');
