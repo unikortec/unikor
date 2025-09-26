@@ -5,20 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <base href="./">
   <title>UNIKOR • Portal</title>
-
   <!-- PWA -->
   <link rel="manifest" href="manifest.json"/>
   <meta name="theme-color" content="#1e7f46"/>
-
   <!-- Ícones do site -->
   <link rel="icon" type="image/png" href="assets/logo/unikor-logo.png">
   <link rel="icon" type="image/svg+xml" href="assets/logo/unikor-logo.svg">
-
   <!-- Estilos -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
   <!-- LOGIN -->
   <section id="scrLogin" class="screen screen--login active">
     <div class="login-wrap">
@@ -26,10 +22,8 @@
       <div class="login-logo">
         <img src="assets/logo/unikor-logo.svg" alt="UNIKOR" loading="eager"/>
       </div>
-
       <!-- TÍTULO -->
       <h1 class="login-title">Bem-vindo</h1>
-
       <!-- CAMPOS -->
       <div class="login-form">
         <input id="email" type="email" placeholder="E-mail" autocomplete="username" inputmode="email"/>
@@ -39,7 +33,6 @@
       </div>
     </div>
   </section>
-
   <!-- DASHBOARD -->
   <section id="scrDash" class="screen screen--dash" style="display:none">
     <header class="dash-header">
@@ -51,15 +44,156 @@
       </div>
       <button id="btnLogout" class="logout" title="Sair" style="display:none">Sair</button>
     </header>
-
     <main class="dash-main">
       <div class="grid" id="gridApps">
         <!-- tiles gerados via JS -->
       </div>
     </main>
-
     <!-- FAB Config (só master) -->
     <button id="fabConfig" class="fab" title="Configurações" style="display:none">
+      <img src="assets/logo/icon-gear-white.svg" alt="Configurações">
+    </button>
+  </section>
+  <!-- App -->
+  <script type="module">
+    import { doLogin, doLogout, doReset, onUser, $ } from "./js/auth.js";
+    // ---------- UI helpers ----------
+    const ERRORS_PT = {
+      "auth/invalid-email": "E-mail inválido.",
+      "auth/missing-password": "Informe a senha.",
+      "auth/invalid-credential": "E-mail ou senha inválidos.",
+      "auth/user-not-found": "Usuário não encontrado.",
+      "auth/wrong-password": "Senha incorreta.",
+      "auth/too-many-requests": "Muitas tentativas. Tente novamente em instantes.",
+    };
+    const msgErro = (e)=> ERRORS_PT[e?.code] || (e?.message || "Não foi possível realizar a operação.");
+    // ---------- Navegação por tile ----------
+    document.addEventListener('click',(ev)=>{
+      const tile = ev.target.closest('.tile');
+      if (tile){ window.location.href = tile.dataset.href; }
+    });
+    // ---------- Login ----------
+    $('#btnEntrar').addEventListener('click', async () => {
+      const email = $('#email').value.trim();
+      const senha = $('#senha').value;
+      if (!email || !senha) { alert('Informe e-mail e senha.'); return; }
+      try {
+        await doLogin(email, senha);
+      } catch (e) {
+        alert('Falha ao entrar: ' + msgErro(e));
+      }
+    });
+    $('#linkEsqueci').addEventListener('click', async (ev) => {
+      ev.preventDefault();
+      const email = prompt('Qual seu e-mail?');
+      if (!email) return;
+      try {
+        await doReset(email);
+        alert('Enviamos um e-mail com as instruções.');
+      } catch (e) {
+        alert('Não foi possível enviar: ' + msgErro(e));
+      }
+    });
+    // ---------- Estado de autenticação ----------
+    onUser(async (user) => {
+      const scrLogin = $('#scrLogin');
+      const scrDash  = $('#scrDash');
+      const gridApps = $('#gridApps');
+      const btnOut   = $('#btnLogout');
+      const fab      = $('#fabConfig');
+      const bemv     = $('#bemvindoTxt');
+
+      // CORREÇÃO: Tratar usuário anônimo como "não logado" para o portal
+      if (!user || user.isAnonymous) { // Adicionado 'user.isAnonymous'
+        scrLogin.classList.add('active');
+        scrLogin.style.display = 'block';
+        scrDash.style.display  = 'none';
+        btnOut.style.display   = 'none';
+        fab.style.display      = 'none';
+        return;
+      }
+      // Claims + nome
+      let role = 'geral';
+      try {
+        const token = await user.getIdTokenResult(true);
+        role = token?.claims?.role ?? 'geral';
+      } catch {}
+      const nomeRaw = user.displayName || (user.email?.split('@')[0] || 'Usuário');
+      const nomeFmt = nomeRaw.charAt(0).toUpperCase() + nomeRaw.slice(1);
+      bemv.textContent = `Bem-vindo, ${nomeFmt}`;
+      // Monta grid de apps (para /app/<slug>/)
+      const APPS = [
+        { slug: "pedidos",    name: "Pedidos",     icon: "icon-pedidos.svg" },
+        { slug: "relatorios", name: "Relatório",   icon: "icon-relatorios.svg" },
+        { slug: "estoque",    name: "Estoque",     icon: "icon-estoque.svg" },
+        { slug: "despesas",   name: "Despesas",    icon: "icon-despesas.svg" },
+        { slug: "crm",        name: "CRM",         icon: "icon-crm.svg" },
+        { slug: "dashboard",  name: "Dashboard",   icon: "icon-dashboard.svg" },
+      ];
+      gridApps.innerHTML = APPS.map(a=>`
+        <div class="tile" data-href="app/${a.slug}/">
+          <img class="tile-icon" src="assets/logo/${a.icon}" alt="${a.name}">
+          <div class="tile-title">${a.name}</div>
+        </div>
+      `).join("");
+      // Botão sair (topo direito)
+      btnOut.style.display = 'inline-flex';
+      btnOut.onclick = () => doLogout();
+      // FAB Config (apenas master)
+      if (role === 'master'){
+        fab.style.display = 'flex';
+        fab.onclick = () => window.location.href = 'app/config/';
+      } else {
+        fab.style.display = 'none';
+        fab.onclick = null;
+      }
+      // Exibe dashboard
+      scrLogin.classList.remove('active');
+      scrLogin.style.display = 'none';
+      scrDash.style.display  = 'block';
+    });
+    // =============== Service Worker (auto-update) ===============
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          // (passo 1) registra o SW do PORTAL (raiz do portal)
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          // checa atualização quando volta ao foco
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+          // checagem periódica
+          setInterval(() => reg.update(), 10 * 60 * 1000);
+          // (passo 2) quando um novo SW instalar, pede pra assumir e recarrega as abas
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!window.__reloadedBySW) {
+              window.__reloadedBySW = true;
+              location.reload();
+            }
+          });
+          // opcional: ouvir o SW avisando que ativou
+          navigator.serviceWorker.addEventListener('message', (ev) => {
+            if (ev.data && ev.data.type === 'SW_ACTIVATED') {
+              // console.log('SW ativado:', ev.data.cache);
+            }
+          });
+        } catch (err) {
+          console.warn('SW:', err);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
       <img src="assets/logo/icon-gear-white.svg" alt="Configurações">
     </button>
   </section>
