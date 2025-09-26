@@ -1,4 +1,3 @@
-import { salvarPedido } from './js/storage.js';
 import { up, formatMoney, parseMoney, formatKg, parseKg } from './js/utils.js';
 
 console.log('App inicializado');
@@ -46,17 +45,16 @@ function calcularPesoTotal(item) {
 function atualizarItem(index) {
   const item = window.appState.itens[index];
   if (!item) return;
-  
   const container = document.querySelector(`[data-index="${index}"]`);
   if (!container) return;
-  
+
   // Pega valores dos inputs
   item.descricao = container.querySelector('.item-descricao')?.value || '';
   item.quantidade = container.querySelector('.item-quantidade')?.value || '';
   item.gramatura = container.querySelector('.item-gramatura')?.value || '';
   item.peso = container.querySelector('.item-peso')?.value || '';
   item.valor = container.querySelector('.item-valor')?.value || '';
-  
+
   // Calcula peso total se tem gramatura
   const pesoCalculado = calcularPesoTotal(item);
   if (pesoCalculado > 0) {
@@ -64,17 +62,17 @@ function atualizarItem(index) {
     const pesoInput = container.querySelector('.item-peso');
     if (pesoInput) pesoInput.value = item.peso;
   }
-  
+
   // Calcula subtotal
   const subtotal = calcularSubtotal(item);
   item.subtotal = formatMoney(subtotal);
-  
+
   // Atualiza display do subtotal
   const subtotalDisplay = container.querySelector('.subtotal');
   if (subtotalDisplay) {
     subtotalDisplay.textContent = `Subtotal: R$ ${item.subtotal}`;
   }
-  
+
   atualizarTotal();
 }
 
@@ -84,7 +82,7 @@ function atualizarTotal() {
     const subtotal = parseMoney(item.subtotal) || 0;
     total += subtotal;
   });
-  
+
   const totalElement = document.getElementById('total');
   if (totalElement) {
     totalElement.textContent = `Total: R$ ${formatMoney(total)}`;
@@ -115,9 +113,9 @@ function removerItem(index) {
 function renderizarItens() {
   const container = document.getElementById('itensContainer');
   if (!container) return;
-  
+
   container.innerHTML = '';
-  
+
   window.appState.itens.forEach((item, index) => {
     const itemHTML = `
       <div class="item" data-index="${index}">
@@ -151,7 +149,7 @@ function renderizarItens() {
     
     container.insertAdjacentHTML('beforeend', itemHTML);
   });
-  
+
   // Adiciona listeners para os inputs
   container.querySelectorAll('.item').forEach((itemElement, index) => {
     const inputs = itemElement.querySelectorAll('input');
@@ -160,7 +158,7 @@ function renderizarItens() {
       input.addEventListener('blur', () => atualizarItem(index));
     });
   });
-  
+
   atualizarTotal();
 }
 
@@ -187,54 +185,30 @@ window.getItens = function() {
 async function gerarPDF() {
   const botao = document.getElementById('gerarPdfBtn');
   if (!botao) return;
-  
+
   const textoOriginal = botao.textContent;
   botao.disabled = true;
   botao.innerHTML = '⏳ Gerando PDF...';
-  
+
   try {
     console.log('Iniciando geração de PDF...');
     const { montarPDF } = await import('./js/pdf.js');
     
-    // Validações básicas
-    const cliente = document.getElementById('cliente')?.value?.trim();
-    if (!cliente) {
+    const dados = coletarDadosFormulario();
+    if (!dados.cliente.trim()) {
       alert('Informe o nome do cliente');
       return;
     }
-    
-    if (window.appState.itens.length === 0) {
+    if (dados.itens.length === 0) {
       alert('Adicione pelo menos um item');
       return;
     }
-    
+
     await montarPDF();
     console.log('PDF gerado com sucesso');
   } catch (error) {
     console.error('[PDF] Erro ao gerar:', error);
     alert('Erro ao gerar PDF: ' + error.message);
-  } finally {
-    botao.disabled = false;
-    botao.textContent = textoOriginal;
-  }
-}
-
-async function compartilharPDF() {
-  const botao = document.getElementById('compartilharBtn');
-  if (!botao) return;
-  
-  const textoOriginal = botao.textContent;
-  botao.disabled = true;
-  botao.innerHTML = '⏳ Compartilhando...';
-  
-  try {
-    console.log('Iniciando compartilhamento de PDF...');
-    // Primeiro gera o PDF, depois compartilha
-    await gerarPDF();
-    console.log('PDF compartilhado com sucesso');
-  } catch (error) {
-    console.error('[PDF] Erro ao compartilhar:', error);
-    alert('Erro ao compartilhar PDF: ' + error.message);
   } finally {
     botao.disabled = false;
     botao.textContent = textoOriginal;
@@ -260,62 +234,24 @@ function coletarDadosFormulario() {
   };
 }
 
-async function salvarPedidoCompleto() {
-  try {
-    const dados = coletarDadosFormulario();
-    if (!dados.cliente.trim()) {
-      alert('Informe o nome do cliente');
-      return;
-    }
-    if (dados.itens.length === 0) {
-      alert('Adicione pelo menos um item');
-      return;
-    }
-    
-    await salvarPedido(dados);
-    
-    try {
-      const { toastOk } = await import('./js/ui.js');
-      if (toastOk) toastOk('Pedido salvo com sucesso!');
-    } catch (error) {
-      console.log('Pedido salvo com sucesso!');
-    }
-    
-    console.log('Pedido salvo:', dados);
-  } catch (error) {
-    console.error('Erro ao salvar pedido:', error);
-    alert('Erro ao salvar pedido: ' + error.message);
-  }
-}
-
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
   
   // Inicializa com um item
   adicionarItem();
-  
+
   // Botões principais
   const btnAdicionar = document.getElementById('adicionarItemBtn');
   if (btnAdicionar) {
     btnAdicionar.addEventListener('click', adicionarItem);
   }
-  
+
   const btnGerarPDF = document.getElementById('gerarPdfBtn');
   if (btnGerarPDF) {
     btnGerarPDF.addEventListener('click', gerarPDF);
   }
-  
-  const btnCompartilhar = document.getElementById('compartilharBtn');
-  if (btnCompartilhar) {
-    btnCompartilhar.addEventListener('click', compartilharPDF);
-  }
-  
-  const btnSalvar = document.getElementById('salvarBtn');
-  if (btnSalvar) {
-    btnSalvar.addEventListener('click', salvarPedidoCompleto);
-  }
-  
+
   // Formatação de inputs principais
   const inputCliente = document.getElementById('cliente');
   if (inputCliente) {
@@ -326,6 +262,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // Funções globais
 window.removerItem = removerItem;
 window.gerarPDF = gerarPDF;
-window.compartilharPDF = compartilharPDF;
 
 console.log('App configurado completamente');
