@@ -1,82 +1,228 @@
-export const up = (s) => (s ?? "").toString().trim().toUpperCase();
-export const removeAcentos = (s) => (s ?? "").toString()
-  .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-export const normNome = (s) => removeAcentos(up(s));
-export const digitsOnly = (v) => String(v||"").replace(/\D/g,"");
-
-
-export function debounce(fn, ms){ let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); }; }
-
-
-export function forcarUppercase(el){ if(!el || !el.value) return; el.value = up(el.value); }
-export function maskCNPJ(el){
-  const d = digitsOnly(el.value).slice(0,14);
-  let out = d;
-  if (d.length>2) out = d.slice(0,2)+'.'+d.slice(2);
-  if (d.length>5) out = out.slice(0,6)+'.'+d.slice(5);
-  if (d.length>8) out = out.slice(0,10)+'/'+d.slice(8);
-  if (d.length>12) out = out.slice(0,15)+'-'+d.slice(12);
-  el.value = out;
+// Utilitários gerais
+export function up(str) {
+  if (!str) return '';
+  return str.toString().toUpperCase();
 }
-export function normalizeCNPJ(el){ el.value = digitsOnly(el.value).slice(0,14); }
-export function maskCEP(el){
-  const d = digitsOnly(el.value).slice(0,8);
-  el.value = d.length>5 ? d.slice(0,5)+'-'+d.slice(5) : d;
+
+export function digitsOnly(str) {
+  if (!str) return '';
+  return str.toString().replace(/\D/g, '');
 }
-export function normalizeCEP(el){ el.value = digitsOnly(el.value).slice(0,8); }
-export function maskTelefone(el){ // Correção: reescrita da função para evitar erro de template literal
-  const d = digitsOnly(el.value).slice(0,11);
-  let formatted = '';
-  if (d.length <= 2) {
-    formatted = d;
-  } else if (d.length <= 6) {
-    formatted = `(${d.slice(0,2)}) ${d.slice(2)}`;
-  } else if (d.length <= 10) { // Telefone fixo ou celular sem 9º dígito
-    formatted = `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
-  } else { // Celular com 9º dígito
-    formatted = `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7,11)}`;
+
+// Formatação de moeda
+export function formatMoney(value) {
+  if (value === null || value === undefined || value === '') return 'R$ 0,00';
+  
+  const num = typeof value === 'string' ? parseMoney(value) : parseFloat(value);
+  if (isNaN(num)) return 'R$ 0,00';
+  
+  return 'R$ ' + num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+export function parseMoney(str) {
+  if (!str) return 0;
+  
+  const cleanStr = str.toString()
+    .replace(/[^\d,-]/g, '')
+    .replace(',', '.');
+  
+  const num = parseFloat(cleanStr);
+  return isNaN(num) ? 0 : num;
+}
+
+// Formatação de peso/quilograma
+export function formatKg(value) {
+  if (value === null || value === undefined || value === '') return '0,000';
+  
+  const num = typeof value === 'string' ? parseKg(value) : parseFloat(value);
+  if (isNaN(num)) return '0,000';
+  
+  return num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  });
+}
+
+export function parseKg(str) {
+  if (!str) return 0;
+  
+  const cleanStr = str.toString()
+    .replace(/[^\d,-]/g, '')
+    .replace(',', '.');
+  
+  const num = parseFloat(cleanStr);
+  return isNaN(num) ? 0 : num;
+}
+
+// Máscaras de input
+export function maskMoney(input) {
+  if (!input) return;
+  
+  let value = digitsOnly(input.value);
+  if (!value) {
+    input.value = '';
+    return;
   }
-  el.value = formatted;
-}
-export function normalizeTelefone(el){ el.value = digitsOnly(el.value).slice(0,11); }
-
-
-export function fmtCNPJ(d){ d = digitsOnly(d).slice(0,14);
-  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*$/, "$1.$2.$3/$4-$5"); }
-export function fmtCEP(d){ d = digitsOnly(d).slice(0,8);
-  return d.replace(/^(\d{5})(\d{3}).*$/, "$1-$2"); }
-export function fmtTel(d){ d = digitsOnly(d).slice(0,11);
-  return (d.length<=10)
-    ? d.replace(/^(\d{2})(\d{4})(\d{0,4}).*$/, "($1) $2-$3")
-    : d.replace(/^(\d{2})(\d{5})(\d{0,4}).*$/, "($1) $2-$3"); }
-
-
-export function formatarData(iso){ if(!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; } // Correção: template literal
-export function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
-export function splitToWidth(doc,t,w){ return doc.splitTextToSize(t||"", w); }
-
-
-// Endereço → garante POA quando não houver cidade
-export function appendPOA(str){
-  const t = String(str||"").trim();
-  if (!t) return t;
-  if (/porto\s*alegre/i.test(t)) return t;
-  const TEM_CIDADE = /,\s([A-Za-zÀ-ÿ'.\-\s]{2,})(?:\s-\s[A-Za-z]{2})?(?:\s,\sBrasil)?\s$/i;
-  if (TEM_CIDADE.test(t)) return t;
-  return `${t}, Porto Alegre - RS`; // Correção: template literal
+  
+  // Converte centavos para reais
+  const reais = parseInt(value) / 100;
+  input.value = formatMoney(reais).replace('R$ ', '');
 }
 
-
-// Peso no nome do produto (ex.: "COSTELA 1.2KG")
-export function parsePesoFromProduto(nome){
-  const s = String(nome||"").toLowerCase().replace(',', '.');
-  const re = /(\d+(?:\.\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/g;
-  let m, last=null;
-  while ((m = re.exec(s)) !== null) last = m;
-  if(!last) return null;
-  const val = parseFloat(last[1]);
-  const unit = last[2];
-  if(!isFinite(val) || val<=0) return null;
-  if (unit === 'kg' || unit.startsWith('quilo')) return val;
-  return val / 1000;
+export function maskKg(input) {
+  if (!input) return;
+  
+  let value = input.value.replace(/[^\d,]/g, '');
+  
+  // Se tem vírgula, mantém apenas a primeira
+  const parts = value.split(',');
+  if (parts.length > 2) {
+    value = parts[0] + ',' + parts.slice(1).join('');
+  }
+  
+  // Limita casas decimais
+  if (parts[1] && parts[1].length > 3) {
+    value = parts[0] + ',' + parts[1].substring(0, 3);
+  }
+  
+  input.value = value;
 }
+
+export function maskCNPJ(input) {
+  if (!input) return;
+  
+  let value = digitsOnly(input.value);
+  
+  // Aplica máscara: 00.000.000/0000-00
+  value = value.replace(/^(\d{2})(\d)/, '$1.$2');
+  value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+  value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
+  value = value.replace(/(\d{4})(\d)/, '$1-$2');
+  
+  input.value = value;
+}
+
+export function maskCEP(input) {
+  if (!input) return;
+  
+  let value = digitsOnly(input.value);
+  
+  // Aplica máscara: 00000-000
+  if (value.length > 5) {
+    value = value.replace(/^(\d{5})(\d)/, '$1-$2');
+  }
+  
+  input.value = value;
+}
+
+export function maskTelefone(input) {
+  if (!input) return;
+  
+  let value = digitsOnly(input.value);
+  
+  // Aplica máscara: (00) 00000-0000 ou (00) 0000-0000
+  if (value.length <= 10) {
+    // Telefone fixo
+    value = value.replace(/^(\d{2})(\d)/, '($1) $2');
+    value = value.replace(/(\d{4})(\d)/, '$1-$2');
+  } else {
+    // Celular
+    value = value.replace(/^(\d{2})(\d)/, '($1) $2');
+    value = value.replace(/(\d{5})(\d)/, '$1-$2');
+  }
+  
+  input.value = value;
+}
+
+// Validações
+export function validarCNPJ(cnpj) {
+  const digits = digitsOnly(cnpj);
+  
+  if (digits.length !== 14) return false;
+  
+  // Verifica se todos os dígitos são iguais
+  if (/^(\d)\1+$/.test(digits)) return false;
+  
+  // Validação dos dígitos verificadores
+  let soma = 0;
+  let peso = 2;
+  
+  // Primeiro dígito
+  for (let i = 11; i >= 0; i--) {
+    soma += parseInt(digits[i]) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  
+  const resto1 = soma % 11;
+  const dv1 = resto1 < 2 ? 0 : 11 - resto1;
+  
+  if (parseInt(digits[12]) !== dv1) return false;
+  
+  // Segundo dígito
+  soma = 0;
+  peso = 2;
+  
+  for (let i = 12; i >= 0; i--) {
+    soma += parseInt(digits[i]) * peso;
+    peso = peso === 9 ? 2 : peso + 1;
+  }
+  
+  const resto2 = soma % 11;
+  const dv2 = resto2 < 2 ? 0 : 11 - resto2;
+  
+  return parseInt(digits[13]) === dv2;
+}
+
+export function validarCEP(cep) {
+  const digits = digitsOnly(cep);
+  return digits.length === 8;
+}
+
+// Utilitário para debounce
+export function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Utilitário para gerar IDs únicos
+export function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// Utilitário para copiar texto
+export function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  } else {
+    // Fallback para navegadores mais antigos
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+      document.execCommand('copy');
+      textArea.remove();
+      return Promise.resolve();
+    } catch (err) {
+      textArea.remove();
+      return Promise.reject(err);
+    }
+  }
+}
+
+console.log('Utils carregado com todas as funções');
