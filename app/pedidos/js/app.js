@@ -1,133 +1,340 @@
-// app/pedidos/js/app.js
-import { getCurrentUser, hasAccessToTenant } from './firebase.js';
-import { atualizarFreteUI } from './frete.js';
+import { salvarPedido } from './js/storage.js';
+import { up, formatMoney, parseMoney, formatKg, parseKg } from './js/utils.js';
 
-// Carrega itens.js com fallback (evita crash se SW servir versão antiga)
-let initItens, adicionarItem, atualizarFreteAoEditarItem;
-async function loadItensModule(){
-    const m = await import('./itens.js');
-    initItens = m.initItens ?? m.default?.initItens;
-    adicionarItem = m.adicionarItem ?? m.default?.adicionarItem;
-    atualizarFreteAoEditarItem = m.atualizarFreteAoEditarItem ?? m.default?.atualizarFreteAoEditarItem;
-    if (!initItens || !adicionarItem) {
-        console.error('[itens.js] exports não encontrados', m);
-        alert('Falha ao carregar módulo de itens. Atualize a página.');
-        return false;
+console.log('App inicializado');
+
+// Estado global do app
+window.appState = {
+  itens: []
+};
+
+// Utilitários para formatação
+function formatarNome(input) {
+  if (!input) return;
+  input.value = up(input.value);
+}
+
+function calcularSubtotal(item) {
+  const qtd = parseFloat(item.quantidade) || 0;
+  const valor = parseMoney(item.valor) || 0;
+  const peso = parseKg(item.peso) || 0;
+  
+  // Se tem peso, usa peso * valor/kg
+  if (peso > 0) {
+    return peso * valor;
+  }
+  // Senão, usa quantidade * valor unitário
+  return qtd * valor;
+}
+
+function calcularPesoTotal(item) {
+  const qtd = parseFloat(item.quantidade) || 0;
+  const gramatura = parseFloat(item.gramatura) || 0;
+  const pesoIndividual = parseKg(item.peso) || 0;
+  
+  // Se tem peso individual, usa ele
+  if (pesoIndividual > 0) {
+    return pesoIndividual;
+  }
+  
+  // Se tem gramatura, calcula: (quantidade * gramatura) / 1000
+  if (gramatura > 0) {
+    return (qtd * gramatura) / 1000;
+  }
+  
+  return 0;
+}
+
+function atualizarItem(index) {
+  const item = window.appState.itens[index];
+  if (!item) return;
+  
+  const container = document.querySelector(`[data-index="${index}"]`);
+  if (!container) return;
+  
+  // Pega valores dos inputs
+  item.descricao = container.querySelector('.item-descricao')?.value || '';
+  item.quantidade = container.querySelector('.item-quantidade')?.value || '';
+  item.gramatura = container.querySelector('.item-gramatura')?.value || '';
+  item.peso = container.querySelector('.item-peso')?.value || '';
+  item.valor = container.querySelector('.item-valor')?.value || '';
+  
+  // Calcula peso total se tem gramatura
+  const pesoCalculado = calcularPesoTotal(item);
+  if (pesoCalculado > 0) {
+    item.peso = formatKg(pesoCalculado);
+    const pesoInput = container.querySelector('.item-peso');
+    if (pesoInput) pesoInput.value = item.peso;
+  }
+  
+  // Calcula subtotal
+  const subtotal = calcularSubtotal(item);
+  item.subtotal = formatMoney(subtotal);
+  
+  // Atualiza display do subtotal
+  const subtotalDisplay = container.querySelector('.subtotal');
+  if (subtotalDisplay) {
+    subtotalDisplay.textContent = `Subtotal: R$ ${item.subtotal}`;
+  }
+  
+  atualizarTotal();
+}
+
+function atualizarTotal() {
+  let total = 0;
+  window.appState.itens.forEach(item => {
+    const subtotal = parseMoney(item.subtotal) || 0;
+    total += subtotal;
+  });
+  
+  const totalElement = document.getElementById('total');
+  if (totalElement) {
+    totalElement.textContent = `Total: R$ ${formatMoney(total)}`;
+  }
+}
+
+function adicionarItem() {
+  const novoItem = {
+    descricao: '',
+    quantidade: '',
+    gramatura: '',
+    peso: '',
+    valor: '',
+    subtotal: 'R$ 0,00'
+  };
+  
+  window.appState.itens.push(novoItem);
+  renderizarItens();
+}
+
+function removerItem(index) {
+  if (confirm('Remover este item?')) {
+    window.appState.itens.splice(index, 1);
+    renderizarItens();
+  }
+}
+
+function renderizarItens() {
+  const container = document.getElementById('itensContainer');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  window.appState.itens.forEach((item, index) => {
+    const itemHTML = `
+      <div class="item" data-index="${index}">
+        <div class="field-group">
+          <label>Descrição do Item:</label>
+          <input type="text" class="item-descricao" value="${item.descricao}" />
+        </div>
+        <div class="field-group grid-2">
+          <div>
+            <label>Quantidade:</label>
+            <input type="number" class="item-quantidade" step="any" value="${item.quantidade}" />
+          </div>
+          <div>
+            <label>Gramatura (g) - se aplicável:</label>
+            <input type="number" class="item-gramatura" step="any" value="${item.gramatura}" />
+          </div>
+        </div>
+        <div class="field-group grid-2">
+          <div>
+            <label>Peso Total (Kg):</label>
+            <input type="text" class="item-peso" value="${item.peso}" />
+          </div>
+          <div>
+            <label>Valor (R$/Kg ou unitário):</label>
+            <input type="text" class="item-valor" value="${item.valor}" />
+          </div>
+        </div>
+        <div class="subtotal">${item.subtotal ? `Subtotal: ${item.subtotal}` : 'Subtotal: R$ 0,00'}</div>
+        <button type="button" class="remove" onclick="removerItem(${index})">Remover Item</button>
+      </div>`;
+    
+    container.insertAdjacentHTML('beforeend', itemHTML);
+  });
+  
+  // Adiciona listeners para os inputs
+  container.querySelectorAll('.item').forEach((itemElement, index) => {
+    const inputs = itemElement.querySelectorAll('input');
+    inputs.forEach(input => {
+      input.addEventListener('input', () => atualizarItem(index));
+      input.addEventListener('blur', () => atualizarItem(index));
+    });
+  });
+  
+  atualizarTotal();
+}
+
+// Funções de PDF com loading
+async function gerarPDF() {
+  const botao = document.getElementById('gerarPdfBtn');
+  if (!botao) return;
+
+  // Adiciona loading
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.innerHTML = '⏳ Gerando PDF...';
+
+  try {
+    console.log('Iniciando geração de PDF...');
+    
+    const { gerarPDF: gerarPDFModule } = await import('./js/pdf.js');
+    
+    // Coleta dados do formulário
+    const dados = coletarDadosFormulario();
+    
+    if (!dados.cliente.trim()) {
+      alert('Informe o nome do cliente');
+      return;
     }
-    return true;
-}
-
-// PDF com fallback de tipos de export
-async function callGerarPDF(mode, btn) {
-    try {
-        const m = await import('./pdf.js');
-        let fn = null;
-        if (typeof m.gerarPDF === 'function') fn = m.gerarPDF;
-        else if (typeof m.default === 'function') fn = m.default;
-        else if (m.default && typeof m.default.gerarPDF === 'function') fn = m.default.gerarPDF;
-        if (!fn) {
-            alert('Módulo de PDF indisponível');
-            return;
-        }
-        await fn(mode, btn);
-    } catch (err) {
-        console.error('[PDF] Falha ao carregar módulo:', err);
-        alert('Não consegui carregar o módulo de PDF. Tente recarregar a página.');
+    
+    if (dados.itens.length === 0) {
+      alert('Adicione pelo menos um item');
+      return;
     }
+    
+    await gerarPDFModule(dados);
+    console.log('PDF gerado com sucesso');
+    
+  } catch (error) {
+    console.error('[PDF] Erro ao gerar:', error);
+    alert('Erro ao gerar PDF: ' + error.message);
+  } finally {
+    // Remove loading
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
 }
 
-// UI: mostra/oculta campo "pagamentoOutro"
-function wirePagamentoOutro(){
-    const sel = document.getElementById('pagamento');
-    const outro = document.getElementById('pagamentoOutro');
-    if (!sel || !outro) return;
-    const sync = () => {
-        outro.style.display = (sel.value === 'OUTRO') ? '' : 'none';
-    };
-    sel.addEventListener('change', sync);
-    sync();
-}
+async function compartilharPDF() {
+  const botao = document.getElementById('compartilharBtn');
+  if (!botao) return;
 
-// Banner offline (ping real)
-async function isReallyOnline(timeoutMs = 5000) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-        const url = "/app/pedidos/manifest.json?ts=" + Date.now();
-        const r = await fetch(url, { method: "HEAD", cache: "no-store", signal: ctrl.signal });
-        return r.ok;
-    } catch {
-        return false;
-    } finally {
-        clearTimeout(t);
+  // Adiciona loading
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.innerHTML = '⏳ Compartilhando...';
+
+  try {
+    console.log('Iniciando compartilhamento de PDF...');
+    
+    const { compartilharPDF: compartilharPDFModule } = await import('./js/pdf.js');
+    
+    // Coleta dados do formulário
+    const dados = coletarDadosFormulario();
+    
+    if (!dados.cliente.trim()) {
+      alert('Informe o nome do cliente');
+      return;
     }
+    
+    if (dados.itens.length === 0) {
+      alert('Adicione pelo menos um item');
+      return;
+    }
+    
+    await compartilharPDFModule(dados);
+    console.log('PDF compartilhado com sucesso');
+    
+  } catch (error) {
+    console.error('[PDF] Erro ao compartilhar:', error);
+    alert('Erro ao compartilhar PDF: ' + error.message);
+  } finally {
+    // Remove loading
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
 }
 
-async function updateOfflineBanner(){
-    const el = document.getElementById('offlineBanner');
-    if (!el) return;
-    el.style.display = (await isReallyOnline()) ? 'none' : 'block';
+function coletarDadosFormulario() {
+  return {
+    cliente: document.getElementById('cliente')?.value || '',
+    telefone: document.getElementById('telefone')?.value || '',
+    endereco: document.getElementById('endereco')?.value || '',
+    observacoes: document.getElementById('observacoes')?.value || '',
+    itens: window.appState.itens.map(item => ({
+      descricao: item.descricao,
+      quantidade: parseFloat(item.quantidade) || 0,
+      gramatura: parseFloat(item.gramatura) || 0,
+      peso: item.peso, // Mantém como string formatada
+      pesoNumerico: parseKg(item.peso) || calcularPesoTotal(item), // Peso numérico para cálculos
+      valor: item.valor,
+      valorNumerico: parseMoney(item.valor) || 0,
+      subtotal: item.subtotal
+    }))
+  };
 }
 
-// Verificar acesso ao tenant - ADICIONADO
-async function checkTenantAccess() {
+async function salvarPedidoCompleto() {
+  try {
+    const dados = coletarDadosFormulario();
+    
+    if (!dados.cliente.trim()) {
+      alert('Informe o nome do cliente');
+      return;
+    }
+    
+    if (dados.itens.length === 0) {
+      alert('Adicione pelo menos um item');
+      return;
+    }
+    
+    await salvarPedido(dados);
+    
+    // Toast de sucesso
     try {
-        const hasAccess = await hasAccessToTenant();
-        if (!hasAccess) {
-            alert('Usuário não tem permissão para acessar este módulo.');
-            window.location.href = '/';
-            return false;
-        }
-        return true;
+      const { toastOk } = await import('./js/ui.js');
+      if (toastOk) toastOk('Pedido salvo com sucesso!');
     } catch (error) {
-        console.error('Erro ao verificar acesso ao tenant:', error);
-        return true; // Em caso de erro, permite continuar
+      console.log('Pedido salvo com sucesso!');
     }
+    
+    console.log('Pedido salvo:', dados);
+  } catch (error) {
+    console.error('Erro ao salvar pedido:', error);
+    alert('Erro ao salvar pedido: ' + error.message);
+  }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Aguardar um pouco para garantir que a autenticação foi carregada pelo auth-guard
-    setTimeout(async () => {
-        // Verificar se tem acesso ao tenant
-        const hasAccess = await checkTenantAccess();
-        if (!hasAccess) return;
-        
-        // Carregar módulos do app (mantém a lógica original)
-        const ok = await loadItensModule();
-        if (!ok) return;
-        
-        initItens();
-        
-        const addBtn = document.getElementById('adicionarItemBtn');
-        if (addBtn){
-            addBtn.addEventListener('click', () => {
-                adicionarItem();
-                atualizarFreteUI();
-            });
-        }
-        
-        const end = document.getElementById('endereco');
-        const chkIsentar = document.getElementById('isentarFrete');
-        end && end.addEventListener('blur', atualizarFreteUI);
-        chkIsentar && chkIsentar.addEventListener('change', atualizarFreteUI);
-        
-        atualizarFreteAoEditarItem(() => atualizarFreteUI());
-        
-        wirePagamentoOutro();
-        
-        // Botões PDF (mantém IDs originais)
-        const g = document.getElementById('btnGerarPdf');
-        const s = document.getElementById('btnSalvarPdf');
-        const c = document.getElementById('btnCompartilharPdf');
-        g && g.addEventListener('click', (ev) => callGerarPDF(false, ev.target));
-        s && s.addEventListener('click', (ev) => callGerarPDF(true, ev.target));
-        c && c.addEventListener('click', async () => callGerarPDF('share'));
-        
-        updateOfflineBanner();
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') {
-                setTimeout(updateOfflineBanner, 1000);
-            }
-        });
-    }, 500);
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOM carregado');
+  
+  // Inicializa com um item
+  adicionarItem();
+  
+  // Botões principais
+  const btnAdicionar = document.getElementById('adicionarItemBtn');
+  if (btnAdicionar) {
+    btnAdicionar.addEventListener('click', adicionarItem);
+  }
+  
+  const btnGerarPDF = document.getElementById('gerarPdfBtn');
+  if (btnGerarPDF) {
+    btnGerarPDF.addEventListener('click', gerarPDF);
+  }
+  
+  const btnCompartilhar = document.getElementById('compartilharBtn');
+  if (btnCompartilhar) {
+    btnCompartilhar.addEventListener('click', compartilharPDF);
+  }
+  
+  const btnSalvar = document.getElementById('salvarBtn');
+  if (btnSalvar) {
+    btnSalvar.addEventListener('click', salvarPedidoCompleto);
+  }
+  
+  // Formatação de inputs principais
+  const inputCliente = document.getElementById('cliente');
+  if (inputCliente) {
+    inputCliente.addEventListener('input', () => formatarNome(inputCliente));
+  }
 });
+
+// Funções globais
+window.removerItem = removerItem;
+window.gerarPDF = gerarPDF;
+window.compartilharPDF = compartilharPDF;
+
+console.log('App configurado completamente');
