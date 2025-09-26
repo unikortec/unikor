@@ -2,7 +2,7 @@
 import { salvarCliente, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 
-console.log('Modal cliente carregado'); // DEBUG
+console.log('Modal cliente carregado');
 
 let modalInjected = false;
 
@@ -10,7 +10,7 @@ function injectModal() {
   if (modalInjected || document.getElementById('modalCliente')) return;
   
   const modalHTML = `
-    <div id="modalCliente" class="modal hidden" aria-hidden="true">
+    <div id="modalCliente" class="modal hidden">
       <div class="modal-backdrop" data-close="1"></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalClienteTitulo">
         <div class="modal-header">
@@ -28,7 +28,7 @@ function injectModal() {
             <div>
               <label for="mc_cnpj">CNPJ:</label>
               <input id="mc_cnpj" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
-              <small class="inline-help">Ao sair do campo, tentamos buscar dados públicos.</small>
+              <small class="inline-help">Preenchimento automático desabilitado.</small>
             </div>
             <div>
               <label for="mc_ie">Inscrição Estadual:</label>
@@ -62,7 +62,7 @@ function injectModal() {
   
   document.body.insertAdjacentHTML('beforeend', modalHTML);
   modalInjected = true;
-  console.log('Modal injetado no DOM'); // DEBUG
+  console.log('Modal injetado no DOM');
 }
 
 function clearForm() {
@@ -80,7 +80,7 @@ function clearForm() {
 }
 
 function openModal() {
-  console.log('Tentando abrir modal'); // DEBUG
+  console.log('Abrindo modal cliente');
   injectModal();
   clearForm();
   populateDatalist();
@@ -88,14 +88,12 @@ function openModal() {
   const modal = document.getElementById('modalCliente');
   if (modal) {
     modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
+    // Foca no primeiro input depois que o modal abrir
     setTimeout(() => {
       const nomeInput = document.getElementById('mc_nome');
       if (nomeInput) nomeInput.focus();
     }, 100);
-    console.log('Modal aberto'); // DEBUG
-  } else {
-    console.error('Modal não encontrado no DOM'); // DEBUG
+    console.log('Modal aberto');
   }
 }
 
@@ -103,8 +101,7 @@ function closeModal() {
   const modal = document.getElementById('modalCliente');
   if (modal) {
     modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-    console.log('Modal fechado'); // DEBUG
+    console.log('Modal fechado');
   }
 }
 
@@ -120,9 +117,9 @@ async function populateDatalist() {
       option.value = nome;
       datalist.appendChild(option);
     });
-    console.log(`Carregados ${clientes.length} clientes no datalist`); // DEBUG
+    console.log(`${clientes.length} clientes carregados no datalist`);
   } catch (error) {
-    console.error('Erro ao carregar clientes:', error); // DEBUG
+    console.error('Erro ao carregar clientes:', error);
   }
 }
 
@@ -158,13 +155,13 @@ async function handleNomeChange() {
       const checkbox = document.getElementById('mc_isentoFrete');
       if (checkbox) checkbox.checked = !!info.isentoFrete;
       
-      console.log('Dados do cliente carregados:', info); // DEBUG
+      console.log('Dados do cliente carregados:', info);
     } else {
       const titulo = document.getElementById('modalClienteTitulo');
       if (titulo) titulo.textContent = 'Novo Cliente';
     }
   } catch (error) {
-    console.error('Erro ao buscar cliente:', error); // DEBUG
+    console.error('Erro ao buscar cliente:', error);
   }
 }
 
@@ -176,10 +173,9 @@ async function autoPreencherPorCNPJ() {
   const cnpj = digitsOnly(cnpjRaw);
   if (cnpj.length !== 14) return;
   
-  console.log('CNPJ lookup temporariamente desabilitado'); // DEBUG
+  console.log('CNPJ lookup temporariamente desabilitado');
   return; // TEMPORARIAMENTE DESABILITADO
 }
-
 
 async function saveFromModal() {
   const nome = (document.getElementById('mc_nome')?.value || '').trim();
@@ -218,37 +214,38 @@ async function saveFromModal() {
       const { toastOk } = await import('./ui.js');
       if (toastOk) toastOk('Cliente salvo com sucesso!');
     } catch (error) {
-      console.log('Cliente salvo com sucesso!'); // Fallback
+      console.log('Cliente salvo com sucesso!');
     }
     
     closeModal();
-    console.log('Cliente salvo:', nome); // DEBUG
+    console.log('Cliente salvo:', nome);
   } catch (error) {
-    console.error('Erro ao salvar cliente:', error); // DEBUG
+    console.error('Erro ao salvar cliente:', error);
     alert('Erro ao salvar cliente: ' + error.message);
   }
 }
 
-// Inicialização
+// Inicialização quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM carregado, inicializando modal cliente'); // DEBUG
+  console.log('DOM carregado, inicializando modal cliente');
   
   // Injeta o modal
   injectModal();
   
-  // Event listener para o botão de adicionar cliente
+  // Event listener para o botão +
   const btnAddCliente = document.getElementById('btnAddCliente');
   if (btnAddCliente) {
     btnAddCliente.addEventListener('click', (e) => {
       e.preventDefault();
-      console.log('Botão + clicado'); // DEBUG
+      console.log('Botão + clicado');
       openModal();
     });
+    console.log('Listener do botão + configurado');
   } else {
-    console.error('Botão btnAddCliente não encontrado'); // DEBUG
+    console.error('Botão btnAddCliente não encontrado');
   }
   
-  // Event listeners globais
+  // Event listeners do modal
   document.body.addEventListener('click', (event) => {
     const target = event.target;
     
@@ -296,4 +293,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Popula a lista inicial
   populateDatalist();
+  
+  console.log('Modal cliente totalmente configurado');
 });
