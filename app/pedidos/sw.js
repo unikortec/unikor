@@ -1,7 +1,7 @@
 /* Serra Nobre – Pedidos: Service Worker (Unikor)
 Versão inicial Unikor:
  */
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 const SW_VERSION = `pedidos-v${APP_VERSION}`; // Correção: template literal
 const CACHE_NAME = `sn-pedidos::${SW_VERSION}`; // Correção: template literal
 
