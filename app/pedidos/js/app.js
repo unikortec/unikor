@@ -1,10 +1,5 @@
 // app/pedidos/js/app.js
-import { 
-  loginWithEmailPassword, 
-  logout, 
-  isLoggedIn, 
-  getCurrentUser 
-} from './firebase.js';
+import { getCurrentUser, hasAccessToTenant } from './firebase.js';
 import { atualizarFreteUI } from './frete.js';
 
 // Carrega itens.js com fallback (evita crash se SW servir versão antiga)
@@ -74,21 +69,19 @@ async function updateOfflineBanner(){
     el.style.display = (await isReallyOnline()) ? 'none' : 'block';
 }
 
-// Gerenciamento de telas
-function showLoginScreen() {
-    const loginScreen = document.getElementById('loginScreen');
-    const mainApp = document.getElementById('mainApp');
-    if (loginScreen) loginScreen.style.display = 'flex';
-    if (mainApp) mainApp.style.display = 'none';
+// Verificar acesso ao tenant
+async function checkTenantAccess() {
+    const hasAccess = await hasAccessToTenant();
+    if (!hasAccess) {
+        alert('Usuário não tem permissão para acessar este módulo.');
+        window.location.href = '/';
+        return false;
+    }
+    return true;
 }
 
-function showMainApp() {
-    const loginScreen = document.getElementById('loginScreen');
-    const mainApp = document.getElementById('mainApp');
-    if (loginScreen) loginScreen.style.display = 'none';
-    if (mainApp) mainApp.style.display = 'block';
-    
-    // Atualizar informações do usuário
+// Atualizar informações do usuário no header
+function updateUserInfo() {
     const user = getCurrentUser();
     const userDisplayName = document.getElementById('userDisplayName');
     if (user && userDisplayName) {
@@ -96,112 +89,52 @@ function showMainApp() {
     }
 }
 
-// Configurar login
-function setupLogin() {
-    const loginForm = document.getElementById('loginForm');
-    const loginBtn = document.getElementById('loginBtn');
-    const loginError = document.getElementById('loginError');
-    
-    if (!loginForm) return;
-    
-    loginForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const email = document.getElementById('loginEmail').value;
-        const password = document.getElementById('loginPassword').value;
-        
-        if (!email || !password) {
-            loginError.textContent = 'Por favor, preencha todos os campos.';
-            loginError.style.display = 'block';
-            return;
-        }
-        
-        loginBtn.disabled = true;
-        loginBtn.textContent = 'Entrando...';
-        loginError.style.display = 'none';
-        
-        const result = await loginWithEmailPassword(email, password);
-        
-        if (result.success) {
-            showMainApp();
-        } else {
-            loginError.textContent = result.error || 'Erro ao fazer login. Verifique suas credenciais.';
-            loginError.style.display = 'block';
-        }
-        
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Entrar';
-    });
-}
-
-// Configurar logout
-function setupLogout() {
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (!logoutBtn) return;
-    
-    logoutBtn.addEventListener('click', async () => {
-        await logout();
-        showLoginScreen();
-    });
-}
-
-// Listener para mudanças de autenticação
-document.addEventListener('authStateChanged', (event) => {
-    const { loggedIn } = event.detail;
-    
-    if (loggedIn) {
-        showMainApp();
-    } else {
-        showLoginScreen();
-    }
-});
-
 document.addEventListener('DOMContentLoaded', async () => {
-    // Configurar login/logout
-    setupLogin();
-    setupLogout();
-    
-    // Verificar se já está logado
-    if (isLoggedIn()) {
-        showMainApp();
-    } else {
-        showLoginScreen();
-    }
-    
-    // Carregar módulos do app principal
-    const ok = await loadItensModule();
-    if (!ok) return;
-    
-    initItens();
-    
-    const addBtn = document.getElementById('adicionarItemBtn');
-    if (addBtn){
-        addBtn.addEventListener('click', () => {
-            adicionarItem();
-            atualizarFreteUI();
-        });
-    }
-    
-    const end = document.getElementById('endereco');
-    const chkIsentar = document.getElementById('isentarFrete');
-    end && end.addEventListener('blur', atualizarFreteUI);
-    chkIsentar && chkIsentar.addEventListener('change', atualizarFreteUI);
-    
-    atualizarFreteAoEditarItem(() => atualizarFreteUI());
-    
-    wirePagamentoOutro();
-    
-    const g = document.getElementById('btnGerarPdf');
-    const s = document.getElementById('btnSalvarPdf');
-    const c = document.getElementById('btnCompartilharPdf');
-    g && g.addEventListener('click', (ev) => callGerarPDF(false, ev.target));
-    s && s.addEventListener('click', (ev) => callGerarPDF(true, ev.target));
-    c && c.addEventListener('click', async () => callGerarPDF('share'));
-    
-    updateOfflineBanner();
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            setTimeout(updateOfflineBanner, 1000);
+    // O auth-guard.js já vai garantir que o usuário esteja logado
+    // Aguardar um pouco para garantir que a autenticação foi carregada
+    setTimeout(async () => {
+        // Verificar se tem acesso ao tenant
+        const hasAccess = await checkTenantAccess();
+        if (!hasAccess) return;
+        
+        // Atualizar info do usuário
+        updateUserInfo();
+        
+        // Carregar módulos do app
+        const ok = await loadItensModule();
+        if (!ok) return;
+        
+        initItens();
+        
+        const addBtn = document.getElementById('adicionarItemBtn');
+        if (addBtn){
+            addBtn.addEventListener('click', () => {
+                adicionarItem();
+                atualizarFreteUI();
+            });
         }
-    });
+        
+        const end = document.getElementById('endereco');
+        const chkIsentar = document.getElementById('isentarFrete');
+        end && end.addEventListener('blur', atualizarFreteUI);
+        chkIsentar && chkIsentar.addEventListener('change', atualizarFreteUI);
+        
+        atualizarFreteAoEditarItem(() => atualizarFreteUI());
+        
+        wirePagamentoOutro();
+        
+        const g = document.getElementById('btnGerarPdf');
+        const s = document.getElementById('btnSalvarPdf');
+        const c = document.getElementById('btnCompartilharPdf');
+        g && g.addEventListener('click', (ev) => callGerarPDF(false, ev.target));
+        s && s.addEventListener('click', (ev) => callGerarPDF(true, ev.target));
+        c && c.addEventListener('click', async () => callGerarPDF('share'));
+        
+        updateOfflineBanner();
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                setTimeout(updateOfflineBanner, 1000);
+            }
+        });
+    }, 500);
 });
