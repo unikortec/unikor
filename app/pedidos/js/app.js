@@ -1,3 +1,4 @@
+// app.js
 import { salvarPedido } from './js/storage.js';
 import { up, formatMoney, parseMoney, formatKg, parseKg } from './js/utils.js';
 
@@ -8,7 +9,7 @@ window.appState = {
   itens: []
 };
 
-// Função global para o PDF.js acessar os dados
+// Função global para compatibilidade com PDF.js
 window.getItens = function() {
   return window.appState.itens.map(item => {
     const pesoNumerico = parseKg(item.peso) || calcularPesoTotal(item);
@@ -199,155 +200,9 @@ async function gerarPDF() {
     
     // Coleta dados do formulário
     const dados = coletarDadosFormulario();
-    
     if (!dados.cliente.trim()) {
       alert('Informe o nome do cliente');
       return;
     }
-    
     if (dados.itens.length === 0) {
-      alert('Adicione pelo menos um item');
-      return;
-    }
-    
-    await gerarPDFModule(dados);
-    console.log('PDF gerado com sucesso');
-  } catch (error) {
-    console.error('[PDF] Erro ao gerar:', error);
-    alert('Erro ao gerar PDF: ' + error.message);
-  } finally {
-    // Remove loading
-    botao.disabled = false;
-    botao.textContent = textoOriginal;
-  }
-}
-
-async function compartilharPDF() {
-  const botao = document.getElementById('compartilharBtn');
-  if (!botao) return;
-  
-  // Adiciona loading
-  const textoOriginal = botao.textContent;
-  botao.disabled = true;
-  botao.innerHTML = '⏳ Compartilhando...';
-  
-  try {
-    console.log('Iniciando compartilhamento de PDF...');
-    const { compartilharPDF: compartilharPDFModule } = await import('./js/pdf.js');
-    
-    // Coleta dados do formulário
-    const dados = coletarDadosFormulario();
-    
-    if (!dados.cliente.trim()) {
-      alert('Informe o nome do cliente');
-      return;
-    }
-    
-    if (dados.itens.length === 0) {
-      alert('Adicione pelo menos um item');
-      return;
-    }
-    
-    await compartilharPDFModule(dados);
-    console.log('PDF compartilhado com sucesso');
-  } catch (error) {
-    console.error('[PDF] Erro ao compartilhar:', error);
-    alert('Erro ao compartilhar PDF: ' + error.message);
-  } finally {
-    // Remove loading
-    botao.disabled = false;
-    botao.textContent = textoOriginal;
-  }
-}
-
-function coletarDadosFormulario() {
-  return {
-    cliente: document.getElementById('cliente')?.value || '',
-    telefone: document.getElementById('telefone')?.value || '',
-    endereco: document.getElementById('endereco')?.value || '',
-    observacoes: document.getElementById('observacoes')?.value || '',
-    itens: window.appState.itens.map(item => ({
-      descricao: item.descricao,
-      quantidade: parseFloat(item.quantidade) || 0,
-      gramatura: parseFloat(item.gramatura) || 0,
-      peso: item.peso,
-      pesoNumerico: parseKg(item.peso) || calcularPesoTotal(item),
-      valor: item.valor,
-      valorNumerico: parseMoney(item.valor) || 0,
-      subtotal: item.subtotal
-    }))
-  };
-}
-
-async function salvarPedidoCompleto() {
-  try {
-    const dados = coletarDadosFormulario();
-    
-    if (!dados.cliente.trim()) {
-      alert('Informe o nome do cliente');
-      return;
-    }
-    
-    if (dados.itens.length === 0) {
-      alert('Adicione pelo menos um item');
-      return;
-    }
-    
-    await salvarPedido(dados);
-    
-    // Toast de sucesso
-    try {
-      const { toastOk } = await import('./js/ui.js');
-      if (toastOk) toastOk('Pedido salvo com sucesso!');
-    } catch (error) {
-      console.log('Pedido salvo com sucesso!');
-    }
-    
-    console.log('Pedido salvo:', dados);
-  } catch (error) {
-    console.error('Erro ao salvar pedido:', error);
-    alert('Erro ao salvar pedido: ' + error.message);
-  }
-}
-
-// Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM carregado');
-  
-  // Inicializa com um item
-  adicionarItem();
-  
-  // Botões principais
-  const btnAdicionar = document.getElementById('adicionarItemBtn');
-  if (btnAdicionar) {
-    btnAdicionar.addEventListener('click', adicionarItem);
-  }
-  
-  const btnGerarPDF = document.getElementById('gerarPdfBtn');
-  if (btnGerarPDF) {
-    btnGerarPDF.addEventListener('click', gerarPDF);
-  }
-  
-  const btnCompartilhar = document.getElementById('compartilharBtn');
-  if (btnCompartilhar) {
-    btnCompartilhar.addEventListener('click', compartilharPDF);
-  }
-  
-  const btnSalvar = document.getElementById('salvarBtn');
-  if (btnSalvar) {
-    btnSalvar.addEventListener('click', salvarPedidoCompleto);
-  }
-  
-  // Formatação de inputs principais
-  const inputCliente = document.getElementById('cliente');
-  if (inputCliente) {
-    inputCliente.addEventListener('input', () => formatarNome(inputCliente));
-  }
-});
-
-// Funções globais
-window.removerItem = removerItem;
-window.gerarPDF = gerarPDF;
-window.compartilharPDF = compartilharPDF;
-
-console.log('App configurado completamente');
+      alert
