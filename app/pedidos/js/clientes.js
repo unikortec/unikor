@@ -126,12 +126,24 @@ function setMainFormFromCliente(d){
   if (!d) return;
   const byId = (id)=>document.getElementById(id);
   if (d.endereco && byId('endereco')) byId('endereco').value = d.endereco;
-  if (d.cnpj && byId('cnpj'))         byId('cnpj').value     = d.cnpj;
-  if (d.ie && byId('ie'))             byId('ie').value       = d.ie;
-  if (d.cep && byId('cep'))           byId('cep').value      = d.cep;
-  if (d.contato && byId('contato'))   byId('contato').value  = d.contato;
+  if (d.cnpj && byId('cnpj')) byId('cnpj').value = d.cnpj;
+  if (d.ie && byId('ie')) byId('ie').value = d.ie;
+  if (d.cep && byId('cep')) byId('cep').value = d.cep;
+  if (d.contato && byId('contato')) byId('contato').value = d.contato;
+  
   const chk = document.getElementById('isentarFrete');
   if (chk) chk.checked = !!d.isentoFrete;
+  
+  // ✅ NOVO: Aplicar frete automaticamente do cadastro
+  if (d.lastFrete && typeof d.lastFrete === 'number') {
+    import('./frete.js').then(({ setFreteSugestao, atualizarFreteUI }) => {
+      setFreteSugestao(d.lastFrete);
+      // Força atualização do frete na UI
+      setTimeout(() => {
+        atualizarFreteUI();
+      }, 500);
+    });
+  }
 }
 
 async function hydrateDatalist(){
