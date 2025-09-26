@@ -1,6 +1,39 @@
-import { formatMoney, parseMoney, formatKg, parseKg } from './utils.js';
-
 console.log('Módulo PDF carregado');
+
+// Funções auxiliares locais para evitar problemas de importação
+function formatMoneyLocal(value) {
+  if (value === null || value === undefined || value === '') return 'R$ 0,00';
+  const num = typeof value === 'string' ? parseMoneyLocal(value) : parseFloat(value);
+  if (isNaN(num)) return 'R$ 0,00';
+  return 'R$ ' + num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function parseMoneyLocal(str) {
+  if (!str) return 0;
+  const cleanStr = str.toString().replace(/[^\d,-]/g, '').replace(',', '.');
+  const num = parseFloat(cleanStr);
+  return isNaN(num) ? 0 : num;
+}
+
+function formatKgLocal(value) {
+  if (value === null || value === undefined || value === '') return '0,000';
+  const num = typeof value === 'string' ? parseKgLocal(value) : parseFloat(value);
+  if (isNaN(num)) return '0,000';
+  return num.toLocaleString('pt-BR', {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  });
+}
+
+function parseKgLocal(str) {
+  if (!str) return 0;
+  const cleanStr = str.toString().replace(/[^\d,-]/g, '').replace(',', '.');
+  const num = parseFloat(cleanStr);
+  return isNaN(num) ? 0 : num;
+}
 
 // Função para calcular peso correto baseado na gramatura
 function calcularPesoReal(item) {
@@ -122,9 +155,9 @@ export async function gerarPDF(dados) {
       
       doc.text(descricao, margemEsq, yAtual);
       doc.text(String(item.quantidade || 0), margemEsq + 80, yAtual);
-      doc.text(formatKg(pesoReal), margemEsq + 100, yAtual);
+      doc.text(formatKgLocal(pesoReal), margemEsq + 100, yAtual);
       doc.text(item.valor || 'R$ 0,00', margemEsq + 130, yAtual);
-      doc.text(formatMoney(subtotalReal), margemEsq + 155, yAtual);
+      doc.text(formatMoneyLocal(subtotalReal), margemEsq + 155, yAtual);
       
       yAtual += 8;
       
@@ -148,7 +181,7 @@ export async function gerarPDF(dados) {
     // Total
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text(`TOTAL: ${formatMoney(totalGeral)}`, margemEsq + 100, yAtual);
+    doc.text(`TOTAL: ${formatMoneyLocal(totalGeral)}`, margemEsq + 100, yAtual);
     
     // Observações
     if (dados.observacoes && dados.observacoes.trim()) {
@@ -184,30 +217,27 @@ export async function gerarPDF(dados) {
 
 export async function compartilharPDF(dados) {
   try {
-    // Importa jsPDF dinamicamente
+    // Mesmo código do gerarPDF mas com compartilhamento
     const { jsPDF } = await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     
     const doc = new jsPDF();
     
-    // Configurações
+    // [Mesmo código de geração do PDF...]
     const margemEsq = 20;
     const margemDir = 190;
     const larguraPagina = margemDir - margemEsq;
     let yAtual = 30;
     
-    // Título
     doc.setFontSize(18);
     doc.setFont(undefined, 'bold');
     doc.text('PEDIDO DE COMPRA', margemEsq, yAtual);
     yAtual += 15;
     
-    // Data
     doc.setFontSize(10);
     doc.setFont(undefined, 'normal');
     doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, margemEsq, yAtual);
     yAtual += 10;
     
-    // Dados do cliente
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
     doc.text('DADOS DO CLIENTE', margemEsq, yAtual);
@@ -229,12 +259,10 @@ export async function compartilharPDF(dados) {
     
     yAtual += 5;
     
-    // Cabeçalho da tabela
     doc.setFont(undefined, 'bold');
     doc.text('ITENS', margemEsq, yAtual);
     yAtual += 8;
     
-    // Headers da tabela
     doc.setFontSize(9);
     doc.text('Descrição', margemEsq, yAtual);
     doc.text('Qtd', margemEsq + 80, yAtual);
@@ -243,27 +271,22 @@ export async function compartilharPDF(dados) {
     doc.text('Subtotal', margemEsq + 155, yAtual);
     yAtual += 6;
     
-    // Linha separadora
     doc.line(margemEsq, yAtual, margemDir, yAtual);
     yAtual += 8;
     
-    // Itens
     doc.setFont(undefined, 'normal');
     let totalGeral = 0;
     
     dados.itens.forEach((item, index) => {
-      // Verifica se precisa de nova página
       if (yAtual > 250) {
         doc.addPage();
         yAtual = 30;
       }
       
-      // Calcula valores corretos
       const pesoReal = calcularPesoReal(item);
       const subtotalReal = calcularSubtotalReal(item);
       totalGeral += subtotalReal;
       
-      // Descrição (trunca se muito longa)
       let descricao = item.descricao || `Item ${index + 1}`;
       if (descricao.length > 35) {
         descricao = descricao.substring(0, 32) + '...';
@@ -271,13 +294,12 @@ export async function compartilharPDF(dados) {
       
       doc.text(descricao, margemEsq, yAtual);
       doc.text(String(item.quantidade || 0), margemEsq + 80, yAtual);
-      doc.text(formatKg(pesoReal), margemEsq + 100, yAtual);
+      doc.text(formatKgLocal(pesoReal), margemEsq + 100, yAtual);
       doc.text(item.valor || 'R$ 0,00', margemEsq + 130, yAtual);
-      doc.text(formatMoney(subtotalReal), margemEsq + 155, yAtual);
+      doc.text(formatMoneyLocal(subtotalReal), margemEsq + 155, yAtual);
       
       yAtual += 8;
       
-      // Se tem gramatura, mostra info adicional
       if (item.gramatura && item.gramatura > 0) {
         doc.setFontSize(8);
         doc.setFont(undefined, 'italic');
@@ -289,17 +311,13 @@ export async function compartilharPDF(dados) {
     });
     
     yAtual += 5;
-    
-    // Linha separadora do total
     doc.line(margemEsq, yAtual, margemDir, yAtual);
     yAtual += 8;
     
-    // Total
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text(`TOTAL: ${formatMoney(totalGeral)}`, margemEsq + 100, yAtual);
+    doc.text(`TOTAL: ${formatMoneyLocal(totalGeral)}`, margemEsq + 100, yAtual);
     
-    // Observações
     if (dados.observacoes && dados.observacoes.trim()) {
       yAtual += 15;
       doc.setFontSize(10);
