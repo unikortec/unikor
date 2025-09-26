@@ -1,5 +1,5 @@
-import { up, formatMoney, parseMoney, formatKg, parseKg } from './js/utils.js';
-import { initItens, adicionarItem, getItens } from './js/itens.js';
+import { up, formatMoney, parseMoney, formatKg, parseKg } from './utils.js';
+import { initItens, adicionarItem, getItens } from './itens.js';
 
 console.log('App inicializado');
 
@@ -11,7 +11,7 @@ function formatarNome(input) {
 
 // Funções de PDF com loading
 async function gerarPDF() {
-  const botao = document.getElementById('gerarPdfBtn');
+  const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
   
   const textoOriginal = botao.textContent;
@@ -20,7 +20,7 @@ async function gerarPDF() {
   
   try {
     console.log('Iniciando geração de PDF...');
-    const { montarPDF } = await import('./js/pdf.js');
+    const { montarPDF } = await import('./pdf.js');
     const dados = coletarDadosFormulario();
     
     if (!dados.cliente.trim()) {
@@ -48,10 +48,10 @@ async function gerarPDF() {
 function coletarDadosFormulario() {
   return {
     cliente: document.getElementById('cliente')?.value || '',
-    telefone: document.getElementById('telefone')?.value || '',
+    telefone: document.getElementById('contato')?.value || '',
     endereco: document.getElementById('endereco')?.value || '',
-    observacoes: document.getElementById('observacoes')?.value || '',
-    itens: getItens() // usa a função do itens.js
+    observacoes: document.getElementById('obsGeral')?.value || '',
+    itens: getItens()
   };
 }
 
@@ -62,13 +62,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializa o sistema de itens
   initItens();
   
+  // ADICIONA UM ITEM INICIAL automaticamente
+  setTimeout(() => {
+    adicionarItem();
+    console.log('Item inicial adicionado');
+  }, 100);
+  
   // Botões principais
   const btnAdicionar = document.getElementById('adicionarItemBtn');
   if (btnAdicionar) {
     btnAdicionar.addEventListener('click', adicionarItem);
   }
   
-  const btnGerarPDF = document.getElementById('gerarPdfBtn');
+  const btnGerarPDF = document.getElementById('btnGerarPdf');
   if (btnGerarPDF) {
     btnGerarPDF.addEventListener('click', gerarPDF);
   }
