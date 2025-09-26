@@ -1,11 +1,13 @@
-// app/pedidos/js/pdf.js
+  // app/pedidos/js/pdf.js
 import { ensureFreteBeforePDF, getFreteAtual } from './frete.js';
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
-import { digitsOnly, formatarData, diaDaSemanaExtenso, splitToWidth } from './utils.js'; // Correção: importando de utils.js
 const { jsPDF } = window.jspdf;
 
 /* ========================= Helpers ========================= */
-// Funções digitsOnly, formatarData, diaDaSemanaExtenso, splitToWidth removidas daqui e importadas de utils.js
+function digitsOnly(v) { return String(v || "").replace(/\D/g, ""); }
+function formatarData(iso) { if (!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; }
+function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
+function splitToWidth(doc, t, w){ return doc.splitTextToSize(t||"", w); }
 
 function twoFirstNamesCamel(client){
   const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
@@ -14,7 +16,7 @@ function twoFirstNamesCamel(client){
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
   const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
-  return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_${hh}-${mm}.pdf`; // Correção: template literal
+  return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_${hh}-${mm}.pdf`;
 }
 
 // Lê itens do estado (expõe via window.getItens em itens.js) com fallback ao DOM
@@ -190,7 +192,7 @@ export async function montarPDF(){
 
     if (tipo==='UN' && pesoTotalKg) {
       doc.setFontSize(7); doc.setFont("helvetica","italic");
-      doc.text(`(*) Peso total: ${pesoTotalKg.toFixed(3)} kg`, margemX+3, y+4); // Correção: template literal
+      doc.text(`(*) Peso total: ${pesoTotalKg.toFixed(3)} kg`, margemX+3, y+4);
       doc.setFont("helvetica","normal"); doc.setFontSize(9);
       y += 5;
     }
@@ -236,7 +238,7 @@ export async function montarPDF(){
   doc.rect(freteX, y, freteW, 10, "S");
   doc.text("FRETE", freteX+freteW/2, y+4, {align:"center"});
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  const fretePreview = (isentoMan || frete.isento) ? "ISENTO" : `R$ ${Number(frete.valorBase||0).toFixed(2)}`; // Correção: template literal
+  const fretePreview = (isentoMan || frete.isento) ? "ISENTO" : ("R$ " + Number(frete.valorBase||0).toFixed(2));
   doc.text(fretePreview, freteX+freteW/2, y+8.2, {align:"center"});
   doc.setLineWidth(0.2);
   y += 12;
@@ -248,7 +250,7 @@ export async function montarPDF(){
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(9);
   doc.text("TOTAL DO PEDIDO:", margemX+3, y+5.5);
-  doc.text(`R$ ${totalGeral.toFixed(2)}`, margemX+larguraCaixa-3, y+5.5, {align:"right"}); // Correção: template literal
+  doc.text("R$ " + totalGeral.toFixed(2), margemX+larguraCaixa-3, y+5.5, {align:"right"});
   y += 12;
 
   if (obsG){
@@ -280,4 +282,62 @@ export async function montarPDF(){
     obsGeral: obsG,
   };
 
-  return { doc, nome
+  return { doc, nomeArquivo, payload };
+}
+
+/* ================ Ação: gerarPDF (open/save/share & salvar-1x) ================= */
+async function abrirPDFComFallback(doc, nomeArquivo, baixarSeBloquear=false){
+  try{
+    const url = doc.output('bloburl');
+    const win = window.open(url, '_blank');
+    if (win) return;
+    const blob = await doc.output('blob');
+    const a = document.createElement('a');
+    const objURL = URL.createObjectURL(blob);
+    a.href = objURL; a.download = nomeArquivo || 'pedido.pdf';
+    if (baixarSeBloquear){ document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(objURL), 20000); return; }
+    doc.save(nomeArquivo || 'pedido.pdf');
+  }catch(_){ doc.save(nomeArquivo || 'pedido.pdf'); }
+}
+
+async function compartilharPDF(doc, nomeArquivo){
+  const blob = await doc.output('blob');
+  const file = new File([blob], nomeArquivo || 'pedido.pdf', { type: 'application/pdf' });
+  if (navigator.canShare && navigator.canShare({ files:[file] })) {
+    await navigator.share({ title: nomeArquivo, files:[file] });
+  } else {
+    await abrirPDFComFallback(doc, nomeArquivo, true);
+  }
+}
+
+export async function gerarPDF(mode=false, btnEl){
+  const originalTxt = btnEl && btnEl.textContent;
+  if (btnEl){ btnEl.disabled = true; btnEl.textContent = 'Gerando...'; }
+
+  try{
+    await ensureFreteBeforePDF();
+    const { doc, nomeArquivo, payload } = await montarPDF();
+
+    // Salvar 1x no backend (idempotente + cache local)
+    const key = buildIdempotencyKey(payload);
+    const localKey = "pedidoSaved::" + key;
+    if (!localStorage.getItem(localKey)) {
+      try {
+        const resp = await savePedidoIdempotente(payload);
+        if (resp?.ok) localStorage.setItem(localKey, "1"); // evita repetição local
+      } catch (e) {
+        console.warn("Falha ao salvar pedido (segue com PDF):", e?.message || e);
+      }
+    }
+
+    if (mode === 'share') {
+      await compartilharPDF(doc, nomeArquivo);
+    } else if (mode === true) { // apenasSalvar
+      doc.save(nomeArquivo);
+    } else {
+      await abrirPDFComFallback(doc, nomeArquivo, true);
+    }
+  } finally {
+    if (btnEl){ btnEl.disabled = false; btnEl.textContent = originalTxt || 'Gerar PDF'; }
+  }
+}
