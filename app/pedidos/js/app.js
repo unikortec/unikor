@@ -29,6 +29,7 @@ async function gerarPDF() {
     }
     
     const itens = getItens();
+    console.log('Itens coletados:', itens); // Debug
     if (itens.length === 0 || !itens.some(item => item.produto.trim())) {
       alert('Adicione pelo menos um item');
       return;
@@ -39,6 +40,76 @@ async function gerarPDF() {
   } catch (error) {
     console.error('[PDF] Erro ao gerar:', error);
     alert('Erro ao gerar PDF: ' + error.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
+}
+
+async function salvarPDF() {
+  const botao = document.getElementById('btnSalvarPdf');
+  if (!botao) return;
+  
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.innerHTML = '⏳ Salvando PDF...';
+  
+  try {
+    console.log('Iniciando salvamento de PDF...');
+    const { salvarPDFLocal } = await import('./pdf.js');
+    const dados = coletarDadosFormulario();
+    
+    if (!dados.cliente.trim()) {
+      alert('Informe o nome do cliente');
+      return;
+    }
+    
+    const itens = getItens();
+    if (itens.length === 0 || !itens.some(item => item.produto.trim())) {
+      alert('Adicione pelo menos um item');
+      return;
+    }
+    
+    await salvarPDFLocal();
+    console.log('PDF salvo com sucesso');
+  } catch (error) {
+    console.error('[PDF] Erro ao salvar:', error);
+    alert('Erro ao salvar PDF: ' + error.message);
+  } finally {
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
+}
+
+async function compartilharPDF() {
+  const botao = document.getElementById('btnCompartilharPdf');
+  if (!botao) return;
+  
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.innerHTML = '⏳ Compartilhando PDF...';
+  
+  try {
+    console.log('Iniciando compartilhamento de PDF...');
+    const { compartilharPDFNativo } = await import('./pdf.js');
+    const dados = coletarDadosFormulario();
+    
+    if (!dados.cliente.trim()) {
+      alert('Informe o nome do cliente');
+      return;
+    }
+    
+    const itens = getItens();
+    if (itens.length === 0 || !itens.some(item => item.produto.trim())) {
+      alert('Adicione pelo menos um item');
+      return;
+    }
+    
+    await compartilharPDFNativo();
+    console.log('PDF compartilhado com sucesso');
+  } catch (error) {
+    console.error('[PDF] Erro ao compartilhar:', error);
+    alert('Erro ao compartilhar PDF: ' + error.message);
   } finally {
     botao.disabled = false;
     botao.textContent = textoOriginal;
@@ -59,13 +130,16 @@ function coletarDadosFormulario() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
   
-  // Inicializa o sistema de itens
+  // Inicializa o sistema de itens apenas uma vez
   initItens();
   
-  // ADICIONA UM ITEM INICIAL automaticamente
+  // Verifica se já tem itens antes de adicionar
   setTimeout(() => {
-    adicionarItem();
-    console.log('Item inicial adicionado');
+    const containerItens = document.getElementById('itens');
+    if (containerItens && containerItens.children.length === 0) {
+      adicionarItem();
+      console.log('Item inicial adicionado');
+    }
   }, 100);
   
   // Botões principais
@@ -79,6 +153,16 @@ document.addEventListener('DOMContentLoaded', () => {
     btnGerarPDF.addEventListener('click', gerarPDF);
   }
   
+  const btnSalvarPDF = document.getElementById('btnSalvarPdf');
+  if (btnSalvarPDF) {
+    btnSalvarPDF.addEventListener('click', salvarPDF);
+  }
+  
+  const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
+  if (btnCompartilharPDF) {
+    btnCompartilharPDF.addEventListener('click', compartilharPDF);
+  }
+  
   // Formatação de inputs principais
   const inputCliente = document.getElementById('cliente');
   if (inputCliente) {
@@ -88,4 +172,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Funções globais
 window.gerarPDF = gerarPDF;
+window.salvarPDF = salvarPDF;
+window.compartilharPDF = compartilharPDF;
 console.log('App configurado completamente');
