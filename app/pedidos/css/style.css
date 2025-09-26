@@ -171,3 +171,61 @@ button{
   background:var(--brand); color:#fff; font-weight:700;
 }
 .btn-secondary:hover, .btn-primary:hover{ filter:brightness(0.97); }
+/* Botão de consulta (lupa) */
+.btn-consultar {
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.btn-consultar:hover {
+  filter: brightness(0.95);
+}
+
+.btn-consultar:active {
+  transform: translateY(1px);
+}
+
+/* Layout do frete */
+.frete-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.frete-row label {
+  font-weight: 500;
+  min-width: fit-content;
+}
+
+.frete-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.switch-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.switch-box input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.switch-box label {
+  margin: 0;
+  font-weight: normal;
+  cursor: pointer;
+}
