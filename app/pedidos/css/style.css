@@ -467,3 +467,89 @@ hr {
   border-top: 1px solid var(--line);
   margin: 20px 0;
 }
+/* SEÇÃO DE ITENS */
+.secao-itens {
+  margin: 20px 0;
+}
+
+.secao-itens h3 {
+  color: var(--brand);
+  margin-bottom: 15px;
+}
+
+.item {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.item-header h4 {
+  margin: 0;
+  color: var(--brand);
+  font-size: 16px;
+}
+
+.item .remove {
+  background: var(--danger);
+  color: #fff;
+  font-weight: 600;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+  width: auto;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 740px) {
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.subtotal {
+  font-weight: 700;
+  color: var(--brand);
+  font-size: 16px;
+  padding: 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.botoes-pdf {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+@media (max-width: 740px) {
+  .botoes-pdf {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Melhorias no resumo */
+#resumo {
+  margin-top: 20px;
+  padding: 20px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
