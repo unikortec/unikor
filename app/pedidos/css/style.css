@@ -174,7 +174,7 @@ button{
 /* Botão de consulta (lupa) */
 .btn-consultar {
   background: var(--brand);
-  color: #fff;
+  color: #111827;
   border: none;
   border-radius: 8px;
   width: 36px;
