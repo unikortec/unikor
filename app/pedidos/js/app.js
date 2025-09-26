@@ -1,4 +1,4 @@
-import { up, formatMoney, parseMoney, formatKg, parseKg } from './js/utils.js';
+import { initItens, adicionarItem } from './itens.js';
 
 console.log('App inicializado');
 
@@ -239,12 +239,12 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
   
   // Inicializa com um item
-  adicionarItem();
+  initItens();
 
   // Botões principais
-  const btnAdicionar = document.getElementById('adicionarItemBtn');
+ const btnAdicionar = document.getElementById('adicionarItemBtn');
   if (btnAdicionar) {
-    btnAdicionar.addEventListener('click', adicionarItem);
+    btnAdicionar.addEventListener('click', adicionarItem); // função do itens.js
   }
 
   const btnGerarPDF = document.getElementById('gerarPdfBtn');
