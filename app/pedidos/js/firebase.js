@@ -33,7 +33,7 @@ export const authReady = new Promise((resolve) => {
 
 
 // dispara o login anônimo
-signInAnonymously(auth).catch(() => { /* silencioso */ });
+signInAnonymously(auth).catch((e) => { console.error("Erro no login anônimo:", e); /* silencioso */ }); // Adicionado log de erro
 
 
 // Tenant fixo (rodando isolado)
@@ -41,4 +41,4 @@ export const TENANT_ID = "serranobrecarnes.com.br";
 
 
 // Persistência offline do Firestore (ignora se o navegador não suportar)
-enableIndexedDbPersistence(db).catch(() => {});
+enableIndexedDbPersistence(db).catch((e) => { console.warn("Erro ao habilitar persistência offline:", e); }); // Adicionado log de erro
