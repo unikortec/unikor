@@ -1,5 +1,5 @@
 /* UNIKOR Portal – Service Worker (v1.0.3) */
-const CACHE = "unikor-portal-v1.0.7"; // 🔁 troque a cada deploy (ou injete hash de build)
+const CACHE = "unikor-portal-v1.0.8"; // 🔁 troque a cada deploy (ou injete hash de build)
 
 const CORE = [
   // Shell & PWA
