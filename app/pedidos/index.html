@@ -4,38 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Unikor – Pedidos</title>
-  <meta name="theme-color" content="0ea5a6" />
+  <meta name="theme-color" content="#0ea5a6" />
   <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
-  <!-- garante paths corretos mesmo sem a barra final na URL -->
   <base href="./">
-  <!-- Manifest e ícones globais (assets/logo/ na main) -->
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" href="/assets/logo/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
-  <!-- CSS -->
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
         <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
       </div>
       <div class="hero-right">
-        <!-- Botão redondo verde com "+" -->
         <a class="btn-add" id="btnAddCliente" title="Novo cliente">+</a>
         <a class="btn-report" href="https://relatorios-seven.vercel.app/">Relatórios</a>
       </div>
     </div>
   </header>
+
   <div id="offlineBanner" class="offline-banner">OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.</div>
+
   <main id="appMain">
     <div class="field-group">
       <label for="cliente">Cliente:</label>
       <input list="listaClientes" type="text" id="cliente" autocomplete="off" required />
       <datalist id="listaClientes"></datalist>
     </div>
+
     <div class="field-group grid-2">
       <div>
         <label for="cnpj">CNPJ:</label>
@@ -48,6 +46,7 @@
         <small class="inline-help">Aceita "ISENTO".</small>
       </div>
     </div>
+
     <div class="field-group">
       <label for="endereco">Endereço:</label>
       <input type="text" id="endereco" autocomplete="off" required />
@@ -56,12 +55,14 @@
         Sem cidade, será considerado <b>Porto Alegre - RS</b>.
       </small>
     </div>
-    <!-- Adicione isso perto do campo de endereço -->
-<div class="form-group">
-  <label for="freteManual">Frete Manual (R$):</label>
-  <input type="number" id="freteManual" step="0.01" placeholder="Ex: 15.50">
-  <small>Deixe vazio para calcular automaticamente</small>
-</div>
+
+    <!-- Frete manual (mostrado só quando aplicável) -->
+    <div class="field-group" id="freteManualGroup" style="display:none">
+      <label for="freteManual">Frete Manual (R$):</label>
+      <input type="number" id="freteManual" step="0.01" placeholder="Ex: 15.50">
+      <small>Deixe vazio para calcular automaticamente</small>
+    </div>
+
     <div class="field-group grid-2">
       <div>
         <label for="contato">Contato (tel/WhatsApp):</label>
@@ -72,6 +73,7 @@
         <input type="text" id="cep" inputmode="numeric" placeholder="00000-000" maxlength="9" />
       </div>
     </div>
+
     <div class="field-group">
       <label for="entrega">Data de Entrega:</label>
       <input type="date" id="entrega" required/>
@@ -80,11 +82,13 @@
       <label for="horaEntrega">Horário de Entrega:</label>
       <input type="time" id="horaEntrega" required/>
     </div>
+
     <div class="field-group switch-box">
       <label>Entrega/Retirada:</label>
       <label><input type="radio" name="tipoEntrega" value="ENTREGA" checked> Entrega</label>
       <label><input type="radio" name="tipoEntrega" value="RETIRADA"> Retirada</label>
     </div>
+
     <div class="field-group">
       <label>Valor do Frete:</label>
       <div class="frete-row">
@@ -92,9 +96,12 @@
         <label class="inline"><input type="checkbox" id="isentarFrete"/> Isentar frete</label>
       </div>
     </div>
+
     <div id="itens"></div>
     <button id="adicionarItemBtn">Adicionar Item</button>
+
     <hr/>
+
     <label for="pagamento">Forma de Pagamento:</label>
     <select id="pagamento">
       <option value="PIX">PIX</option>
@@ -103,36 +110,48 @@
       <option value="OUTRO">OUTRO</option>
     </select>
     <input type="text" id="pagamentoOutro" placeholder="Digite outra forma de pagamento" style="display:none"/>
+
     <hr/>
+
     <label for="obsGeral">Observação geral do pedido:</label>
     <textarea id="obsGeral"></textarea>
+
     <hr/>
+
     <button class="pdf-btn"  id="btnGerarPdf">Gerar PDF</button>
     <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
     <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
+
     <div id="resumo"></div>
   </main>
-  <!-- jsPDF (CDN) -->
+
+  <!-- container de toasts + overlay -->
+  <div id="toastBox" class="toast-box"></div>
+  <div id="appOverlay" class="overlay hidden"><div class="spinner"></div></div>
+
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- AUTH GUARD - ADICIONADO APENAS ESTA LINHA -->
+
+  <!-- Auth Guard (corrigido para não loopar) -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
+
   <!-- Módulos do app -->
   <script type="module" src="./js/firebase.js"></script>
   <script type="module" src="./js/utils.js"></script>
   <script type="module" src="./js/ui.js"></script>
+  <script type="module" src="./js/itens.js"></script>
   <script type="module" src="./js/clientes.js"></script>
   <script type="module" src="./js/frete.js"></script>
   <script type="module" src="./js/pdf.js"></script>
-  <!-- NOVO: módulo que injeta e controla o modal de cliente -->
   <script type="module" src="./js/modal-cliente.js"></script>
   <script type="module" src="./js/app.js"></script>
+
   <!-- SW registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
-          const scope = location.pathname.replace(/[^/]+$/, '');
-          const reg = await navigator.serviceWorker.register('./sw.js', { scope });
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
           document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') reg.update();
           });
@@ -152,6 +171,7 @@
       });
     }
   </script>
+
   <datalist id="listaProdutos"></datalist>
 </body>
 </html>
