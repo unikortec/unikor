@@ -1,32 +1,47 @@
-// /shared/js/auth-guard.js
-import { auth } from '/js/firebase.js';
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+// Auth Guard resiliente para múltiplos apps (sem loop e sem anônimo)
+let firebaseMod = null;
 
-// Aguardar autenticação antes de liberar a página
-function waitForAuth() {
-    return new Promise((resolve) => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            unsubscribe();
-            resolve(user);
-        });
-    });
+async function loadFirebase() {
+  if (firebaseMod) return firebaseMod;
+  try {
+    // Caminho padrão compartilhado (se existir)
+    firebaseMod = await import('/js/firebase.js');
+  } catch {
+    // Fallback para o app de pedidos
+    firebaseMod = await import('/app/pedidos/js/firebase.js');
+  }
+  return firebaseMod;
 }
 
-// Verificar autenticação ao carregar a página
+async function getUser() {
+  const { auth } = await loadFirebase();
+  return new Promise((resolve) => {
+    // import dinâmico do onAuthStateChanged (evita duplicidade)
+    import("https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js")
+      .then(({ onAuthStateChanged }) => {
+        const unsub = onAuthStateChanged(auth, (user) => {
+          unsub(); resolve(user);
+        });
+      });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
-    const user = await waitForAuth();
-    
-    if (!user || user.isAnonymous) {
-        // Salvar a URL atual para redirect após login
-        const currentPath = window.location.pathname + window.location.search;
-        if (currentPath !== '/') {
-            sessionStorage.setItem('redirectAfterLogin', currentPath);
-        }
-        // Redirecionar para o portal
-        window.location.href = '/';
-        return;
+  // Evita redireciono em loop
+  if (sessionStorage.getItem('authGuardRedirecting') === '1') return;
+
+  const user = await getUser();
+
+  if (!user || user.isAnonymous) {
+    const currentPath = window.location.pathname + window.location.search;
+    if (currentPath !== '/') {
+      sessionStorage.setItem('redirectAfterLogin', currentPath);
     }
-    
-    // Usuário está logado, pode continuar
-    console.log('Usuário autenticado:', user.email);
+    sessionStorage.setItem('authGuardRedirecting', '1');
+    window.location.replace('/');
+    return;
+  }
+
+  sessionStorage.removeItem('authGuardRedirecting');
+  console.log('Usuário autenticado:', user.email);
 });
