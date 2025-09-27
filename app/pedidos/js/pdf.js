@@ -1,5 +1,5 @@
+// app/pedidos/js/pdf.js
 import { ensureFreteBeforePDF, getFreteAtual } from './frete.js';
-import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 
 const { jsPDF } = window.jspdf;
 
@@ -12,53 +12,56 @@ function twoFirstNamesCamel(client){
   const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
   return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase()).join('').replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
 }
+// >>> Nome com "H" antes da hora
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
   const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
-  // ✅ “H” antes da hora
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
-// Lê itens diretamente do DOM (robusto)
+// Lê itens do DOM
 function lerItensDaTela(){
   const itensContainer = document.getElementById('itens');
   if (!itensContainer) return [];
   const itemElements = Array.from(itensContainer.querySelectorAll('.item'));
-  if (itemElements.length === 0) return [];
-
   return itemElements.map(itemEl => {
     const produtoInput = itemEl.querySelector('.produto');
     const tipoSelect = itemEl.querySelector('.tipo-select');
     const quantidadeInput = itemEl.querySelector('.quantidade');
     const precoInput = itemEl.querySelector('.preco');
-    const obsInput = itemEl.querySelector('.obs');
+    const obsInput = itemEl.querySelector('.obsItem');
+
     const produto = produtoInput?.value?.trim() || '';
-    const tipo = tipoSelect?.value || 'KG';
+    const tipo = (tipoSelect?.value || 'KG').toUpperCase();
     const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso total para UN (preço por KG extraído do nome)
+    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
-      const produtoLower = produto.toLowerCase();
-      const match = /(\d+(?:[.,]\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/.exec(produtoLower);
-      if (match) {
-        const valor = parseFloat(match[1].replace(',', '.')) || 0;
-        const unidade = match[2];
-        kgPorUnidade = (unidade === 'kg' || unidade.startsWith('quilo')) ? valor : valor / 1000;
-        pesoTotalKg = quantidade * kgPorUnidade;
+      const s = produto.toLowerCase().replace(',', '.').replace(/\s+/g,' ');
+      const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
+      let m, last=null; while((m=re.exec(s))!==null) last=m;
+      if (last){
+        const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
+        const val = parseFloat(raw);
+        if (isFinite(val) && val>0){
+          const unit = last[2];
+          kgPorUnidade = (unit==='kg'||unit==='kgs'||unit==='kg.'||unit.startsWith('quilo')) ? val : (val/1000);
+          pesoTotalKg = quantidade * kgPorUnidade;
+        }
       }
     }
 
-    const total = (tipo === 'UN' && pesoTotalKg > 0) ? (pesoTotalKg * preco) : (quantidade * preco);
+    const total = (tipo==='UN' && pesoTotalKg>0) ? (pesoTotalKg*preco) : (quantidade*preco);
 
-    return { produto, tipo, quantidade, preco, obs, total, _pesoTotalKg: pesoTotalKg, _kgPorUnidade: kgPorUnidade };
+    return { produto, tipo, quantidade, preco, obs, total, _pesoTotalKg:pesoTotalKg, _kgPorUnidade:kgPorUnidade };
   });
 }
 
-/* ===================== Desenho ====================== */
+/* ================== Desenho de componentes ================= */
 function drawCenteredKeyValueBox(doc, x,y,w, label, value, opts={}){
   const { rowH=12, titleSize=7, valueSize=7 } = opts;
   doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x,y,w,rowH,"S");
@@ -81,9 +84,10 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
   return rowH;
 }
 
-/* ================== Montagem/Geração ===================== */
-export async function montarPDF(){
-  await ensureFreteBeforePDF();
+/* ================== Construção do PDF ====================== */
+async function construirPDF(){
+  // Garante frete atualizado para o resumo
+  const freteResp = await ensureFreteBeforePDF();
 
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
@@ -93,14 +97,10 @@ export async function montarPDF(){
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
   const margemX=2, larguraCaixa=68;
-  // ✅ ÚNICA fonte da verdade para larguras (sem redeclarar consts)
-  const COL = { PROD:23.5, QDE:13, UNIT:13, TOTAL:18.5 };
+  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
   const SAFE_BOTTOM=280;
   let y=12;
-
-  function ensureSpace(h){
-    if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; }
-  }
+  const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
 
   // Campos UI
   const cliente = document.getElementById("cliente")?.value?.trim()?.toUpperCase() || "";
@@ -111,7 +111,6 @@ export async function montarPDF(){
   const ie = (document.getElementById("ie")?.value || "").toUpperCase();
   const cep = digitsOnly(document.getElementById("cep")?.value || "");
   const contato = digitsOnly(document.getElementById("contato")?.value || "");
-  const pagamento = document.getElementById("pagamento")?.value || "";
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
 
@@ -165,14 +164,14 @@ export async function montarPDF(){
   // Tabela itens - Cabeçalho
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
-  doc.rect(margemX, y, COL.PROD, 10, "S");
-  doc.rect(margemX+COL.PROD, y, COL.QDE, 10, "S");
-  doc.rect(margemX+COL.PROD+COL.QDE, y, COL.UNIT, 10, "S");
-  doc.rect(margemX+COL.PROD+COL.QDE+COL.UNIT, y, COL.TOTAL, 10, "S");
-  doc.text("PRODUTO", margemX+COL.PROD/2, y+6, {align:"center"});
-  doc.text("QDE", margemX+COL.PROD+COL.QDE/2, y+6, {align:"center"});
-  doc.text("R$ UNIT.", margemX+COL.PROD+COL.QDE+COL.UNIT/2, y+6, {align:"center"});
-  const valorX = margemX+COL.PROD+COL.QDE+COL.UNIT+COL.TOTAL/2;
+  doc.rect(margemX, y, W_PROD, 10, "S");
+  doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
+  doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
+  doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, 10, "S");
+  doc.text("PRODUTO", margemX+W_PROD/2, y+6, {align:"center"});
+  doc.text("QDE", margemX+W_PROD+W_QDE/2, y+6, {align:"center"});
+  doc.text("R$ UNIT.", margemX+W_PROD+W_QDE+W_UNIT/2, y+6, {align:"center"});
+  const valorX = margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2;
   doc.text("VALOR", valorX, y+4, {align:"center"});
   doc.text("PRODUTO", valorX, y+8.5, {align:"center"});
   y += 12;
@@ -189,32 +188,28 @@ export async function montarPDF(){
     const totalNum = it.total || 0;
     const pesoTotalKg = it._pesoTotalKg || 0;
 
-    const prodLines = splitToWidth(doc, prod, COL.PROD-2).slice(0,3);
+    const prodLines = splitToWidth(doc, prod, W_PROD-2).slice(0,3);
     const rowHi = Math.max(14, 6 + prodLines.length*5);
     ensureSpace(rowHi + (pesoTotalKg ? 6 : 0));
 
     // células
-    doc.rect(margemX, y, COL.PROD, rowHi, "S");
-    doc.rect(margemX+COL.PROD, y, COL.QDE, rowHi, "S");
-    doc.rect(margemX+COL.PROD+COL.QDE, y, COL.UNIT, rowHi, "S");
-    doc.rect(margemX+COL.PROD+COL.QDE+COL.UNIT, y, COL.TOTAL, rowHi, "S");
+    doc.rect(margemX, y, W_PROD, rowHi, "S");
+    doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
+    doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
+    doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, rowHi, "S");
 
-    const center=(cx, lines)=>{ 
-      const block=(lines.length-1)*5; 
-      const base=y+(rowHi-block)/2; 
-      lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); 
-    };
+    const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
 
-    center(margemX+COL.PROD/2, prodLines);
-    center(margemX+COL.PROD+COL.QDE/2, qtdStr ? [qtdStr, tipo] : [""]);
+    center(margemX+W_PROD/2, prodLines);
+    center(margemX+W_PROD+W_QDE/2, qtdStr ? [qtdStr, tipo] : [""]);
 
     if (tipo==='UN' && pesoTotalKg) {
-      center(margemX+COL.PROD+COL.QDE+COL.UNIT/2, precoNum ? ["R$/KG", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoNum ? ["R$/KG", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
     } else {
-      center(margemX+COL.PROD+COL.QDE+COL.UNIT/2, precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
     }
 
-    center(margemX+COL.PROD+COL.QDE+COL.UNIT+COL.TOTAL/2,
+    center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2,
       (totalNum > 0) ? ["R$", totalNum.toFixed(2).replace(".", ",")] : ["—"]);
 
     y += rowHi;
@@ -273,7 +268,7 @@ export async function montarPDF(){
   y += 12;
 
   // TOTAL
-  const freteCobravelParaTotal = (isentoMan ? 0 : Number(frete.valorCobravel||0));
+  const freteCobravelParaTotal = (isentoMan ? 0 : Number(frete.valorCobravel||frete.valorBase||0));
   const totalGeral = subtotal + freteCobravelParaTotal;
   ensureSpace(11);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
@@ -296,5 +291,77 @@ export async function montarPDF(){
   }
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
-  doc.save(nomeArq);
+
+  // Retorna blob p/ salvar/compartilhar/preview
+  const blob = doc.output('blob');
+  return { blob, nomeArq, doc };
+}
+
+/* =================== APIs públicas =================== */
+// Abre uma aba/preview do PDF (sem baixar) — botão "Gerar PDF"
+export async function gerarPDFPreview(){
+  const { blob } = await construirPDF();
+  const url = URL.createObjectURL(blob);
+  // Abre em nova aba. Em iOS PWA, pode abrir o viewer do Safari.
+  window.open(url, '_blank', 'noopener,noreferrer');
+  // Libera URL depois de um tempo
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+// Baixa o arquivo localmente — botão "Salvar PDF"
+export async function salvarPDFLocal(){
+  const { blob, nomeArq } = await construirPDF();
+
+  // File System Access API (quando disponível)
+  try{
+    // @ts-ignore
+    if (window.showSaveFilePicker){
+      // @ts-ignore
+      const handle = await window.showSaveFilePicker({
+        suggestedName: nomeArq,
+        types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { nome: nomeArq };
+    }
+  }catch{ /* fallback abaixo */ }
+
+  // Fallback: a.href + download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeArq;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+  return { nome: nomeArq };
+}
+
+// Compartilha nativamente — botão "Compartilhar PDF"
+export async function compartilharPDFNativo(){
+  const { blob, nomeArq } = await construirPDF();
+  const file = new File([blob], nomeArq, { type: 'application/pdf' });
+
+  try{
+    if (navigator.canShare && navigator.canShare({ files:[file] })) {
+      await navigator.share({
+        title: 'Pedido',
+        text: 'Segue o PDF do pedido.',
+        files: [file]
+      });
+      return { compartilhado:true };
+    }
+  }catch(e){
+    // Usuário pode cancelar; tratamos como não fatal
+    if (String(e).includes('AbortError')) return { compartilhado:false, cancelado:true };
+    throw e;
+  }
+
+  // Fallback: abre o PDF em nova aba (usuário pode enviar manualmente)
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
+  return { compartilhado:false, fallback:true };
 }
