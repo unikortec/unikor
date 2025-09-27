@@ -1,47 +1,49 @@
-// Auth Guard resiliente para múltiplos apps (sem loop e sem anônimo)
-let firebaseMod = null;
+// /shared/js/auth-guard.js
+import { onAuthUser, waitForLogin, getCurrentUser } from '/portal/app/pedidos/js/firebase.js';
 
-async function loadFirebase() {
-  if (firebaseMod) return firebaseMod;
-  try {
-    // Caminho padrão compartilhado (se existir)
-    firebaseMod = await import('/js/firebase.js');
-  } catch {
-    // Fallback para o app de pedidos
-    firebaseMod = await import('/app/pedidos/js/firebase.js');
-  }
-  return firebaseMod;
+/** Esconde UI até confirmar login */
+function hideApp() {
+  const app = document.getElementById('appMain');
+  if (app) app.style.visibility = 'hidden';
+  const off = document.getElementById('offlineBanner');
+  if (off) off.style.display = 'none';
+}
+function showApp() {
+  const app = document.getElementById('appMain');
+  if (app) app.style.visibility = 'visible';
 }
 
-async function getUser() {
-  const { auth } = await loadFirebase();
-  return new Promise((resolve) => {
-    // import dinâmico do onAuthStateChanged (evita duplicidade)
-    import("https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js")
-      .then(({ onAuthStateChanged }) => {
-        const unsub = onAuthStateChanged(auth, (user) => {
-          unsub(); resolve(user);
-        });
-      });
-  });
-}
+hideApp();
 
-document.addEventListener('DOMContentLoaded', async () => {
-  // Evita redireciono em loop
-  if (sessionStorage.getItem('authGuardRedirecting') === '1') return;
-
-  const user = await getUser();
-
-  if (!user || user.isAnonymous) {
+// Observa auth continuamente
+onAuthUser(async (user) => {
+  if (!user) {
+    // sem login → manda para o portal e impede voltar
     const currentPath = window.location.pathname + window.location.search;
     if (currentPath !== '/') {
       sessionStorage.setItem('redirectAfterLogin', currentPath);
     }
-    sessionStorage.setItem('authGuardRedirecting', '1');
-    window.location.replace('/');
+    // reforço: se ainda estamos dentro do app, sai para o portal
+    if (!/^(\/|\/portal\/?)$/.test(window.location.pathname)) {
+      location.replace('/'); // não deixa voltar
+    }
     return;
   }
 
-  sessionStorage.removeItem('authGuardRedirecting');
-  console.log('Usuário autenticado:', user.email);
+  // logado → mostra app
+  showApp();
+
+  // redirect pós login (se veio do portal)
+  const redirect = sessionStorage.getItem('redirectAfterLogin');
+  if (redirect && redirect !== window.location.pathname) {
+    sessionStorage.removeItem('redirectAfterLogin');
+    location.replace(redirect);
+  }
 });
+
+// Caso o guard carregue já logado, libera imediatamente
+if (getCurrentUser()) showApp();
+else {
+  // Se alguém logar depois, waitForLogin libera
+  waitForLogin().then(showApp).catch(()=>{});
+}
