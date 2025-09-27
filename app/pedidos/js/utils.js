@@ -68,15 +68,30 @@ export function appendPOA(str){
 
 
 // Peso no nome do produto (ex.: "COSTELA 1.2KG")
+// utils.js
 export function parsePesoFromProduto(nome){
-  const s = String(nome||"").toLowerCase().replace(',', '.');
-  const re = /(\d+(?:\.\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/g;
-  let m, last=null;
+  // Normaliza vírgula -> ponto e remove pontuação supérflua
+  const s = String(nome || "")
+    .toLowerCase()
+    .replace(',', '.')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Captura o ÚLTIMO peso informado no nome (ex.: "ALCATRA 700G CX 10x700G" -> considera 700g)
+  // Suporta: "1.2kg", "1,2 kg", "1 kg", "1kg.", "1 kgs", "(1,200 kg)", "1200g", "1.200 g", "100 gr", "100 gramas"
+  const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
+
+  let m, last = null;
   while ((m = re.exec(s)) !== null) last = m;
-  if(!last) return null;
-  const val = parseFloat(last[1]);
+  if (!last) return null;
+
+  // Número com milhares tipo "1.200" vira "1200"
+  const raw = String(last[1]).replace(/\s/g, '').replace(/\.(?=\d{3}\b)/g, '');
+  const val = parseFloat(raw);
+  if (!isFinite(val) || val <= 0) return null;
+
   const unit = last[2];
-  if(!isFinite(val) || val<=0) return null;
-  if (unit === 'kg' || unit.startsWith('quilo')) return val;
+  if (unit === 'kg' || unit === 'kgs' || unit === 'kg.' || unit.startsWith('quilo')) return val;
+  // gramas → kg
   return val / 1000;
 }
