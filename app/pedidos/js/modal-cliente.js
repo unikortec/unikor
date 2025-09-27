@@ -1,7 +1,7 @@
 // app/pedidos/js/modal-cliente.js
 import { salvarCliente, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
-import { authReady } from './firebase.js';
+import { waitForLogin, getCurrentUser } from './firebase.js';
 
 console.log('Modal cliente carregado');
 
@@ -103,51 +103,26 @@ function openModal() {
     setTimeout(()=> document.getElementById('mc_nome')?.focus(), 100);
   }
 }
-function closeModal() {
-  document.getElementById('modalCliente')?.classList.add('hidden');
-}
+function closeModal() { document.getElementById('modalCliente')?.classList.add('hidden'); }
 
-/** Abre cnpj.biz/XXXXXXXXXXXXXX com o CNPJ só dígitos */
 function consultarCNPJ() {
   const cnpjInput = document.getElementById('mc_cnpj');
   if (!cnpjInput) return;
-
   const raw = cnpjInput.value || '';
   const digits = digitsOnly(raw);
-
-  if (!raw.trim()) {
-    alert('Digite o CNPJ antes de consultar.');
-    cnpjInput.focus();
-    return;
-  }
-  if (digits.length !== 14) {
-    alert('CNPJ deve ter 14 dígitos.');
-    cnpjInput.focus();
-    return;
-  }
-
+  if (!raw.trim()) { alert('Digite o CNPJ antes de consultar.'); cnpjInput.focus(); return; }
+  if (digits.length !== 14) { alert('CNPJ deve ter 14 dígitos.'); cnpjInput.focus(); return; }
   const url = `https://cnpj.biz/${digits}`;
   const width = 1100, height = 800;
-  const left = (screen.width - width) / 2;
-  const top  = (screen.height - height) / 2;
-
-  const popup = window.open(
-    url,
-    'consultaCNPJ',
-    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
-  );
+  const left = (screen.width - width) / 2, top = (screen.height - height) / 2;
+  const popup = window.open(url, 'consultaCNPJ', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
   if (!popup) alert('Não foi possível abrir o popup. Desative o bloqueador de pop-ups.');
 }
 
 async function populateDatalist() {
-  const user = await authReady;
-  if (!user) {
-    console.log('Sem login — não vou consultar clientes agora.');
-    return;
-  }
+  await waitForLogin();
   const datalist = document.getElementById('mc_listaClientes');
   if (!datalist) return;
-
   datalist.innerHTML = '';
   try {
     const clientes = await clientesMaisUsados(80);
@@ -162,32 +137,21 @@ async function populateDatalist() {
 }
 
 async function handleNomeChange() {
-  const user = await authReady;
-  if (!user) return;
-
-  const nomeInput = document.getElementById('mc_nome');
-  if (!nomeInput) return;
-
-  const nome = up(nomeInput.value || '');
-  if (!nome) return;
-
+  await waitForLogin();
+  const nomeInput = document.getElementById('mc_nome'); if (!nomeInput) return;
+  const nome = up(nomeInput.value || ''); if (!nome) return;
   try {
     const info = await buscarClienteInfo(nome);
     const titulo = document.getElementById('modalClienteTitulo');
     if (info) {
       if (titulo) titulo.textContent = 'Editar Cliente';
-      const setIfEmpty = (id, val) => {
-        const el = document.getElementById(id);
-        if (el && !el.value) el.value = val || '';
-      };
+      const setIfEmpty = (id, val) => { const el = document.getElementById(id); if (el && !el.value) el.value = val || ''; };
       setIfEmpty('mc_endereco', info.endereco);
       setIfEmpty('mc_cnpj', info.cnpj);
       setIfEmpty('mc_ie', info.ie);
       setIfEmpty('mc_cep', info.cep);
       setIfEmpty('mc_contato', info.contato);
-      if (info.frete && !document.getElementById('mc_frete').value) {
-        document.getElementById('mc_frete').value = info.frete;
-      }
+      if (info.frete && !document.getElementById('mc_frete').value) document.getElementById('mc_frete').value = info.frete;
       document.getElementById('mc_isentoFrete').checked = !!info.isentoFrete;
     } else {
       if (titulo) titulo.textContent = 'Novo Cliente';
@@ -201,22 +165,13 @@ function handleFreteChange() {
   const frete = document.getElementById('mc_frete');
   const chk = document.getElementById('mc_isentoFrete');
   if (!frete || !chk) return;
-
-  if (chk.checked) {
-    frete.value = '0,00';
-    frete.disabled = true;
-  } else {
-    frete.disabled = false;
-    if (frete.value === '0,00') frete.value = '';
-  }
+  if (chk.checked) { frete.value = '0,00'; frete.disabled = true; }
+  else { frete.disabled = false; if (frete.value === '0,00') frete.value = ''; }
 }
 
 async function saveFromModal() {
-  const user = await authReady;
-  if (!user) {
-    alert('Faça login para salvar clientes.');
-    return;
-  }
+  await waitForLogin();
+  if (!getCurrentUser()) { alert('Faça login para salvar clientes.'); return; }
 
   const nome = (document.getElementById('mc_nome')?.value || '').trim();
   const endereco = (document.getElementById('mc_endereco')?.value || '').trim();
@@ -227,40 +182,21 @@ async function saveFromModal() {
   const freteStr = document.getElementById('mc_frete')?.value || '';
   const isentoFrete = !!document.getElementById('mc_isentoFrete')?.checked;
 
-  if (!nome) {
-    alert('Informe o nome do cliente.');
-    document.getElementById('mc_nome')?.focus();
-    return;
-  }
+  if (!nome) { alert('Informe o nome do cliente.'); document.getElementById('mc_nome')?.focus(); return; }
 
   try {
-    await salvarCliente(nome, endereco, isentoFrete, {
-      cnpj: cnpjMask,
-      ie,
-      cep,
-      contato,
-      frete: freteStr
-    });
+    await salvarCliente(nome, endereco, isentoFrete, { cnpj: cnpjMask, ie, cep, contato, frete: freteStr });
 
-    // atualiza datalist principal
     const mainDatalist = document.getElementById('listaClientes');
     if (mainDatalist && !Array.from(mainDatalist.options).some(o => o.value === up(nome))) {
-      const option = document.createElement('option');
-      option.value = up(nome);
-      mainDatalist.appendChild(option);
+      const option = document.createElement('option'); option.value = up(nome); mainDatalist.appendChild(option);
     }
 
-    // preenche campo do formulário principal se estiver vazio
     const inputCliente = document.getElementById('cliente');
     if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
-    // feedback
-    try {
-      const { toastOk } = await import('./ui.js');
-      toastOk && toastOk('Cliente salvo com sucesso!');
-    } catch {
-      console.log('Cliente salvo com sucesso!');
-    }
+    try { const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo com sucesso!'); }
+    catch { console.log('Cliente salvo com sucesso!'); }
 
     closeModal();
   } catch (e) {
@@ -271,35 +207,21 @@ async function saveFromModal() {
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', async () => {
-  const user = await authReady;
-  if (!user) {
-    // Se por algum motivo o auth-guard não tiver redirecionado ainda,
-    // não inicializamos o modal para evitar consultas sem login.
-    console.warn('Sem login — modal-cliente não será inicializado.');
-    return;
-  }
-
+  await waitForLogin(); // não inicializa sem login
   injectModal();
 
   const btnAddCliente = document.getElementById('btnAddCliente');
   if (btnAddCliente) {
-    btnAddCliente.addEventListener('click', (e) => {
-      e.preventDefault();
-      openModal();
-    });
+    btnAddCliente.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
   }
 
-  // eventos do modal
   document.body.addEventListener('click', (ev) => {
     const t = ev.target;
-    if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) {
-      closeModal();
-    }
+    if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) closeModal();
     if (t?.id === 'modalClienteSalvar') saveFromModal();
     if (t?.id === 'mc_consultarCNPJ') consultarCNPJ();
   });
 
-  // máscaras
   document.body.addEventListener('input', (ev) => {
     const t = ev.target;
     if (t?.id === 'mc_cnpj') maskCNPJ(t);
@@ -307,16 +229,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     else if (t?.id === 'mc_contato') maskTelefone(t);
   });
 
-  // blur/change
-  document.body.addEventListener('blur', (ev) => {
-    if (ev.target?.id === 'mc_nome') handleNomeChange();
-  }, true);
+  document.body.addEventListener('blur', (ev) => { if (ev.target?.id === 'mc_nome') handleNomeChange(); }, true);
   document.body.addEventListener('change', (ev) => {
     if (ev.target?.id === 'mc_nome') handleNomeChange();
     else if (ev.target?.id === 'mc_isentoFrete') handleFreteChange();
   });
 
-  // datalist inicial
   populateDatalist();
   console.log('Modal cliente totalmente configurado');
 });
