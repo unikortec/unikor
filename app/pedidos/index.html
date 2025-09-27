@@ -6,6 +6,7 @@
   <title>Unikor – Pedidos</title>
   <meta name="theme-color" content="#0ea5a6" />
   <meta name="description" content="Pedido rápido com PDF, histórico por cliente e PWA offline." />
+  <!-- garante paths relativos dentro de /app/pedidos/ -->
   <base href="./">
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" href="/assets/logo/favicon.ico" />
@@ -13,6 +14,7 @@
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
+  <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
@@ -26,8 +28,8 @@
   </header>
 
   <div id="offlineBanner" class="offline-banner" style="display:none">
-  OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.
-</div>
+    OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.
+  </div>
 
   <main id="appMain">
     <div class="field-group">
@@ -134,7 +136,7 @@
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- Auth Guard (corrigido para não loopar) -->
+  <!-- Auth Guard (raiz do repo) -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
 
   <!-- Módulos do app -->
@@ -144,7 +146,7 @@
   <script type="module" src="./js/itens.js"></script>
   <script type="module" src="./js/clientes.js"></script>
   <script type="module" src="./js/frete.js"></script>
-  <script type="module" src="./js/pdf.js"></script>
+  <!-- ⚠️ REMOVIDO: <script type="module" src="./js/pdf.js"></script> (evita "already declared") -->
   <script type="module" src="./js/modal-cliente.js"></script>
   <script type="module" src="./js/app.js"></script>
 
