@@ -1,5 +1,7 @@
-// js/itens.js
+// app/pedidos/js/itens.js
 // Controle de itens do pedido (render, cálculos e eventos)
+
+import { parsePesoFromProduto } from './utils.js';
 
 let itens = [
   { produto: "", tipo: "KG", quantidade: 0, preco: 0, total: 0, obs: "", _pesoTotalKg: 0 }
@@ -10,38 +12,24 @@ let onEditCb = null;
 export function atualizarFreteAoEditarItem(cb){
   onEditCb = typeof cb === 'function' ? cb : null;
 }
-
 function dispararOnEdit(){ try{ onEditCb && onEditCb(); }catch(e){} }
 
 function $(sel, root=document){ return root.querySelector(sel); }
 function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
 
-// extrai peso do nome do produto (ex.: "Bife 100g" → 0.1 kg)
-function parsePesoFromProduto(nome){
-  const s = String(nome||"").toLowerCase().replace(',', '.');
-  const re = /(\d+(?:\.\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/g;
-  let m, last=null;
-  while ((m = re.exec(s)) !== null) last = m;
-  if(!last) return null;
-  const val = parseFloat(last[1]);
-  const unit = last[2];
-  if(!isFinite(val) || val<=0) return null;
-  if (unit === 'kg' || unit.startsWith('quilo')) return val;
-  return val / 1000;
-}
-
 function calcTotalComPesoSeAplicavel({produto, tipo, quantidade, preco}){
   const q = parseFloat(quantidade)||0;
   const p = parseFloat(preco)||0;
+
   if (tipo === 'UN'){
     const kgUn = parsePesoFromProduto(produto);
     if (kgUn){
-      const pesoTotalKg = q * kgUn;
-      const total = pesoTotalKg * p;
-      return { total, pesoTotalKg };
+      const pesoTotalKg = q * kgUn;         // q unidades * kg por unidade
+      const total = pesoTotalKg * p;        // p = R$ por KG
+      return { total, pesoTotalKg, kgUn };
     }
   }
-  return { total: (q*p), pesoTotalKg: 0 };
+  return { total: (q*p), pesoTotalKg: 0, kgUn: 0 };
 }
 
 function salvarCamposAntesRender(){
@@ -78,6 +66,30 @@ function criarTipoSelect(i){
   </select>`;
 }
 
+function updatePrecoLabelAndHints(i, root){
+  const tipoEl  = root.querySelector('.tipo-select');
+  const prodEl  = root.querySelector('.produto');
+  const precoLbl= root.querySelector('.label-preco');
+  const pesoInfo= root.querySelector(`#pesoInfo_${i}`);
+
+  const tipo = tipoEl?.value || 'KG';
+  const prod = prodEl?.value || '';
+
+  if (tipo === 'UN'){
+    const kgUn = parsePesoFromProduto(prod) || 0;
+    if (kgUn > 0){
+      if (precoLbl) precoLbl.textContent = 'Preço (R$/KG):';
+      if (pesoInfo) pesoInfo.textContent = 'Informe o preço por KG; total calcula pela gramagem do produto.';
+    } else {
+      if (precoLbl) precoLbl.textContent = 'Preço Unitário (R$):';
+      if (pesoInfo) pesoInfo.textContent = 'Nenhuma gramagem detectada no nome; total = unidades × preço.';
+    }
+  } else {
+    if (precoLbl) precoLbl.textContent = 'Preço (R$/KG):';
+    if (pesoInfo) pesoInfo.textContent = '';
+  }
+}
+
 function bindItemEvents(i, root){
   const prodEl  = root.querySelector('.produto');
   const tipoEl  = root.querySelector('.tipo-select');
@@ -86,8 +98,9 @@ function bindItemEvents(i, root){
   const obsEl   = root.querySelector('.obsItem');
   const btnRem  = root.querySelector('.remove');
 
-  const recalc = () => { calcularItem(i); dispararOnEdit(); };
+  const recalc = () => { calcularItem(i); dispararOnEdit(); updatePrecoLabelAndHints(i, root); };
 
+  prodEl && prodEl.addEventListener('input', recalc);
   prodEl && prodEl.addEventListener('blur', recalc);
   tipoEl && tipoEl.addEventListener('change', recalc);
   qtdEl  && qtdEl.addEventListener('input', recalc);
@@ -117,6 +130,8 @@ function calcularItem(i){
   if (pi){
     if (tipo==='UN' && (pesoTotalKg||0)>0){
       pi.textContent = `Peso total estimado: ${pesoTotalKg.toFixed(3)} kg (preço por kg)`;
+    } else if (tipo==='UN') {
+      pi.textContent = `Sem gramagem no nome do produto; usando preço unitário`;
     } else {
       pi.textContent = "";
     }
@@ -138,7 +153,7 @@ function renderItens(){
         ${criarTipoSelect(i)}
         <label>Quantidade:</label>
         <input type="number" step="0.01" class="quantidade" data-index="${i}" value="${item.quantidade || ''}"/>
-        <label>Preço Unitário:</label>
+        <label class="label-preco">Preço ${item.tipo==='UN' ? '(R$/KG)' : '(R$/KG)'}:</label>
         <input type="number" step="0.01" class="preco" data-index="${i}" value="${item.preco || ''}"/>
         <div class="peso-info" id="pesoInfo_${i}"></div>
         <label>Observação do item:</label>
@@ -151,6 +166,7 @@ function renderItens(){
     const node = wrapper.firstElementChild;
     container.appendChild(node);
     bindItemEvents(i, node);
+    updatePrecoLabelAndHints(i, node);
   });
 
   if (!document.getElementById("listaProdutos")) {
