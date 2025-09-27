@@ -1,12 +1,9 @@
 // app/pedidos/js/clientes.js
-import { db, authReady, TENANT_ID } from './firebase.js';
-import {
-  collection, addDoc, updateDoc, getDocs, query, where, orderBy, limit,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-import {
-  up as _up, normNome as _normNome, digitsOnly as _digitsOnly
-} from './utils.js';
+import { db, TENANT_ID,
+  collection, addDoc, updateDoc, getDocs, query, where, orderBy, limit, serverTimestamp,
+  waitForLogin, getCurrentUser
+} from './firebase.js';
+import { up as _up, normNome as _normNome, digitsOnly as _digitsOnly } from './utils.js';
 
 const up = (s)=>_up(s);
 const digitsOnly = (s)=>_digitsOnly(s);
@@ -16,24 +13,9 @@ const normNome = (s)=>_normNome(s);
 const colClientes  = () => collection(db, "tenants", TENANT_ID, "clientes");
 const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_precos");
 
-// ===== Helpers de Auth =====
-async function getUserOrNull() {
-  try {
-    const user = await authReady; // resolve com user ou null
-    return user || null;
-  } catch {
-    return null;
-  }
-}
-function assertUser(user) {
-  if (!user) throw new Error("Usuário não autenticado");
-}
-
 // ===== Lookups =====
 export async function getClienteDocByNome(nomeInput){
-  const user = await getUserOrNull();
-  if (!user) return null; // sem login, não consulta
-
+  await waitForLogin(); // garante login
   const alvo = normNome(nomeInput);
   try{
     const s1 = await getDocs(query(colClientes(), where("nomeNormalizado","==",alvo), limit(1)));
@@ -52,9 +34,7 @@ export async function getClienteDocByNome(nomeInput){
 }
 
 export async function buscarClienteInfo(nomeCliente){
-  const user = await getUserOrNull();
-  if (!user) return null;
-
+  await waitForLogin();
   const found = await getClienteDocByNome(up(nomeCliente));
   if (!found) return null;
   const d = found.data || {};
@@ -66,33 +46,30 @@ export async function buscarClienteInfo(nomeCliente){
     cep: d.cep || "",
     contato: d.contato || "",
     lastFrete: typeof d.lastFrete === "number" ? d.lastFrete : null,
-    frete: d.frete || "" // caso tenha sido salvo como string "12,34"
+    frete: d.frete || ""
   };
 }
 
 export async function clientesMaisUsados(n=50){
-  const user = await getUserOrNull();
-  if (!user) return []; // sem login, retorna vazio
-
+  await waitForLogin();
   const out = [];
   try{
     const qs = await getDocs(query(colClientes(), orderBy("compras","desc"), limit(n)));
     qs.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }catch{
-    try {
+    try{
       const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
       qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
-    } catch {
-      /* ignora; retorna o que tem */
-    }
+    }catch{}
   }
   return out.filter(Boolean);
 }
 
 // ===== Create/Update =====
 export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}){
-  const user = await getUserOrNull();
-  assertUser(user);
+  await waitForLogin();
+  const user = getCurrentUser();
+  if (!user) throw new Error("Usuário não autenticado");
 
   const nomeUpper = up(nome);
   const enderecoUpper = up(endereco);
@@ -108,7 +85,6 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
     ie: up(extras.ie)||"",
     cep: digitsOnly(extras.cep)||"",
     contato: digitsOnly(extras.contato)||"",
-    // frete como string (mantém vírgula se usuário digitar "12,34")
     frete: typeof extras.frete === 'string' ? extras.frete : (extras.frete ?? ""),
     atualizadoEm: serverTimestamp()
   };
@@ -121,11 +97,9 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   }
 }
 
-// ===== Histórico de preços por cliente/produto =====
+// ===== Histórico de preços =====
 export async function buscarUltimoPreco(clienteNome, produtoNome){
-  const user = await getUserOrNull();
-  if (!user) return null;
-
+  await waitForLogin();
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   if (!nomeCli || !nomeProd) return null;
@@ -143,9 +117,7 @@ export async function buscarUltimoPreco(clienteNome, produtoNome){
 }
 
 export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
-  const user = await getUserOrNull();
-  assertUser(user);
-
+  await waitForLogin();
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   const valor = parseFloat(preco);
@@ -154,12 +126,9 @@ export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
   await addDoc(colHistPreco(), {
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
-
-  const found = await getClienteDocByNome(nomeCli);
-  if (found) await updateDoc(found.ref, { atualizadoEm: serverTimestamp() });
 }
 
-// ===== Helpers de UI (preenche formulário principal) =====
+// ===== UI helpers =====
 function setMainFormFromCliente(d){
   if (!d) return;
   const byId = (id)=>document.getElementById(id);
@@ -172,7 +141,6 @@ function setMainFormFromCliente(d){
   const chk = document.getElementById('isentarFrete');
   if (chk) chk.checked = !!d.isentoFrete;
 
-  // aplica sugestão de frete (campo manual + frete UI)
   if (d.frete) {
     const fm = document.getElementById('freteManual');
     if (fm && !fm.value) fm.value = d.frete;
@@ -185,41 +153,29 @@ function setMainFormFromCliente(d){
 async function hydrateDatalist(){
   const list = document.getElementById('listaClientes');
   if (!list) return;
-
-  const user = await getUserOrNull();
-  if (!user) {
-    // sem login: não popular (auth-guard deve redirecionar)
-    list.innerHTML = '';
-    return;
-  }
-
+  await waitForLogin();
   list.innerHTML = '';
   (await clientesMaisUsados(80)).forEach(n=>{
     const o = document.createElement('option'); o.value = n; list.appendChild(o);
   });
 }
 
-// ===== Auto-wire no campo "Cliente" (apenas logado) =====
 (function wireClienteBlur(){
   document.addEventListener('DOMContentLoaded', async ()=>{
-    const user = await getUserOrNull();
-    if (!user) return; // sem login não inicializa
-
+    await waitForLogin();
     const el = document.getElementById('cliente');
     if (!el) return;
-
     el.addEventListener('blur', async ()=>{
       const nome = el.value.trim();
       if (!nome) return;
       const info = await buscarClienteInfo(nome);
       if (info) setMainFormFromCliente(info);
     });
-
     hydrateDatalist();
   });
 })();
 
-// exposição opcional (debug/dev)
+// exposição opcional
 window.salvarCliente = salvarCliente;
 window.buscarClienteInfo = buscarClienteInfo;
 window.clientesMaisUsados = clientesMaisUsados;
