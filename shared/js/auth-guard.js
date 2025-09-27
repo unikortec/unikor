@@ -1,5 +1,5 @@
 // /shared/js/auth-guard.js
-import { onAuthUser, waitForLogin, getCurrentUser } from '/portal/app/pedidos/js/firebase.js';
+import { onAuthUser, waitForLogin, getCurrentUser } from '/app/pedidos/js/firebase.js';
 
 /** Esconde UI até confirmar login */
 function hideApp() {
@@ -23,8 +23,8 @@ onAuthUser(async (user) => {
     if (currentPath !== '/') {
       sessionStorage.setItem('redirectAfterLogin', currentPath);
     }
-    // reforço: se ainda estamos dentro do app, sai para o portal
-    if (!/^(\/|\/portal\/?)$/.test(window.location.pathname)) {
+    // reforço: se ainda estamos dentro do app, sai para a raiz (/)
+    if (window.location.pathname !== '/') {
       location.replace('/'); // não deixa voltar
     }
     return;
