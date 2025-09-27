@@ -1,7 +1,7 @@
+// app/pedidos/js/app.js
 import { up } from './utils.js';
-import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
-import { atualizarFreteUI } from './frete.js';
-import { showLoading, hideLoading, toastErro } from './ui.js';
+import { initItens, adicionarItem, getItens } from './itens.js';
+import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
 console.log('App inicializado');
 
@@ -10,72 +10,108 @@ function formatarNome(input) {
   input.value = up(input.value);
 }
 
-function validarAntesDeGerar() {
-  const cliente = document.getElementById('cliente')?.value || '';
-  if (!cliente.trim()) { alert('Informe o nome do cliente'); return false; }
+function coletarDadosFormulario() {
+  return {
+    cliente: document.getElementById('cliente')?.value || '',
+    telefone: document.getElementById('contato')?.value || '',
+    endereco: document.getElementById('endereco')?.value || '',
+    observacoes: document.getElementById('obsGeral')?.value || '',
+    itens: getItens()
+  };
+}
+
+function validarAntesGerar() {
+  const dados = coletarDadosFormulario();
+  if (!dados.cliente.trim()) {
+    alert('Informe o nome do cliente');
+    return false;
+  }
   const itens = getItens();
   if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
-    alert('Adicione pelo menos um item'); return false;
+    alert('Adicione pelo menos um item');
+    return false;
   }
   return true;
 }
 
+// ===== Ações com overlay e feedback =====
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
+  const { gerarPDFPreview } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
   const textoOriginal = botao.textContent;
-  botao.disabled = true; botao.innerHTML = '⏳ Gerando PDF...'; showLoading();
+  botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
+  showOverlay();
   try {
-    if (!validarAntesDeGerar()) return;
-    const { montarPDF } = await import('./pdf.js');
-    await montarPDF();
-  } catch (error) {
-    console.error('[PDF] Erro ao gerar:', error);
+    await gerarPDFPreview();
+    toastOk('PDF gerado (preview)');
+  } catch (e) {
+    console.error('[PDF] Erro ao gerar:', e);
     toastErro('Erro ao gerar PDF');
+    alert('Erro ao gerar PDF: ' + e.message);
   } finally {
-    botao.disabled = false; botao.textContent = textoOriginal; hideLoading();
+    hideOverlay();
+    botao.disabled = false; botao.textContent = textoOriginal;
   }
 }
 
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
+  const { salvarPDFLocal } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
   const textoOriginal = botao.textContent;
-  botao.disabled = true; botao.innerHTML = '⏳ Salvando PDF...'; showLoading();
+  botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
+  showOverlay();
   try {
-    if (!validarAntesDeGerar()) return;
-    const { salvarPDFLocal } = await import('./pdf.js');
-    await salvarPDFLocal();
-  } catch (error) {
-    console.error('[PDF] Erro ao salvar:', error);
+    const { nome } = await salvarPDFLocal();
+    toastOk(`PDF salvo: ${nome}`);
+  } catch (e) {
+    console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
+    alert('Erro ao salvar PDF: ' + e.message);
   } finally {
-    botao.disabled = false; botao.textContent = textoOriginal; hideLoading();
+    hideOverlay();
+    botao.disabled = false; botao.textContent = textoOriginal;
   }
 }
 
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
+  const { compartilharPDFNativo } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
   const textoOriginal = botao.textContent;
-  botao.disabled = true; botao.innerHTML = '⏳ Compartilhando PDF...'; showLoading();
+  botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
+  showOverlay();
   try {
-    if (!validarAntesDeGerar()) return;
-    const { compartilharPDFNativo } = await import('./pdf.js');
-    await compartilharPDFNativo();
-  } catch (error) {
-    console.error('[PDF] Erro ao compartilhar:', error);
+    const res = await compartilharPDFNativo();
+    if (res.compartilhado) toastOk('PDF compartilhado');
+    else if (res.cancelado) toastWarn('Compartilhamento cancelado');
+    else toastWarn('Compartilhamento não suportado — abrimos o PDF');
+  } catch (e) {
+    console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
+    alert('Erro ao compartilhar PDF: ' + e.message);
   } finally {
-    botao.disabled = false; botao.textContent = textoOriginal; hideLoading();
+    hideOverlay();
+    botao.disabled = false; botao.textContent = textoOriginal;
   }
 }
 
+// ===== Inicialização =====
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
 
   initItens();
-  // adiciona um item se vazio
+
   setTimeout(() => {
     const containerItens = document.getElementById('itens');
     if (containerItens && containerItens.children.length === 0) {
@@ -84,10 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 100);
 
-  // Recalcular frete quando itens forem editados
-  atualizarFreteAoEditarItem(() => atualizarFreteUI());
-
-  // Botões principais
   const btnAdicionar = document.getElementById('adicionarItemBtn');
   if (btnAdicionar) btnAdicionar.addEventListener('click', adicionarItem);
 
@@ -100,12 +132,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-  // Formatação de inputs principais
   const inputCliente = document.getElementById('cliente');
-  if (inputCliente) inputCliente.addEventListener('input', () => formatarNome(inputCliente));
+  if (inputCliente) {
+    inputCliente.addEventListener('input', () => formatarNome(inputCliente));
+  }
 });
 
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
+
 console.log('App configurado completamente');
