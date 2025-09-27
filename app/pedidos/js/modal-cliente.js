@@ -1,6 +1,7 @@
 // app/pedidos/js/modal-cliente.js
 import { salvarCliente, buscarClienteInfo, clientesMaisUsados } from './clientes.js';
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
+import { authReady } from './firebase.js';
 
 console.log('Modal cliente carregado');
 
@@ -139,8 +140,14 @@ function consultarCNPJ() {
 }
 
 async function populateDatalist() {
+  const user = await authReady;
+  if (!user) {
+    console.log('Sem login — não vou consultar clientes agora.');
+    return;
+  }
   const datalist = document.getElementById('mc_listaClientes');
   if (!datalist) return;
+
   datalist.innerHTML = '';
   try {
     const clientes = await clientesMaisUsados(80);
@@ -155,6 +162,9 @@ async function populateDatalist() {
 }
 
 async function handleNomeChange() {
+  const user = await authReady;
+  if (!user) return;
+
   const nomeInput = document.getElementById('mc_nome');
   if (!nomeInput) return;
 
@@ -202,6 +212,12 @@ function handleFreteChange() {
 }
 
 async function saveFromModal() {
+  const user = await authReady;
+  if (!user) {
+    alert('Faça login para salvar clientes.');
+    return;
+  }
+
   const nome = (document.getElementById('mc_nome')?.value || '').trim();
   const endereco = (document.getElementById('mc_endereco')?.value || '').trim();
   const cnpjMask = document.getElementById('mc_cnpj')?.value || '';
@@ -254,7 +270,15 @@ async function saveFromModal() {
 }
 
 // Inicialização
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  const user = await authReady;
+  if (!user) {
+    // Se por algum motivo o auth-guard não tiver redirecionado ainda,
+    // não inicializamos o modal para evitar consultas sem login.
+    console.warn('Sem login — modal-cliente não será inicializado.');
+    return;
+  }
+
   injectModal();
 
   const btnAddCliente = document.getElementById('btnAddCliente');
