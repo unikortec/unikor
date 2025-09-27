@@ -16,9 +16,24 @@ const normNome = (s)=>_normNome(s);
 const colClientes  = () => collection(db, "tenants", TENANT_ID, "clientes");
 const colHistPreco = () => collection(db, "tenants", TENANT_ID, "historico_precos");
 
-// lookups
+// ===== Helpers de Auth =====
+async function getUserOrNull() {
+  try {
+    const user = await authReady; // resolve com user ou null
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+function assertUser(user) {
+  if (!user) throw new Error("Usuário não autenticado");
+}
+
+// ===== Lookups =====
 export async function getClienteDocByNome(nomeInput){
-  await authReady;
+  const user = await getUserOrNull();
+  if (!user) return null; // sem login, não consulta
+
   const alvo = normNome(nomeInput);
   try{
     const s1 = await getDocs(query(colClientes(), where("nomeNormalizado","==",alvo), limit(1)));
@@ -37,6 +52,9 @@ export async function getClienteDocByNome(nomeInput){
 }
 
 export async function buscarClienteInfo(nomeCliente){
+  const user = await getUserOrNull();
+  if (!user) return null;
+
   const found = await getClienteDocByNome(up(nomeCliente));
   if (!found) return null;
   const d = found.data || {};
@@ -47,29 +65,39 @@ export async function buscarClienteInfo(nomeCliente){
     ie: d.ie || "",
     cep: d.cep || "",
     contato: d.contato || "",
-    lastFrete: typeof d.lastFrete === "number" ? d.lastFrete : null
+    lastFrete: typeof d.lastFrete === "number" ? d.lastFrete : null,
+    frete: d.frete || "" // caso tenha sido salvo como string "12,34"
   };
 }
 
 export async function clientesMaisUsados(n=50){
-  await authReady;
+  const user = await getUserOrNull();
+  if (!user) return []; // sem login, retorna vazio
+
   const out = [];
   try{
     const qs = await getDocs(query(colClientes(), orderBy("compras","desc"), limit(n)));
     qs.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
   }catch{
-    const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
-    qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
+    try {
+      const qs2 = await getDocs(query(colClientes(), orderBy("nome"), limit(n)));
+      qs2.forEach(d=> out.push(d.data()?.nome || d.data()?.nomeUpper || ""));
+    } catch {
+      /* ignora; retorna o que tem */
+    }
   }
   return out.filter(Boolean);
 }
 
-// create/update
+// ===== Create/Update =====
 export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}){
-  await authReady;
+  const user = await getUserOrNull();
+  assertUser(user);
+
   const nomeUpper = up(nome);
   const enderecoUpper = up(endereco);
   if (!nomeUpper) return;
+
   const base = {
     nome: nomeUpper,
     nomeUpper,
@@ -80,8 +108,11 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
     ie: up(extras.ie)||"",
     cep: digitsOnly(extras.cep)||"",
     contato: digitsOnly(extras.contato)||"",
+    // frete como string (mantém vírgula se usuário digitar "12,34")
+    frete: typeof extras.frete === 'string' ? extras.frete : (extras.frete ?? ""),
     atualizadoEm: serverTimestamp()
   };
+
   const exist = await getClienteDocByNome(nomeUpper);
   if (exist) {
     await updateDoc(exist.ref, base);
@@ -90,12 +121,15 @@ export async function salvarCliente(nome, endereco, isentoFrete=false, extras={}
   }
 }
 
-// histórico de preços
+// ===== Histórico de preços por cliente/produto =====
 export async function buscarUltimoPreco(clienteNome, produtoNome){
-  await authReady;
+  const user = await getUserOrNull();
+  if (!user) return null;
+
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   if (!nomeCli || !nomeProd) return null;
+
   const qs = await getDocs(query(
     colHistPreco(),
     where("cliente","==",nomeCli),
@@ -109,19 +143,23 @@ export async function buscarUltimoPreco(clienteNome, produtoNome){
 }
 
 export async function registrarPrecoCliente(clienteNome, produtoNome, preco){
-  await authReady;
+  const user = await getUserOrNull();
+  assertUser(user);
+
   const nomeCli = up(clienteNome);
   const nomeProd = String(produtoNome||"").trim();
   const valor = parseFloat(preco);
   if (!nomeCli || !nomeProd || isNaN(valor)) return;
+
   await addDoc(colHistPreco(), {
     cliente: nomeCli, produto: nomeProd, preco: valor, data: serverTimestamp()
   });
+
   const found = await getClienteDocByNome(nomeCli);
   if (found) await updateDoc(found.ref, { atualizadoEm: serverTimestamp() });
 }
 
-// helpers UI
+// ===== Helpers de UI (preenche formulário principal) =====
 function setMainFormFromCliente(d){
   if (!d) return;
   const byId = (id)=>document.getElementById(id);
@@ -130,18 +168,16 @@ function setMainFormFromCliente(d){
   if (d.ie && byId('ie')) byId('ie').value = d.ie;
   if (d.cep && byId('cep')) byId('cep').value = d.cep;
   if (d.contato && byId('contato')) byId('contato').value = d.contato;
-  
+
   const chk = document.getElementById('isentarFrete');
   if (chk) chk.checked = !!d.isentoFrete;
-  
-  // ✅ NOVO: Aplicar frete automaticamente do cadastro
-  if (d.lastFrete && typeof d.lastFrete === 'number') {
-    import('./frete.js').then(({ setFreteSugestao, atualizarFreteUI }) => {
-      setFreteSugestao(d.lastFrete);
-      // Força atualização do frete na UI
-      setTimeout(() => {
-        atualizarFreteUI();
-      }, 500);
+
+  // aplica sugestão de frete (campo manual + frete UI)
+  if (d.frete) {
+    const fm = document.getElementById('freteManual');
+    if (fm && !fm.value) fm.value = d.frete;
+    import('./frete.js').then(({ atualizarFreteUI }) => {
+      setTimeout(() => atualizarFreteUI && atualizarFreteUI(), 200);
     });
   }
 }
@@ -149,27 +185,41 @@ function setMainFormFromCliente(d){
 async function hydrateDatalist(){
   const list = document.getElementById('listaClientes');
   if (!list) return;
+
+  const user = await getUserOrNull();
+  if (!user) {
+    // sem login: não popular (auth-guard deve redirecionar)
+    list.innerHTML = '';
+    return;
+  }
+
   list.innerHTML = '';
   (await clientesMaisUsados(80)).forEach(n=>{
     const o = document.createElement('option'); o.value = n; list.appendChild(o);
   });
 }
 
+// ===== Auto-wire no campo "Cliente" (apenas logado) =====
 (function wireClienteBlur(){
-  document.addEventListener('DOMContentLoaded', ()=>{
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    const user = await getUserOrNull();
+    if (!user) return; // sem login não inicializa
+
     const el = document.getElementById('cliente');
     if (!el) return;
+
     el.addEventListener('blur', async ()=>{
       const nome = el.value.trim();
       if (!nome) return;
       const info = await buscarClienteInfo(nome);
       if (info) setMainFormFromCliente(info);
     });
+
     hydrateDatalist();
   });
 })();
 
-// exposição opcional
+// exposição opcional (debug/dev)
 window.salvarCliente = salvarCliente;
 window.buscarClienteInfo = buscarClienteInfo;
 window.clientesMaisUsados = clientesMaisUsados;
