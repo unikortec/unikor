@@ -2,13 +2,13 @@
   "name": "Unikor – Pedidos",
   "short_name": "Pedidos",
   "description": "Pedido rápido com PDF, histórico por cliente e PWA offline.",
-  "id": "/portal/app/pedidos/",
-  "start_url": "/portal/app/pedidos/",
-  "scope": "/portal/app/pedidos/",
+  "id": "/app/pedidos/",
+  "start_url": "/app/pedidos/",
+  "scope": "/app/pedidos/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",  // CORREÇÃO: Adicionado #
-  "theme_color": "#0ea5a6",     // CORREÇÃO: Adicionado #
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5a6",
   "icons": [
     { "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
@@ -20,10 +20,10 @@
     {
       "name": "Novo pedido",
       "short_name": "Pedido",
-      "url": "/portal/app/pedidos/",
+      "url": "/app/pedidos/",
       "icons": [{ "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "categories": ["business", "productivity"],
-  "preferrelatedapplications": false
+  "prefer_related_applications": false
 }
