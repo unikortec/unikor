@@ -4,7 +4,8 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import {
   getFirestore,
   collection, addDoc, getDocs, doc, setDoc, getDoc,
-  query, where, orderBy, limit, serverTimestamp
+  query, where, orderBy, limit, serverTimestamp,
+  updateDoc
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -44,7 +45,10 @@ onAuthStateChanged(auth, (user) => {
 });
 
 // API pública de auth
-export function onAuthUser(cb){ if (typeof cb === 'function') { subs.add(cb); cb(currentUser); return ()=>subs.delete(cb); } return ()=>{}; }
+export function onAuthUser(cb){
+  if (typeof cb === 'function') { subs.add(cb); cb(currentUser); return ()=>subs.delete(cb); }
+  return ()=>{};
+}
 export function getCurrentUser(){ return currentUser; }
 export function isLoggedIn(){ return !!currentUser; }
 
@@ -69,7 +73,7 @@ export async function hasAccessToTenant() {
   }
 }
 
-/* ============== (SEUS CACHES/UTILS OPCIONAIS) ============== */
+/* ============== Caches opcionais ============== */
 let clientesCache = null;
 let produtosCache = null;
 let pedidoAtualId = null;
@@ -77,12 +81,11 @@ let pedidoAtualId = null;
 export function limparCaches(){ clientesCache=null; produtosCache=null; console.log("Caches limpos"); }
 
 // Side-effect leve quando desloga
-onAuthUser((user)=>{
-  if (!user) limparCaches();
-});
+onAuthUser((user)=>{ if (!user) limparCaches(); });
 
-// Re-export Firestore helpers que você já usava em outros módulos
+// Re-export Firestore helpers usados nos outros módulos
 export {
   collection, addDoc, getDocs, doc, setDoc, getDoc,
-  query, where, orderBy, limit, serverTimestamp
+  query, where, orderBy, limit, serverTimestamp,
+  updateDoc
 };
