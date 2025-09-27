@@ -28,11 +28,21 @@ export const TENANT_ID = "serranobrecarnes.com.br";
 /* ===================== AUTH STATE BUS ===================== */
 let currentUser = null;
 const subs = new Set();
-const pendingLoginWaiters = new Set(); // resolvem quando logar
+const pendingLoginWaiters = new Set();
+
+let _authInitialized = false;
+let _resolveAuthReady;
+export const authReady = new Promise((resolve) => { _resolveAuthReady = resolve; });
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user || null;
   console.log("Firebase Auth:", currentUser ? `Logado (${currentUser.email || currentUser.uid})` : "Não logado");
+
+  // marca primeira resolução
+  if (!_authInitialized) {
+    _authInitialized = true;
+    try { _resolveAuthReady(currentUser); } catch {}
+  }
 
   // notifica subscribers
   subs.forEach(fn => { try { fn(currentUser); } catch {} });
@@ -46,7 +56,11 @@ onAuthStateChanged(auth, (user) => {
 
 // API pública de auth
 export function onAuthUser(cb){
-  if (typeof cb === 'function') { subs.add(cb); cb(currentUser); return ()=>subs.delete(cb); }
+  if (typeof cb === 'function') {
+    subs.add(cb);
+    // NÃO chamamos imediatamente para evitar decisão precoce com null.
+    return () => subs.delete(cb);
+  }
   return ()=>{};
 }
 export function getCurrentUser(){ return currentUser; }
@@ -83,7 +97,7 @@ export function limparCaches(){ clientesCache=null; produtosCache=null; console.
 // Side-effect leve quando desloga
 onAuthUser((user)=>{ if (!user) limparCaches(); });
 
-// Re-export Firestore helpers usados nos outros módulos
+// Re-export Firestore helpers
 export {
   collection, addDoc, getDocs, doc, setDoc, getDoc,
   query, where, orderBy, limit, serverTimestamp,
