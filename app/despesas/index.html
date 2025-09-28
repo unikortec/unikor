@@ -6,39 +6,45 @@
  * Pré-requisitos:
  * - Ativar Drive API no projeto
  * - Compartilhar a pasta alvo no Drive com a Service Account
- * - Definir env var: DRIVE_PARENT=<folderId>  (opcional; se vazio, não sobe arquivo)
- *   firebase functions:config:set app.drive_parent="1AbC..."   (ou usar process.env se em 2nd gen)
+ * - Definir env var: DRIVE_PARENT=<folderId> (opcional; se vazio, não sobe arquivo)
+ *   firebase functions:config:set app.drive_parent="1AbC..."
  */
 
 const functions = require("firebase-functions");
 const admin     = require("firebase-admin");
-const fetch     = require("node-fetch");
 const cheerio   = require("cheerio");
 const { parseStringPromise } = require("xml2js");
 const { google } = require("googleapis");
 
+// node-fetch v3 (ESM) em módulo CommonJS → usar import dinâmico:
+const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+
 admin.initializeApp();
-
 const db = admin.firestore();
-const DRIVE_PARENT = process.env.DRIVE_PARENT || (functions.config().app?.drive_parent || "");
 
-// util
-const yyyymm = (d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const DRIVE_PARENT =
+  process.env.DRIVE_PARENT || (functions.config().app?.drive_parent || "");
 
-/* ===== Google Drive (opcional) ===== */
+// --- Utils ---
+const allowCors = (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
+  return false;
+};
+
 function streamFromBuffer(buf){
   const { Readable } = require("stream");
   const s = new Readable();
-  s.push(buf);
-  s.push(null);
+  s.push(buf); s.push(null);
   return s;
 }
 
 async function driveUpload(name, mime, dataBuffer){
-  if (!DRIVE_PARENT) return null; // desligado se não configurado
-  const auth = await google.auth.getClient({ scopes: ["https://www.googleapis.com/auth/drive.file"] });
+  if (!DRIVE_PARENT) return null; // desativado se não configurado
+  const auth  = await google.auth.getClient({ scopes: ["https://www.googleapis.com/auth/drive.file"] });
   const drive = google.drive({ version: "v3", auth });
-
   const res = await drive.files.create({
     requestBody: { name, parents: [DRIVE_PARENT] },
     media: { mimeType: mime, body: streamFromBuffer(dataBuffer) },
@@ -47,53 +53,63 @@ async function driveUpload(name, mime, dataBuffer){
   return res.data;
 }
 
-/* ===== Parse NFC-e (HTML) ===== */
+// --- NFC-e (HTML) ---
 async function fetchNfceHtml(qrUrl){
-  const r = await fetch(qrUrl, { redirect: "follow" });
+  const r = await fetch(qrUrl, { redirect: "follow", headers:{'User-Agent':'Mozilla/5.0'} });
   if (!r.ok) throw new Error(`NFC-e fetch ${r.status}`);
   return await r.text();
 }
 
 function parseNfceFromHtml(html, accessKey, category, uid, userName){
   const $ = cheerio.load(html);
-  // Páginas variam entre estados; os seletores abaixo cobrem SVRS e variações comuns.
-  // Fallbacks simples se algo não for encontrado.
+
   const emitter = {
-    name: ($("td:contains('Emitente'), td:contains('Razão Social')").next().text().trim()) ||
-          ($("td:contains('Emitente')").parent().next().find("td").first().text().trim()) ||
-          null,
-    cnpj: ($("td:contains('CNPJ')").next().text().replace(/\D/g,'').slice(0,14)) || null,
-    address: ($("td:contains('Endereço')").next().text().trim()) || null
+    name:
+      ($("td:contains('Emitente'), td:contains('Razão Social')").next().text().trim()) ||
+      ($("td:contains('Emitente')").parent().next().find("td").first().text().trim()) ||
+      ($("h3, .txtTopo, .razaoSocial").first().text().trim()) ||
+      null,
+    cnpj:
+      ($("td:contains('CNPJ')").next().text().replace(/\D/g,'').slice(0,14)) ||
+      ($(":contains('CNPJ')").first().text().replace(/\D/g,'').slice(0,14)) ||
+      null,
+    address:
+      ($("td:contains('Endereço')").next().text().trim()) ||
+      ($(":contains('Endere')").first().next().text().trim()) ||
+      null
   };
 
-  // data/hora
-  const dateStr = ($("td:contains('Emissão'), td:contains('Data de Emissão')").next().text().trim()) || "";
+  const dateStr =
+    ($("td:contains('Emissão'), td:contains('Data de Emissão')").next().text().trim()) ||
+    (html.match(/(\d{2}\/\d{2}\/\d{4})[^\d]{1,5}(\d{2}:\d{2}:\d{2})/)?.[0]) ||
+    "";
   const date = dateStr ? new Date(dateStr) : new Date();
 
-  // pagamento (não padronizado; tentativas)
   let pgMethod = ($("td:contains('Forma de Pagamento')").next().text().trim()) || null;
-  const totalStr = ($("td:contains('Valor a Pagar'), td:contains('Valor Total')").next().text().trim()) || "";
-  const amount = parseFloat((totalStr.match(/[\d.,]+/)||["0"]).shift().replace(/\./g,'').replace(',','.')) || 0;
+  const totalStr =
+    ($("td:contains('Valor a Pagar'), td:contains('Valor Total')").next().text().trim()) ||
+    (html.match(/Total\s*R\$\s*([\d\.,]+)/i)?.[1]) || "";
+  const amount = parseFloat((String(totalStr).match(/[\d.,]+/)||["0"])[0].replace(/\./g,'').replace(',','.')) || 0;
 
-  // itens — muitas UIs têm tabelas com "Descrição / Qtde / UN / V. Unit / V. Total"
   const items = [];
-  $("table tr").each((_, tr)=>{
-    const tds = $(tr).find("td");
-    if (tds.length >= 4) {
-      const desc = $(tds[0]).text().trim();
-      const qty  = parseFloat($(tds[1]).text().replace(',','.')) || null;
-      const unit = ($(tds[2]).text().trim() || null);
-      const uval = parseFloat($(tds[3]).text().replace(/\./g,'').replace(',','.')) || null;
-      // tenta pegar total
-      const tval = tds[4] ? parseFloat($(tds[4]).text().replace(/\./g,'').replace(',','.')) : null;
-      // heurística: aceita linhas com descrição e pelo menos qty ou price
-      if (desc && (qty || uval || tval)) {
-        const lineTotal = tval ?? (qty && uval ? qty*uval : null);
-        items.push({
-          description: desc, qty, unit, unitPrice: uval ?? null,
-          lineTotal: lineTotal ?? null
-        });
-      }
+  $("table, .table").each((_, tbl)=>{
+    const rows = $(tbl).find('tr'); if (rows.length < 2) return;
+    const head = $(rows[0]).text().toUpperCase();
+    const isItems = (head.includes('DESCRI') || head.includes('PROD')) &&
+                    (head.includes('QTD') || head.includes('QUANT')) &&
+                    (head.includes('UNIT')) &&
+                    (head.includes('TOTAL'));
+    if (!isItems) return;
+    for (let i=1;i<rows.length;i++){
+      const tds = $(rows[i]).find('td,th'); if (tds.length < 4) continue;
+      const txts = tds.map((__,td)=>$(td).text().trim()).get();
+      const [descr, qtd, un, vUnit, vTot] = txts;
+      if (!descr) continue;
+      const qty = parseFloat(String(qtd).replace(',','.')) || null;
+      const unitPrice = parseFloat(String(vUnit).replace(/\./g,'').replace(',','.')) || null;
+      const lineTotal = vTot ? parseFloat(String(vTot).replace(/\./g,'').replace(',','.')) :
+                        (qty && unitPrice ? qty*unitPrice : null);
+      items.push({ description: descr, qty, unit: (un||'UN').replace(/\s+/g,''), unitPrice, lineTotal });
     }
   });
 
@@ -116,7 +132,7 @@ function parseNfceFromHtml(html, accessKey, category, uid, userName){
   return doc;
 }
 
-/* ===== Parse NFe 55 (XML) ===== */
+// --- NFe 55 (XML) ---
 async function parseNfe55Xml(xml, category, uid, userName, accessKeyGuess){
   const j = await parseStringPromise(xml, { explicitArray:false, ignoreAttrs:false });
   const nfe = j?.nfeProc?.NFe || j?.NFe;
@@ -125,21 +141,20 @@ async function parseNfe55Xml(xml, category, uid, userName, accessKeyGuess){
   const emit= inf?.emit || {};
   const det = Array.isArray(inf?.det) ? inf.det : (inf?.det ? [inf.det] : []);
 
-  const accessKey = accessKeyGuess || (inf?.["$"]?.Id || "").replace(/^NFe/,'');
+  const accessKey = accessKeyGuess || (inf?.["$"]?.Id || "").replace(/^NFe/,'') || null;
   const date = new Date(ide?.dhEmi || ide?.dEmi || Date.now());
 
   const items = det.map(d=>{
-    const prod = d?.prod || {};
-    const imposto = d?.imposto || {};
-    const qCom = parseFloat(prod.qCom?.replace(',','.')) || null;
-    const vUn  = parseFloat((prod.vUnCom||"").replace(',','.')) || null;
-    const vTot = parseFloat((prod.vProd || "").replace(',','.')) || (qCom && vUn ? qCom*vUn : null);
+    const p = d?.prod || {};
+    const q = parseFloat(String(p.qCom || p.qTrib || '').replace(',','.')) || null;
+    const v = parseFloat(String(p.vUnCom || p.vUnTrib || '').replace(',','.')) || null;
+    const t = parseFloat(String(p.vProd || '').replace(',','.')) || (q && v ? q*v : null);
     return {
-      description: prod.xProd || null,
-      qty: qCom,
-      unit: prod.uCom || null,
-      unitPrice: vUn,
-      lineTotal: vTot
+      description: p.xProd || null,
+      qty: q,
+      unit: p.uCom || null,
+      unitPrice: v,
+      lineTotal: t
     };
   });
 
@@ -171,11 +186,12 @@ async function parseNfe55Xml(xml, category, uid, userName, accessKeyGuess){
   return doc;
 }
 
-/* ====== HTTP FUNCTIONS ====== */
+// --- HTTP FUNCTIONS ---
 exports.ingestNfceByQr = functions
   .region("southamerica-east1")
   .https.onRequest(async (req, res)=>{
     try{
+      if (allowCors(req,res)) return;
       if (req.method !== "POST") return res.status(405).send("POST only");
       const { uid, userName, category, qrUrl, accessKey } = req.body || {};
       if (!uid || !qrUrl || !accessKey) return res.status(400).json({ error: "uid/qrUrl/accessKey required" });
@@ -183,13 +199,9 @@ exports.ingestNfceByQr = functions
       const html = await fetchNfceHtml(qrUrl);
       const doc  = parseNfceFromHtml(html, accessKey, (category||"GERAL").toUpperCase(), uid, userName);
 
-      // (opcional) upload do HTML no Drive
       try{
         const up = await driveUpload(`${accessKey}.html`, "text/html", Buffer.from(html,"utf8"));
-        if (up?.id) {
-          doc.sources.driveFileId  = up.id;
-          doc.sources.driveWebView = up.webViewLink;
-        }
+        if (up?.id) { doc.sources.driveFileId = up.id; doc.sources.driveWebView = up.webViewLink; }
       }catch(e){ console.warn("Drive upload NFC-e falhou:", e.message); }
 
       const ref = db.collection("users").doc(uid).collection("expenses").doc(accessKey);
@@ -206,6 +218,7 @@ exports.ingestNfe55Xml = functions
   .region("southamerica-east1")
   .https.onRequest(async (req, res)=>{
     try{
+      if (allowCors(req,res)) return;
       if (req.method !== "POST") return res.status(405).send("POST only");
       const { uid, userName, category, accessKey, xmlBase64 } = req.body || {};
       if (!uid || !xmlBase64) return res.status(400).json({ error: "uid/xmlBase64 required" });
@@ -213,13 +226,9 @@ exports.ingestNfe55Xml = functions
       const xml = Buffer.from(xmlBase64, "base64").toString("utf8");
       const doc = await parseNfe55Xml(xml, (category||"GERAL").toUpperCase(), uid, userName, accessKey);
 
-      // (opcional) upload do XML no Drive
       try{
         const up = await driveUpload(`${doc.accessKey||"nfe"}.xml`, "application/xml", Buffer.from(xml,"utf8"));
-        if (up?.id) {
-          doc.sources.driveFileId  = up.id;
-          doc.sources.driveWebView = up.webViewLink;
-        }
+        if (up?.id) { doc.sources.driveFileId = up.id; doc.sources.driveWebView = up.webViewLink; }
       }catch(e){ console.warn("Drive upload NFe55 falhou:", e.message); }
 
       const id = doc.accessKey || db.collection("_tmp").doc().id;
