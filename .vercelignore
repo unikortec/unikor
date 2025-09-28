@@ -1,1 +1,37 @@
+# Ignorar dependências e builds locais
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+pnpm-lock.yaml
+.DS_Store
+
+# Pastas de backend (não devem ser servidas no Vercel)
+functions
 app/despesas/functions
+app/estoque/functions
+app/pedidos/functions
+app/relatorios/functions
+app/financeiro/functions
+
+# Configurações do Firebase e outros
+.firebase
+.firebaserc
+firebase.json
+storage.rules
+firestore.rules
+
+# Pastas de cache/build
+.cache
+dist
+build
+coverage
+tmp
+logs
+
+# Arquivos locais/IDE
+.vscode
+.idea
+*.swp
+*.swo
+*.log
