@@ -1,5 +1,5 @@
-// usa o app/auth central do portal (NÃO reinicializa Firebase)
-import { app, auth } from "../../js/firebase.js";
+// usa o app/auth central via proxy local (não reinicializa Firebase)
+import { app, auth } from "./firebase.js";
 import {
   onAuthStateChanged,
   signInAnonymously
@@ -53,16 +53,6 @@ function fileToBase64(file){
 
 // UI helpers
 const $ = (s)=>document.querySelector(s);
-
-/* ====== BIND DA TELA ====== */
-// Inputs esperados na tela:
-//  #inpQr   (texto ou hidden)  – colar/ler URL do QR da NFC-e
-//  #inpCat  (categoria)        – ex.: "ALIMENTAÇÃO"
-//  #btnQrIngest               – processa NFC-e (URL)
-//  #inpXml (file)             – upload XML NFe 55
-//  #btnXmlIngest              – processa NFe 55
-//  Campos informativos: #outMsg
-
 const out = (msg)=>{
   const el = $("#outMsg");
   if (el) el.textContent = msg;
