@@ -1,18 +1,11 @@
-// Service Worker — DESPESAS v1 (entry=app.js)
-// Estratégias:
-// - Precaching (assets locais)
-// - Navegação: network-first (+ navigation preload) com fallback offline
-// - CDNs: stale-while-revalidate
-// - Outros same-origin: network com fallback cache
-// - Atualização forçada via postMessage {type:'SKIP_WAITING'}
-
-const APP_VERSION  = '1.0.0';
+// Service Worker — DESPESAS v1 (entry=js/app.js)
+const APP_VERSION  = '1.0.4';
 const CACHE_TAG    = 'despesas';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
 const OFFLINE_URL  = './index.html';
 
-// ATENÇÃO: entry agora é js/app.js (antes js/main.js)
+// Precaching (somente arquivos estáticos que existem)
 const ASSETS = [
   './',
   './index.html',
@@ -20,7 +13,12 @@ const ASSETS = [
 
   // JS
   './js/app.js',
+  './js/nfce.js',
+  './js/nfe.js',
   './js/scanner.js',
+  './js/store.js',
+  // proxy local do firebase (se você criou):
+  './js/firebase.js',
 
   // CSS
   './css/style.css',
@@ -70,6 +68,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
+  const path = url.pathname.replace(/\/+/g,'/');
+
+  // Nunca servir/armazenar backend público por engano
+  if (path.startsWith('/app/despesas/functions/')) {
+    // Deixa a navegação acontecer; a página tem um guard que redireciona
+    return;
+  }
 
   // Navegação
   if (request.mode === 'navigate') {
@@ -90,7 +95,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Estáticos precacheados
+  // Estáticos precacheados (same-origin)
   if (sameOrigin) {
     const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./', '/')));
     if (isPrecached) {
@@ -105,7 +110,7 @@ self.addEventListener('fetch', (event) => {
     }
   }
 
-  // CDNs / terceiros
+  // CDNs / terceiros: Stale-While-Revalidate
   const isCDN = /(^|\.)(?:gstatic|googleapis|jsdelivr|unpkg|cloudflare|cdnjs)\.com$/i.test(url.hostname);
   if (!sameOrigin || isCDN) {
     event.respondWith((async () => {
