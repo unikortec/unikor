@@ -1,7 +1,7 @@
-// pdf.js — geração dos dois PDFs (sem logo, com barra verde Unikor)
+// app/estoque/js/pdf.js — geração dos PDFs
 import { fmt3, round3, dtLabel } from "./constants.js";
 import { FAMILIAS, itensDigitadosDaFamilia } from "./catalog.js";
-import { getPriceKg, getMinKg } from "./prices.js"; // re-exportados de store via prices
+import { getPriceKg, getMinKg } from "./prices.js";
 import { sessao, ultimo } from "./store.js";
 
 /* ===== Helpers visuais ===== */
@@ -50,14 +50,13 @@ export function snapshotNow(){
   return {dateISO:now.toISOString(), dateLabel:dtLabel(now), data:snapshotFromSession()};
 }
 
-/* ===== PDF ESTOQUE DO DIA ===== */
+/* ===== PDF ESTOQUE ===== */
 export async function pdfEstoqueBlob(){
   const { jsPDF } = window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
   const W=doc.internal.pageSize.getWidth();
   const margin=36; let y=margin;
 
-  // título + data
   doc.setFont('helvetica','bold'); doc.setFontSize(16);
   doc.text('ESTOQUE DO DIA', W/2, y+10, {align:'center'});
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
@@ -70,7 +69,7 @@ export async function pdfEstoqueBlob(){
 
   // barra verde Unikor
   const headerTop = y, headerBoxH = 30;
-  doc.setFillColor(30,127,70); // #1e7f46
+  doc.setFillColor(30,127,70);
   doc.rect(margin, headerTop, W - margin*2, headerBoxH, 'F');
   doc.setFont('helvetica','bold'); doc.setFontSize(11);
   doc.setTextColor(255,255,255);
@@ -167,7 +166,7 @@ export async function pdfPosicaoBlob(){
   const X = (i)=> margin + colW*(i+0.5);
 
   const headerTop = y, headerBoxH = 26;
-  doc.setFillColor(30,127,70); // barra Unikor
+  doc.setFillColor(30,127,70);
   doc.rect(margin, headerTop, W - margin*2, headerBoxH, 'F');
   doc.setTextColor(255,255,255);
   doc.setFont('helvetica','bold'); doc.setFontSize(10);
