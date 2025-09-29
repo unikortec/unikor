@@ -1,10 +1,53 @@
-// portal/apps/despesas/manifest.json
 {
   "name": "Unikor • Despesas",
   "short_name": "Despesas",
-  "start_url": ".",
+  "description": "Controle de despesas com leitura NFC-e (QR), NFe-55 (XML) e manuais, integrado ao Google Drive.",
+  "id": "/app/despesas/",
+  "start_url": "/app/despesas/",
+  "scope": "/app/despesas/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
-  "icons": []
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#1e7f46",
+  "icons": [
+    {
+      "src": "/assets/logo/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logo/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/logo/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logo/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/logo/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova Despesa",
+      "short_name": "Despesa",
+      "url": "/app/despesas/",
+      "icons": [{ "src": "/assets/logo/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false
 }
