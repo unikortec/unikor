@@ -19,6 +19,7 @@ export const firebaseConfig = {
 
 // =================== INIT ===================
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+export { app };              // 🔥 Agora o app é exportado corretamente
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
@@ -31,10 +32,8 @@ onAuthStateChanged(auth, (user) => {
   currentUser = user || null;
   console.log("[Firebase Auth]", currentUser ? `Logado: ${currentUser.email}` : "Não logado");
 
-  // notifica subscribers
   subs.forEach(fn => { try { fn(currentUser); } catch {} });
 
-  // resolve quem estava esperando login
   if (currentUser) {
     pendingLoginWaiters.forEach(res => res(currentUser));
     pendingLoginWaiters.clear();
@@ -64,7 +63,7 @@ export function waitForLogin() {
   return new Promise((resolve) => pendingLoginWaiters.add(resolve));
 }
 
-// Reexport Firestore helpers (facilita nos módulos)
+// Reexport Firestore helpers
 export {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
   query, where, orderBy, limit, serverTimestamp
