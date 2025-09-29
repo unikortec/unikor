@@ -25,7 +25,6 @@ service cloud.firestore {
     function nonNeg(n)    { return n is number && n >= 0; }
     function validTipo(t) { return t in ["RESFRIADO","CONGELADO"]; }
     function validUnit(u) { return u in ["KG","CX","UN"]; }
-    function isServerTime(ts) { return ts is timestamp && ts == request.time; }
 
     // Garante que o write é para o tenant do path (se o doc tiver campo tenantId)
     function matchesTenantField(tenantId) {
@@ -33,13 +32,19 @@ service cloud.firestore {
              request.resource.data.tenantId == tenantId;
     }
 
-    // (Opcional) valida autor/timestamps quando presentes
+    // Valida autor/timestamps quando presentes (sem comparar com request.time)
     function validAuthorFields() {
+      // aceita PT ou EN
+      let hasCreated = ("criadoEm" in request.resource.data && request.resource.data.criadoEm is timestamp)
+                    || ("createdAt" in request.resource.data && request.resource.data.createdAt is timestamp);
+      let hasUpdated = ("atualizadoEm" in request.resource.data && request.resource.data.atualizadoEm is timestamp)
+                    || ("updatedAt" in request.resource.data && request.resource.data.updatedAt is timestamp);
+
       return (
         (!("createdBy"  in request.resource.data) || request.resource.data.createdBy  == request.auth.uid) &&
         (!("updatedBy"  in request.resource.data) || request.resource.data.updatedBy  == request.auth.uid) &&
-        (!("createdAt"  in request.resource.data) || isServerTime(request.resource.data.createdAt)) &&
-        (!("updatedAt"  in request.resource.data) || isServerTime(request.resource.data.updatedAt))
+        ( !("criadoEm"    in request.resource.data) && !("createdAt"   in request.resource.data) || hasCreated ) &&
+        ( !("atualizadoEm" in request.resource.data) && !("updatedAt"  in request.resource.data) || hasUpdated )
       );
     }
 
@@ -52,35 +57,40 @@ service cloud.firestore {
       // ---- CLIENTES ----
       match /clientes/{clienteId} {
         allow read:    if isAuthed() && (tenantId == userTenant() || isAdmin());
-        allow create:  if isAuthed() && (tenantId == userTenant() || isAdmin()) && matchesTenantField(tenantId) && validAuthorFields();
-        allow update:  if isAuthed() && (tenantId == userTenant() || isAdmin()) && matchesTenantField(tenantId) && validAuthorFields();
-        // excluir clientes: somente admin/master
+        allow create:  if isAuthed() && (tenantId == userTenant() || isAdmin())
+                          && matchesTenantField(tenantId) && validAuthorFields();
+        allow update:  if isAuthed() && (tenantId == userTenant() || isAdmin())
+                          && matchesTenantField(tenantId) && validAuthorFields();
         allow delete:  if isAdmin() && tenantId == userTenant();
 
         // subcoleção produtos (apenas admin para escrita)
         match /produtos/{prodId} {
           allow read: if isAuthed() && tenantId == userTenant();
           allow create, update, delete:
-            if isAdmin() && tenantId == userTenant() && matchesTenantField(tenantId) && validAuthorFields();
+            if isAdmin() && tenantId == userTenant()
+               && matchesTenantField(tenantId) && validAuthorFields();
         }
       }
 
       // ---- HISTÓRICO DE PREÇOS ---- (append-only)
       match /historico_precos/{docId} {
         allow read:   if isAuthed() && (tenantId == userTenant() || isAdmin());
-        allow create: if isAuthed() && (tenantId == userTenant() || isAdmin()) && matchesTenantField(tenantId) && validAuthorFields();
+        allow create: if isAuthed() && (tenantId == userTenant() || isAdmin())
+                        && matchesTenantField(tenantId) && validAuthorFields();
         allow update, delete: if false;
       }
 
-      // ---- PEDIDOS ---- (todos podem criar/editar/excluir dentro do tenant)
+      // ---- PEDIDOS ----
       match /pedidos/{pedidoId} {
         allow read:   if isAuthed() && (tenantId == userTenant() || isAdmin());
-        allow create: if isAuthed() && (tenantId == userTenant() || isAdmin()) && matchesTenantField(tenantId) && validAuthorFields();
-        allow update: if isAuthed() && (tenantId == userTenant() || isAdmin()) && matchesTenantField(tenantId) && validAuthorFields();
+        allow create: if isAuthed() && (tenantId == userTenant() || isAdmin())
+                        && matchesTenantField(tenantId) && validAuthorFields();
+        allow update: if isAuthed() && (tenantId == userTenant() || isAdmin())
+                        && matchesTenantField(tenantId) && validAuthorFields();
         allow delete: if isAuthed() && (tenantId == userTenant() || isAdmin());
       }
 
-      // ---- ESTOQUE ---- (user do tenant pode criar/editar; delete só admin)
+      // ---- ESTOQUE ----
       match /inventory/{docId} {
         allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
 
@@ -94,8 +104,7 @@ service cloud.firestore {
              nonNeg(request.resource.data.resfriado_un) &&
              nonNeg(request.resource.data.congelado_kg) &&
              nonNeg(request.resource.data.congelado_cx) &&
-             nonNeg(request.resource.data.congelado_un) &&
-             ("updatedat" in request.resource.data ? isServerTime(request.resource.data.updatedat) : true);
+             nonNeg(request.resource.data.congelado_un);
 
         allow delete: if isAdmin() && tenantId == userTenant();
       }
@@ -110,12 +119,11 @@ service cloud.firestore {
              isUpper(request.resource.data.product) &&
              validTipo(request.resource.data.tipo) &&
              validUnit(request.resource.data.unit) &&
-             (request.resource.data.qty is number && request.resource.data.qty >= 0) &&
-             ("at" in request.resource.data ? isServerTime(request.resource.data.at) : true);
+             (request.resource.data.qty is number && request.resource.data.qty >= 0);
         allow update, delete: if false;
       }
 
-      // ---- DESPESAS ---- (user do tenant pode criar/editar; delete só admin)
+      // ---- DESPESAS ----
       match /despesas/{docId} {
         allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
         allow create, update:
@@ -130,17 +138,23 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // ---- CRM (somente admin/master) ----
+      // ---- CRM (somente admin/master)
       match /crm_contatos/{docId} {
-        allow read, create, update, delete: if isAdmin() && tenantId == userTenant() && matchesTenantField(tenantId) && validAuthorFields();
+        allow read, create, update, delete:
+          if isAdmin() && tenantId == userTenant()
+             && matchesTenantField(tenantId) && validAuthorFields();
       }
       match /crm_leads/{docId} {
-        allow read, create, update, delete: if isAdmin() && tenantId == userTenant() && matchesTenantField(tenantId) && validAuthorFields();
+        allow read, create, update, delete:
+          if isAdmin() && tenantId == userTenant()
+             && matchesTenantField(tenantId) && validAuthorFields();
       }
 
-      // ---- DASHBOARD (somente admin/master) ----
+      // ---- DASHBOARD (somente admin/master)
       match /metrics/{docId} {
-        allow read, write: if isAdmin() && tenantId == userTenant() && matchesTenantField(tenantId) && validAuthorFields();
+        allow read, write:
+          if isAdmin() && tenantId == userTenant()
+             && matchesTenantField(tenantId) && validAuthorFields();
       }
     }
 
