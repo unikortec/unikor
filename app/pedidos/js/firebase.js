@@ -15,14 +15,13 @@ export {
 };
 
 /* ========= App/Auth/DB compartilhados ========= */
-export const app  = rootApp;         // <- export explícito (evita o erro "does not provide an export named 'app'")
+export const app  = rootApp;   // <- export explícito (evita o erro “app”)
 export const auth = rootAuth;
 export const db   = getFirestore(app);
 
 /* ========= Tenant ========= */
 export const TENANT_FIXED = "serranobrecarnes.com.br";
-
-// >>> ADIÇÃO: export para manter compatibilidade com módulos antigos (clientes.js)
+/* >>> Compat com módulos antigos (ex.: clientes.js) */
 export const TENANT_ID = TENANT_FIXED;
 
 let cachedTenantId = TENANT_FIXED;
@@ -51,17 +50,9 @@ onAuthStateChanged(auth, (user) => {
   currentUser = user || null;
   console.log("[PEDIDOS] Auth:", currentUser ? `Logado (${currentUser.email || currentUser.uid})` : "Não logado");
 
-  if (!_init) {
-    _init = true;
-    try { _resolveReady(currentUser); } catch {}
-  }
-
+  if (!_init) { _init = true; try { _resolveReady(currentUser); } catch {} }
   subs.forEach(fn => { try { fn(currentUser); } catch {} });
-
-  if (currentUser) {
-    waiters.forEach(r => { try { r(currentUser); } catch {} });
-    waiters.clear();
-  }
+  if (currentUser) { waiters.forEach(r => { try { r(currentUser); } catch {} }); waiters.clear(); }
 });
 
 // API pública
