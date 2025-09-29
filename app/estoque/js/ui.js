@@ -19,7 +19,6 @@ import { fbFetchAllInventory } from "./firebase.js";
 let termoBusca = "";
 
 export async function bootFromFirestoreIfNeeded() {
-  // Mantém a UI independente do Firestore: só tenta popular "ultimo" se estiver vazio
   try {
     if (!ultimo.value) {
       const docs = await fbFetchAllInventory();
@@ -45,10 +44,7 @@ export async function bootFromFirestoreIfNeeded() {
           dateLabel: "",
           data: snapData,
         };
-        localStorage.setItem(
-          "estoque_v3_last_report",
-          JSON.stringify(ultimo.value)
-        );
+        localStorage.setItem("estoque_v3_last_report", JSON.stringify(ultimo.value));
       }
     }
   } catch (e) {
@@ -79,15 +75,19 @@ export function mountUI() {
         "OK para baixar o modelo de preços e mínimos.\nCancelar para enviar uma planilha."
       );
       if (querModelo) {
-        const blob = gerarModeloConfigXLSX(FAMILIAS);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `MODELO_CONFIG_${Date.now()}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        try{
+          const blob = gerarModeloConfigXLSX(FAMILIAS);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `MODELO_CONFIG_${Date.now()}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        }catch(e){
+          alert("Biblioteca XLSX não carregada.");
+        }
       } else {
         inputUpload.click();
       }
