@@ -1,73 +1,78 @@
 // /app/pedidos/js/firebase.js
-// Reaproveita o MESMO app/auth da raiz (sessão única no portal)
+// Reaproveita o MESMO app/auth da raiz, garantindo sessão única.
 import { app as rootApp, auth as rootAuth } from '/js/firebase.js';
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore,
   collection, addDoc, getDocs, doc, setDoc, getDoc,
-  query, where, orderBy, limit, serverTimestamp, updateDoc
+  query, where, orderBy, limit, serverTimestamp,
+  updateDoc
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-/* ========= Reexports úteis ========= */
-export {
-  collection, addDoc, getDocs, doc, setDoc, getDoc,
-  query, where, orderBy, limit, serverTimestamp, updateDoc
-};
-
-/* ========= App/Auth/DB compartilhados ========= */
-export const app  = rootApp;         // <- export explícito para evitar erro de import
+// Usa o mesmo app/auth do portal/menu
 export const auth = rootAuth;
-export const db   = getFirestore(app);
+export const db   = getFirestore(rootApp);
 
-/* ========= Tenant =========
-   Para Pedidos você vinha usando um tenant fixo.
-   Ainda assim consultamos as claims e caímos no fixo se vazio. */
-export const TENANT_FIXED = "serranobrecarnes.com.br";
-let cachedTenantId = TENANT_FIXED;
-export async function getTenantId() {
-  const u = getCurrentUser();
-  if (!u) return TENANT_FIXED;
-  try {
-    const t = await u.getIdTokenResult(true);
-    cachedTenantId = t.claims?.tenantId || TENANT_FIXED;
-  } catch {
-    cachedTenantId = TENANT_FIXED;
-  }
-  return cachedTenantId;
-}
+// Tenant fixo do Pedidos
+export const TENANT_ID = "serranobrecarnes.com.br";
 
-/* ========= AUTH BUS ========= */
+/* ===================== AUTH READY ===================== */
 let currentUser = null;
 const subs = new Set();
-const waiters = new Set();
+const pendingLoginWaiters = new Set();
 
-let _init = false;
-let _resolveReady;
-export const authReady = new Promise(res => (_resolveReady = res));
+let _authInitialized = false;
+let _resolveAuthReady;
+export const authReady = new Promise((resolve) => { _resolveAuthReady = resolve; });
 
+// Observa mudanças da auth COMPARTILHADA
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 onAuthStateChanged(auth, (user) => {
   currentUser = user || null;
-  console.log("[PEDIDOS] Auth:", currentUser ? `Logado (${currentUser.email || currentUser.uid})` : "Não logado");
+  console.log("Firebase Auth (Pedidos):", currentUser ? `Logado (${currentUser.email || currentUser.uid})` : "Não logado");
 
-  if (!_init) {
-    _init = true;
-    try { _resolveReady(currentUser); } catch {}
+  if (!_authInitialized) {
+    _authInitialized = true;
+    try { _resolveAuthReady(currentUser); } catch {}
   }
 
   subs.forEach(fn => { try { fn(currentUser); } catch {} });
 
   if (currentUser) {
-    waiters.forEach(r => { try { r(currentUser); } catch {} });
-    waiters.clear();
+    pendingLoginWaiters.forEach(resolve => { try { resolve(currentUser); } catch {} });
+    pendingLoginWaiters.clear();
   }
 });
 
-// API pública
-export function onAuthUser(cb){ if (typeof cb === 'function'){ subs.add(cb); cb(currentUser); return ()=>subs.delete(cb); } return ()=>{}; }
+// API pública de auth
+export function onAuthUser(cb){
+  if (typeof cb === 'function') { subs.add(cb); return ()=>subs.delete(cb); }
+  return ()=>{};
+}
 export function getCurrentUser(){ return currentUser; }
 export function isLoggedIn(){ return !!currentUser; }
-export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser) : new Promise(r => waiters.add(r)); }
+export function waitForLogin(){
+  if (currentUser) return Promise.resolve(currentUser);
+  return new Promise((resolve) => { pendingLoginWaiters.add(resolve); });
+}
 
-/* ========= Helpers convenientes de path (opcional) ========= */
-export const colTenants = (name, tenantId) => collection(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name);
-export const docTenants = (name, id, tenantId) => doc(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name, id);
+// (Opcional) claims de tenant
+export async function hasAccessToTenant() {
+  const user = getCurrentUser();
+  if (!user) return false;
+  try {
+    const tokenResult = await user.getIdTokenResult(true);
+    const userTenantId = tokenResult.claims.tenantId;
+    const userRole = tokenResult.claims.role;
+    return (userTenantId === TENANT_ID || userRole === "master");
+  } catch (e) {
+    console.error("Erro ao verificar acesso ao tenant:", e);
+    return false;
+  }
+}
+
+// Re-export Firestore helpers (usados em outros módulos)
+export {
+  collection, addDoc, getDocs, doc, setDoc, getDoc,
+  query, where, orderBy, limit, serverTimestamp,
+  updateDoc
+};
