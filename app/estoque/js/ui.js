@@ -1,4 +1,3 @@
-// app/estoque/js/ui.js
 import { $, fmt3 } from "./constants.js";
 import {
   FAMILIAS,
@@ -53,6 +52,10 @@ export async function bootFromFirestoreIfNeeded() {
 }
 
 export function mountUI() {
+  // logo → volta para /app/
+  const logoEl = document.getElementById("logoHome");
+  if (logoEl) logoEl.onclick = ()=>{ window.location.href = "/app/"; };
+
   const buscaEl = $("#busca");
   if (buscaEl) {
     buscaEl.addEventListener("input", (e) => {
@@ -61,7 +64,6 @@ export function mountUI() {
     });
   }
 
-  // upload/modelo
   const uploadBtn = $("#btnPrecoUpload");
   if (uploadBtn) {
     const inputUpload = document.createElement("input");
@@ -117,7 +119,6 @@ export function render() {
   }
   app.innerHTML = "";
 
-  // Monta cards das famílias sempre usando FAMILIAS como fonte primária (catálogo pode estar vazio)
   FAMILIAS.forEach((fam, idx) => {
     const card = document.createElement("section");
     card.className = `card fam-${idx}`;
@@ -127,7 +128,6 @@ export function render() {
     title.className = "fam-title";
     title.textContent = fam.nome;
 
-    // contagem preenchidos considera itens do catálogo + padrões
     const itensFamilia = Object.keys(catalogo[fam.nome] || {});
     const preenchidos = itensFamilia.filter((p) => {
       const v = getSessao(fam.nome, p);
@@ -145,11 +145,11 @@ export function render() {
     const ordenados = [...new Set([...fam.itens, ...Object.keys(catalogo[fam.nome] || {})])].sort();
 
     for (const p of ordenados) {
-      const row = linhaProduto(fam.nome, p);
+      const row = linhaProduto(fam.nome, p, idx);
       if (row) body.appendChild(row);
     }
     body.appendChild(document.createElement("div")).className = "divider";
-    body.appendChild(blocoNovaLinhaProduto(fam.nome));
+    body.appendChild(blocoNovaLinhaProduto(fam.nome, idx));
 
     head.append(title, meta);
     card.append(head, body);
@@ -157,7 +157,7 @@ export function render() {
   });
 }
 
-function linhaProduto(fam, prod) {
+function linhaProduto(fam, prod, famIdx) {
   ensureCatalogEntry(fam, prod);
   if (termoBusca && !String(prod).toUpperCase().includes(termoBusca)) return null;
 
@@ -171,15 +171,10 @@ function linhaProduto(fam, prod) {
   const last = document.createElement("div");
   last.className = "last";
   const prev = ultimo.value?.data?.[fam]?.[prod];
-  if (prev) {
-    const rk = fmt3(prev.RESFRIADO_KG || 0);
-    const ck = fmt3(prev.CONGELADO_KG || 0);
-    last.textContent = `Última: RESF ${rk} kg | CONG ${ck} kg`;
-  } else {
-    last.textContent = "Última: —";
-  }
+  last.textContent = prev
+    ? `Última: RESF ${fmt3(prev.RESFRIADO_KG || 0)} kg | CONG ${fmt3(prev.CONGELADO_KG || 0)} kg`
+    : "Última: —";
 
-  // chips
   const chips = document.createElement("div");
   chips.className = "chips";
   const cR = document.createElement("div");
@@ -189,32 +184,19 @@ function linhaProduto(fam, prod) {
   cC.className = "chip";
   cC.textContent = "CONGELADO";
   let tipo = "RESFRIADO";
-  cR.onclick = () => {
-    tipo = "RESFRIADO";
-    cR.classList.add("active");
-    cC.classList.remove("active");
-  };
-  cC.onclick = () => {
-    tipo = "CONGELADO";
-    cC.classList.add("active");
-    cR.classList.remove("active");
-  };
+  cR.onclick = () => { tipo = "RESFRIADO"; cR.classList.add("active"); cC.classList.remove("active"); };
+  cC.onclick = () => { tipo = "CONGELADO"; cC.classList.add("active"); cR.classList.remove("active"); };
   chips.append(cR, cC);
 
-  // qty
   const qty = document.createElement("div");
   qty.className = "qty";
   const inp = document.createElement("input");
-  inp.type = "number";
-  inp.step = "0.001";
-  inp.min = "0";
-  inp.placeholder = "KG";
+  inp.type = "number"; inp.step = "0.001"; inp.min = "0"; inp.placeholder = "KG";
   const btnAdd = document.createElement("button");
   btnAdd.className = "btn";
   btnAdd.textContent = "Adicionar";
   qty.append(inp, btnAdd);
 
-  // result + actions
   const res = document.createElement("div");
   res.className = "result";
   const numbers = document.createElement("div");
@@ -224,10 +206,10 @@ function linhaProduto(fam, prod) {
   const actions = document.createElement("div");
   actions.className = "actions";
   const btnEdit = document.createElement("button");
-  btnEdit.className = "btn xs";
+  btnEdit.className = "btn xs btn-edit";
   btnEdit.textContent = "Editar";
   const btnClear = document.createElement("button");
-  btnClear.className = "btn xs";
+  btnClear.className = "btn xs btn-clear";
   btnClear.textContent = "Limpar";
   const btnDel = document.createElement("button");
   btnDel.className = "btn xs";
@@ -239,15 +221,9 @@ function linhaProduto(fam, prod) {
 
   btnAdd.onclick = () => {
     const valStr = (inp.value || "").replace(",", ".");
-    if (valStr === "") {
-      alert("Informe KG.");
-      return;
-    }
+    if (valStr === "") { alert("Informe KG."); return; }
     const v = parseFloat(valStr);
-    if (isNaN(v) || v < 0) {
-      alert("KG inválido.");
-      return;
-    }
+    if (isNaN(v) || v < 0) { alert("KG inválido."); return; }
     setSessaoKg(fam, prod, tipo, v);
     numbers.textContent = resumoTexto(fam, prod);
     inp.value = "";
@@ -274,10 +250,7 @@ function linhaProduto(fam, prod) {
     if (ck === null) return;
     const rkv = parseFloat(String(rk).replace(",", "."));
     const ckv = parseFloat(String(ck).replace(",", "."));
-    if (isNaN(rkv) || isNaN(ckv) || rkv < 0 || ckv < 0) {
-      alert("Valores inválidos.");
-      return;
-    }
+    if (isNaN(rkv) || isNaN(ckv) || rkv < 0 || ckv < 0) { alert("Valores inválidos."); return; }
     editBothKg(fam, prod, rkv, ckv);
     numbers.textContent = resumoTexto(fam, prod);
   };
@@ -304,25 +277,14 @@ function blocoNovaLinhaProduto(fam) {
   cC.className = "chip";
   cC.textContent = "CONGELADO";
   let tipo = "RESFRIADO";
-  cR.onclick = () => {
-    tipo = "RESFRIADO";
-    cR.classList.add("active");
-    cC.classList.remove("active");
-  };
-  cC.onclick = () => {
-    tipo = "CONGELADO";
-    cC.classList.add("active");
-    cR.classList.remove("active");
-  };
+  cR.onclick = () => { tipo = "RESFRIADO"; cR.classList.add("active"); cC.classList.remove("active"); };
+  cC.onclick = () => { tipo = "CONGELADO"; cC.classList.add("active"); cR.classList.remove("active"); };
   chips.append(cR, cC);
 
   const qty = document.createElement("div");
   qty.className = "qty";
   const inp = document.createElement("input");
-  inp.type = "number";
-  inp.step = "0.001";
-  inp.min = "0";
-  inp.placeholder = "KG";
+  inp.type = "number"; inp.step = "0.001"; inp.min = "0"; inp.placeholder = "KG";
   const btnAdd = document.createElement("button");
   btnAdd.className = "btn";
   btnAdd.textContent = "Adicionar";
@@ -334,20 +296,11 @@ function blocoNovaLinhaProduto(fam) {
 
   btnAdd.onclick = () => {
     const prod = (nomeInp.value || "").trim().toUpperCase();
-    if (!prod) {
-      alert("Digite o nome do produto.");
-      return;
-    }
+    if (!prod) { alert("Digite o nome do produto."); return; }
     const valStr = (inp.value || "").replace(",", ".");
-    if (valStr === "") {
-      alert("Informe KG.");
-      return;
-    }
+    if (valStr === "") { alert("Informe KG."); return; }
     const v = parseFloat(valStr);
-    if (isNaN(v) || v < 0) {
-      alert("KG inválido.");
-      return;
-    }
+    if (isNaN(v) || v < 0) { alert("KG inválido."); return; }
 
     ensureCatalogEntry(fam, prod);
     ensureSessaoEntry(fam, prod);
@@ -356,13 +309,9 @@ function blocoNovaLinhaProduto(fam) {
     else editBothKg(fam, prod, getSessao(fam, prod).RESFRIADO_KG, v);
 
     const cur = getSessao(fam, prod);
-    res.textContent = `${prod}: Resfriado ${fmt3(
-      cur.RESFRIADO_KG
-    )} kg | Congelado ${fmt3(cur.CONGELADO_KG)} kg`;
-    nomeInp.value = "";
-    inp.value = "";
+    res.textContent = `${prod}: Resfriado ${fmt3(cur.RESFRIADO_KG)} kg | Congelado ${fmt3(cur.CONGELADO_KG)} kg`;
+    nomeInp.value = ""; inp.value = "";
 
-    // injeta linha real acima do bloco
     const before = linhaProduto(fam, prod);
     if (before) wrap.parentElement.insertBefore(before, wrap);
   };
