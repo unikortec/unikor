@@ -1,5 +1,5 @@
 // app/estoque/js/constants.js
-export const APP_VERSION = "1.0.1";
+export const APP_VERSION = "1.0.3";
 
 export const $ = (s) => document.querySelector(s);
 export const fmt3 = (n) =>
