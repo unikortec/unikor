@@ -1,13 +1,11 @@
-// app/estoque/js/firebase.js
-// Unikor • Estoque — camada Firebase (usa o app central do portal)
-
+// app/estoque/js/firebase.js — camada Firebase (usa o app central do portal)
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore, serverTimestamp, doc, runTransaction, collection,
   addDoc, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-// ⚠️ IMPORTANTE: caminho correto até o app central (portal/js/firebase.js)
+// Caminho correto até o app central do portal:
 // estamos em: app/estoque/js/firebase.js → sobe 3 níveis → /js/firebase.js
 import { app } from "../../../js/firebase.js";
 
@@ -15,8 +13,6 @@ export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
 export async function ensureAuth(){
-  // Se já estiver logado no portal, não faz nada.
-  // Se não houver user (ex.: acesso direto), autentica anônimo só p/ gravar no Firestore.
   if (!auth.currentUser) await signInAnonymously(auth);
 }
 
