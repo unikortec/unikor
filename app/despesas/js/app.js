@@ -1,64 +1,55 @@
-// app/despesas/js/app.js
-import { onAuthUser, getUserShortName, waitForLogin, getGoogleAccessToken, salvarDespesaFirestore } from './firebase.js';
+// /app/despesas/js/app.js
+import { auth, onAuthUser, getGoogleAccessToken } from './firebase.js';
 import { initDrive, uploadArtifacts, saveManualDespesaToDrive } from './drive.js';
 import { QRScanner } from './scanner.js';
-import { parseNFCe, fileToBase64 } from './nfce.js';
-import { parseNFe55XML, parseNFCeXML } from './nfe.js';
+import { parseNFCe } from './nfce.js';
+import { parseNFCeXML, parseNFe55XML } from './nfe.js';
 
-// ========= SW: forçar pegar versão nova sempre =========
-(function swAutoRefresh(){
-  if ('serviceWorker' in navigator){
-    window.addEventListener('load', async ()=>{
-      try {
-        const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-        const ping = ()=> reg.update();
-        document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') ping(); });
-        setInterval(ping, 5*60*1000);
-        reg.addEventListener('updatefound', ()=>{
-          const nw = reg.installing;
-          nw && nw.addEventListener('statechange', ()=>{
-            if (nw.state === 'installed' && navigator.serviceWorker.controller){
-              reg.waiting && reg.waiting.postMessage({type:'SKIP_WAITING'});
-            }
-          });
-        });
-        navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-          if (!window.__reloadedBySW){ window.__reloadedBySW = true; location.reload(); }
-        });
-      } catch {}
-    });
-  }
-})();
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+let scanner = null;
+let gapiInitDone = false;
 
-// ========= UI helpers =========
-const $ = (sel, root=document)=> root.querySelector(sel);
-const $$ = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
-const statusBox = ()=> $('#statusBox');
-function logStatus(text){ if (statusBox()) statusBox().textContent = String(text); }
+function $(sel, root=document){ return root.querySelector(sel); }
+function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+function status(msg){ $('#statusBox').textContent = String(msg || ''); }
+function toast(msg){ try{ alert(msg); }catch{} }
 
-// ========= Header (voltar) + usuário =========
-document.addEventListener('DOMContentLoaded', ()=>{
-  // Botões de voltar
+async function ensureDrive(){
+  if (gapiInitDone) return;
+  await initDrive(async ()=> await getGoogleAccessToken(DRIVE_SCOPE));
+  gapiInitDone = true;
+}
+
+/* ---------- Header / Navegação ---------- */
+function wireHeader(){
   $('#btnVoltar')?.addEventListener('click', ()=> location.href = '/');
-  $('.topbar .logo')?.addEventListener('click', ()=> location.href = '/');
+  $('#logoHome')?.addEventListener('click',   ()=> location.href = '/');
 
-  // Usuário logado (só o nome)
-  onAuthUser(u=>{
+  onAuthUser((user)=>{
     const el = $('#usuarioLogado');
     if (!el) return;
-    el.textContent = u ? `Usuário: ${getUserShortName()}` : 'Usuário: —';
+    if (user) {
+      const name = user.displayName || (user.email ? user.email.split('@')[0] : user.uid);
+      el.textContent = `Usuário: ${name}`;
+    } else {
+      el.textContent = 'Usuário: —';
+    }
   });
-});
+}
 
-// ========= Categorias (persistência local) =========
-const LS_KEY_CATS = 'unikor_despesas:cats';
+/* ---------- Categorias (persistir no localStorage) ---------- */
+const CAT_KEY = 'unikor_despesas:cats';
 function getCats(){
-  try{ const v = JSON.parse(localStorage.getItem(LS_KEY_CATS)||'null'); 
-       return v && Array.isArray(v) ? v : ["Alimentação","Manutenção","Combustível","Limpeza","Embalagens"]; 
-  }catch{ return ["Alimentação","Manutenção","Combustível","Limpeza","Embalagens"]; }
+  try{ return JSON.parse(localStorage.getItem(CAT_KEY)||'[]'); }catch{ return []; }
 }
 function setCats(list){
-  try{ localStorage.setItem(LS_KEY_CATS, JSON.stringify(Array.from(new Set(list.filter(Boolean))))); }catch{}
+  try{ localStorage.setItem(CAT_KEY, JSON.stringify(list||[])); }catch{}
+}
+function addCatIfNew(cat){
+  const c = (String(cat||'').trim());
+  if (!c) return;
+  const list = getCats();
+  if (!list.includes(c)) { list.push(c); setCats(list); hydrateCats(); }
 }
 function hydrateCats(){
   const dl = $('#listaCategorias'); if (!dl) return;
@@ -67,294 +58,247 @@ function hydrateCats(){
     const o = document.createElement('option'); o.value = c; dl.appendChild(o);
   });
 }
-document.addEventListener('DOMContentLoaded', hydrateCats);
 
-// ========= jsPDF (dinâmico) =========
-let jsPDF = null;
-async function ensureJsPDF(){
-  if (jsPDF) return jsPDF;
-  const mod = await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-  jsPDF = mod.jspdf || mod.jsPDF || mod.default || mod;
-  return jsPDF;
+/* ---------- Linhas de produto (manual) ---------- */
+function addProdutoLinha(){
+  const box = $('#produtosBox');
+  const linha = document.createElement('div');
+  linha.className = 'produto-linha';
+  linha.innerHTML = `
+    <input class="produto-nome"  placeholder="Produto">
+    <input class="produto-valor" type="number" step="0.01" placeholder="Valor (R$)">
+    <button type="button" class="btn btn-add-linha" title="Adicionar linha">+</button>`;
+  box.appendChild(linha);
 }
-
-// ========= GDrive init =========
-async function ensureDrive(){
-  await initDrive(getGoogleAccessToken);
-}
-
-// ========= PDF helpers =========
-async function buildManualPDF({categoria, estabelecimento, produtos, total, usuario}){
-  await ensureJsPDF();
-  const doc = new jsPDF();
-
-  let y = 14;
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text('DESPESA MANUAL', 14, y); y+=8;
-
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  doc.text(`Categoria: ${categoria||'-'}`, 14, y); y+=6;
-  doc.text(`Estabelecimento: ${estabelecimento||'-'}`, 14, y); y+=6;
-  doc.text(`Usuário: ${usuario||'-'}`, 14, y); y+=8;
-
-  doc.setFont('helvetica','bold');
-  doc.text('Itens:', 14, y); y+=6;
-
-  doc.setFont('helvetica','normal');
-  (produtos||[]).forEach(p=>{
-    const line = `• ${(p.nome||'-')}  —  R$ ${(Number(p.valor)||0).toFixed(2)}`;
-    if (y > 280) { doc.addPage(); y = 14; }
-    doc.text(line, 16, y);
-    y+=6;
+function wireProdutos(){
+  document.body.addEventListener('click', (e)=>{
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('btn-add-linha')){
+      addProdutoLinha();
+    }
   });
-  y+=4; doc.setFont('helvetica','bold');
-  doc.text(`TOTAL: R$ ${(Number(total)||0).toFixed(2)}`, 14, y);
+}
+
+/* ---------- PDF helpers ---------- */
+function manualToPDFBlob({ categoria, estabelecimento, produtos, userName }){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'a4' });
+
+  let y = 40;
+  doc.setFontSize(16); doc.text('UNIKOR • Despesa Manual', 40, y); y += 22;
+  doc.setFontSize(11);
+  doc.text(`Usuário: ${userName||'-'}`, 40, y); y += 16;
+  doc.text(`Categoria: ${categoria||'-'}`, 40, y); y += 16;
+  doc.text(`Estabelecimento: ${estabelecimento||'-'}`, 40, y); y += 22;
+
+  doc.setFontSize(12); doc.text('Itens:', 40, y); y += 16;
+  doc.setFontSize(11);
+  let total = 0;
+  (produtos||[]).forEach((p, idx)=>{
+    const nome = String(p.nome||'-');
+    const val  = Number(p.valor)||0;
+    total += val;
+    doc.text(`${idx+1}. ${nome}`, 50, y);
+    doc.text(`R$ ${val.toFixed(2)}`, 480, y, { align:'right' });
+    y += 16;
+  });
+  y += 12;
+  doc.setFontSize(12);
+  doc.text(`TOTAL: R$ ${total.toFixed(2)}`, 480, y, { align:'right' });
 
   return doc.output('blob');
 }
 
-async function buildNFePDF({titulo, headerLines=[], itens=[], total}){
-  await ensureJsPDF();
-  const doc = new jsPDF();
-  let y = 14;
-
-  doc.setFont('helvetica','bold'); doc.setFontSize(16);
-  doc.text(titulo, 14, y); y+=8;
-
-  doc.setFont('helvetica','normal'); doc.setFontSize(11);
-  headerLines.forEach(h=>{ doc.text(h,14,y); y+=6; });
-
-  y+=4; doc.setFont('helvetica','bold');
-  doc.text('Itens:', 14, y); y+=6;
-
-  doc.setFont('helvetica','normal');
-  itens.forEach(it=>{
-    const line = `• ${it.nome} — Qtd ${it.qtd||1} x R$ ${(Number(it.unit)||0).toFixed(2)} = R$ ${(Number(it.subtotal)||0).toFixed(2)}`;
-    if (y > 280) { doc.addPage(); y = 14; }
-    doc.text(line, 16, y); y+=6;
-  });
-
-  y+=4; doc.setFont('helvetica','bold');
-  doc.text(`TOTAL: R$ ${(Number(total)||0).toFixed(2)}`, 14, y);
-
+function simpleNFCePDFBlob({ url, categoria, userName }){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'a4' });
+  let y = 40;
+  doc.setFontSize(16); doc.text('UNIKOR • NFC-e', 40, y); y += 22;
+  doc.setFontSize(11);
+  doc.text(`Usuário: ${userName||'-'}`, 40, y); y += 16;
+  doc.text(`Categoria: ${categoria||'-'}`, 40, y); y += 16;
+  doc.text('URL do QR:', 40, y); y += 16;
+  doc.setFontSize(10);
+  const lines = doc.splitTextToSize(String(url||'-'), 520);
+  lines.forEach(l=>{ doc.text(l, 40, y); y += 14; });
   return doc.output('blob');
 }
 
-// ========= UI: Despesa Manual =========
-function recalcManualTotal(){
-  const total = $$('.produto-linha').reduce((s,ln)=>{
-    const v = parseFloat(ln.querySelector('.produto-valor')?.value || '0')||0;
-    return s+v;
-  },0);
-  const el = $('#manualTotal');
-  if (el) el.textContent = `Total: R$ ${total.toFixed(2)}`;
-  return total;
-}
+/* ---------- Salvar Despesa Manual ---------- */
+async function handleSalvarManual(){
+  const categoria = $('#categoriaManual')?.value?.trim() || 'GERAL';
+  const estabelecimento = $('#estabelecimento')?.value?.trim() || '';
+  const produtos = $all('.produto-linha').map(l=>({
+    nome:  l.querySelector('.produto-nome')?.value?.trim(),
+    valor: parseFloat(l.querySelector('.produto-valor')?.value||0) || 0
+  })).filter(p=>p.nome || p.valor);
 
-document.addEventListener('input', (e)=>{
-  if (e.target && e.target.classList.contains('produto-valor')) recalcManualTotal();
-});
-
-document.addEventListener('click', (e)=>{
-  if (e.target && e.target.classList.contains('btn-add-linha')){
-    const linha = e.target.closest('.produto-linha');
-    const clone = linha.cloneNode(true);
-    clone.querySelectorAll('input').forEach(i=> i.value = '');
-    linha.parentNode.appendChild(clone);
+  if (!produtos.length){
+    toast('Adicione pelo menos um produto.');
+    return;
   }
-});
 
-$('#btnSalvarManual')?.addEventListener('click', async ()=>{
+  addCatIfNew(categoria);
+
+  // nome do usuário logado
+  const user = auth.currentUser;
+  const userName = user?.displayName || (user?.email ? user.email.split('@')[0] : '-');
+
   try{
-    logStatus('Gerando PDF…');
+    status('Gerando PDF…');
+    const pdfBlob = manualToPDFBlob({ categoria, estabelecimento, produtos, userName });
 
-    const categoria = $('#categoriaManual')?.value || 'GERAL';
-    const estabelecimento = $('#estabelecimento')?.value || '';
-    // persiste categoria digitada
-    setCats([...(getCats()), categoria]);
-
-    const produtos = $$('.produto-linha').map(l=>({
-      nome: l.querySelector('.produto-nome')?.value || '',
-      valor: parseFloat(l.querySelector('.produto-valor')?.value || '0')||0
-    }));
-    const total = produtos.reduce((s,p)=> s+(Number(p.valor)||0), 0);
-
-    await waitForLogin();
     await ensureDrive();
+    status('Enviando ao Drive…');
+    const nowISO = new Date().toISOString();
+    const safeEstab = (estabelecimento||'SEM-ESTAB').replace(/[^\p{L}\p{N}\-_. ]/gu,'').trim();
+    const filename = `MANUAL_${categoria.toUpperCase()}_${safeEstab}_${nowISO.slice(0,16).replace(/[:T]/g,'-')}.pdf`;
 
-    // PDF
-    const usuario = getUserShortName();
-    const pdfBlob = await buildManualPDF({ categoria, estabelecimento, produtos, total, usuario });
-    const whenIso = new Date().toISOString();
-    const pdfName = `MANUAL_${categoria.toUpperCase()}_${whenIso.slice(0,10)}.pdf`;
-
-    // Drive
     await uploadArtifacts({
-      isoDate: whenIso,
+      isoDate: nowISO,
       visualBlob: pdfBlob,
-      visualName: pdfName,
+      visualName: filename,
+      xmlBlob: null,
+      xmlName: null,
       tipo: 'Manuais',
       categoria
     });
 
-    // Firestore
-    await salvarDespesaFirestore({
-      tipo: 'manual',
-      categoria,
-      estabelecimento,
-      produtos,
-      total,
-      data: whenIso.slice(0,10),
-      origem: { kind:'manual' }
-    });
-
-    logStatus('Despesa manual salva no Drive e no Firestore ✅');
-    alert('Despesa manual salva com sucesso!');
+    status('OK! Salvo no Drive.');
+    toast('Despesa manual salva em PDF no Drive.');
   }catch(e){
     console.error(e);
-    alert('Erro ao salvar despesa manual.');
-    logStatus('Erro: '+ e.message);
+    status('Erro ao salvar no Drive.');
+    toast('Falha ao salvar a despesa.');
   }
-});
+}
 
-// ========= UI: NFC-e (URL ou QR) =========
-let scanner = null;
-
-$('#btnAbrirCamera')?.addEventListener('click', async ()=>{
-  const video = $('#qrVideo');
-  if (!video) return;
-  logStatus('Abrindo câmera…');
-  try{
-    scanner = new QRScanner({
-      video,
-      onResult: (text)=> {
-        $('#qrUrl').value = text;
-        scanner?.stop();
-        $('#qrVideo').style.display = 'none';
-        logStatus('QR lido. Pronto para processar.');
-      },
-      onError: (e)=> { console.warn(e); logStatus(e.message||'Falha na câmera'); }
-    });
-    $('#qrVideo').style.display = 'block';
-    await scanner.start();
-  }catch(e){
-    console.error(e);
-    alert(e.message || 'Não foi possível abrir a câmera.');
-  }
-});
-
-$('#btnProcessarNfce')?.addEventListener('click', async ()=>{
+/* ---------- NFC-e: URL e Câmera ---------- */
+async function processarNfceUrl(){
   const url = $('#qrUrl')?.value?.trim();
-  if (!url){ alert('Cole a URL do QR da NFC-e ou leia o QR.'); return; }
+  const categoria = $('#categoriaNfce')?.value?.trim() || 'GERAL';
+  if (!url){ toast('Cole a URL do QR.'); return; }
 
   const parsed = parseNFCe(url);
-  if (!parsed){ alert('URL de NFC-e inválida.'); return; }
+  if (!parsed){ toast('URL inválida de NFC-e.'); return; }
+
+  const user = auth.currentUser;
+  const userName = user?.displayName || (user?.email ? user.email.split('@')[0] : '-');
 
   try{
-    logStatus('Gerando PDF da NFC-e…');
-    await waitForLogin();
+    status('Gerando PDF da NFC-e…');
+    const pdfBlob = simpleNFCePDFBlob({ url, categoria, userName });
+
     await ensureDrive();
-
-    // Monta um PDF simples com a “chave” (se quiseres, depois puxamos XML de portais SEFAZ)
-    const header = [
-      `Acesso: ${parsed.accessKey}`,
-      `Modelo: 65`
-    ];
-    const pdfBlob = await buildNFePDF({
-      titulo: 'NFC-e (QR)',
-      headerLines: header,
-      itens: [],
-      total: 0
-    });
-
-    const whenIso = new Date().toISOString();
-    const categoria = ($('#categoriaNfce')?.value || 'GERAL');
-    const pdfName = `NFCE_${parsed.accessKey.slice(0,8)}_${whenIso.slice(0,10)}.pdf`;
+    status('Enviando ao Drive…');
+    const nowISO = new Date().toISOString();
+    const filename = `NFCE_${categoria.toUpperCase()}_${parsed.accessKey.slice(0,10)}_${nowISO.slice(0,16).replace(/[:T]/g,'-')}.pdf`;
 
     await uploadArtifacts({
-      isoDate: whenIso,
+      isoDate: nowISO,
       visualBlob: pdfBlob,
-      visualName: pdfName,
+      visualName: filename,
+      xmlBlob: null,
+      xmlName: null,
       tipo: 'NFCe',
       categoria
     });
 
-    await salvarDespesaFirestore({
-      tipo: 'nfce',
-      categoria,
-      estabelecimento: '',
-      produtos: [],
-      total: 0,
-      data: whenIso.slice(0,10),
-      origem: { kind:'nfce', accessKey: parsed.accessKey, url }
-    });
-
-    logStatus('NFC-e salva no Drive e no Firestore ✅');
-    alert('NFC-e salva com sucesso!');
+    status('OK! NFC-e salva no Drive.');
+    toast('NFC-e salva em PDF no Drive.');
   }catch(e){
-    console.error(e);
-    alert('Erro ao processar NFC-e.');
-    logStatus('Erro: '+ e.message);
+    console.error(e); status('Erro ao salvar NFC-e no Drive.'); toast('Falha ao salvar NFC-e.');
   }
-});
+}
 
-// ========= UI: NFe 55 (XML) =========
-$('#btnProcessarNfe')?.addEventListener('click', async ()=>{
+function wireCamera(){
+  const video = $('#qrVideo');
+  $('#btnStartCam')?.addEventListener('click', async ()=>{
+    try{
+      if (!scanner) scanner = new QRScanner({
+        video,
+        onResult: (text)=>{ $('#qrUrl').value = text; processarNfceUrl(); stopCam(); },
+        onError: (e)=> status('Câmera: ' + (e?.message||e))
+      });
+      await scanner.start();
+      $('#btnStartCam').disabled = true;
+      $('#btnStopCam').disabled = false;
+      status('Câmera ligada. Mire no QR da NFC-e.');
+    }catch(e){
+      console.error(e); toast('Não foi possível abrir a câmera.'); status('Erro na câmera.');
+    }
+  });
+  function stopCam(){
+    try{ scanner && scanner.stop(); }catch{} 
+    $('#btnStartCam').disabled = false;
+    $('#btnStopCam').disabled = true;
+    status('Câmera desligada.');
+  }
+  $('#btnStopCam')?.addEventListener('click', stopCam);
+}
+
+/* ---------- NFe-55 (XML) -> PDF bem simples + XML no Drive ---------- */
+async function handleProcessarNfe(){
   const inp = $('#xmlFile');
-  if (!inp?.files?.length){ alert('Selecione um arquivo XML.'); return; }
-  const file = inp.files[0];
+  const f = inp?.files?.[0];
+  if (!f){ toast('Selecione um arquivo XML.'); return; }
+
+  let xmlStr = '';
+  try{ xmlStr = await f.text(); }catch{ toast('Erro ao ler arquivo.'); return; }
+
+  // tenta ambos parsers (NFCe e NFe55) para gerar um PDF rápido
+  let data = null;
+  try{ data = parseNFe55XML(xmlStr); }catch{}
+  if (!data){ try{ data = parseNFCeXML(xmlStr); }catch{} }
+  if (!data){ toast('XML inválido.'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'a4' });
+  let y = 40;
+  doc.setFontSize(16); doc.text('UNIKOR • NFe-55 / NFC-e (resumo)', 40, y); y += 22;
+  doc.setFontSize(11);
+  doc.text(`Empresa: ${data.empresa||'-'}`, 40, y); y += 16;
+  doc.text(`CNPJ: ${data.cnpj||'-'}`, 40, y); y += 16;
+  doc.text(`Data: ${data.data||'-'}`, 40, y); y += 16;
+  doc.text(`Total: R$ ${(Number(data.total)||0).toFixed(2)}`, 40, y); y += 22;
+  doc.text('Itens:', 40, y); y += 16;
+  (data.itens||[]).slice(0,25).forEach((it, i)=>{
+    doc.text(`${i+1}. ${it.nome||'-'}`, 50, y);
+    doc.text(`${(it.qtd||0)} x R$ ${(it.unit||0).toFixed(2)} = R$ ${(it.subtotal||0).toFixed(2)}`, 480, y, { align:'right' });
+    y += 14;
+  });
+  const pdfBlob = doc.output('blob');
 
   try{
-    const xmlStr = atob(await fileToBase64(file));
-    // tenta 55, senão cai para NFCe-XML
-    const info = parseNFe55XML(xmlStr) || parseNFCeXML(xmlStr);
-
-    const header = [
-      `Empresa: ${info.empresa||'-'}`,
-      `CNPJ: ${info.cnpj||'-'}`,
-      `Data: ${info.data||'-'}`
-    ];
-    const pdfBlob = await buildNFePDF({
-      titulo: info.origem==='nfe55' ? 'NF-e (55)' : 'NFC-e (XML)',
-      headerLines: header,
-      itens: info.itens||[],
-      total: info.total||0
-    });
-
-    await waitForLogin(); 
     await ensureDrive();
-
-    const catInput = $('#categoriaNfe55') || $('#categoriaNfce'); // se existir campo próprio, usa
-    const categoria = catInput ? (catInput.value||'GERAL') : 'GERAL';
-    const whenIso = new Date().toISOString();
-
-    const pdfName = `${info.origem==='nfe55'?'NFE55':'NFCE_XML'}_${(info.cnpj||'').slice(-6)}_${whenIso.slice(0,10)}.pdf`;
-
+    const nowISO = new Date().toISOString();
+    const pdfName = `NFE55_${(data.empresa||'EMPRESA').replace(/[^\p{L}\p{N}\-_. ]/gu,'')}_${nowISO.slice(0,16).replace(/[:T]/g,'-')}.pdf`;
     await uploadArtifacts({
-      isoDate: whenIso,
+      isoDate: nowISO,
       visualBlob: pdfBlob,
       visualName: pdfName,
       xmlBlob: new Blob([xmlStr], { type:'text/xml' }),
-      xmlName: file.name,
-      tipo: info.origem==='nfe55'?'NFe55':'NFCe',
-      categoria
+      xmlName: f.name,
+      tipo: 'NFe55',
+      categoria: 'GERAL'
     });
-
-    await salvarDespesaFirestore({
-      tipo: info.origem==='nfe55'?'nfe55':'nfce',
-      categoria,
-      estabelecimento: info.empresa || '',
-      produtos: (info.itens||[]).map(i=>({ nome:i.nome, qtd:i.qtd, unit:i.unit, subtotal:i.subtotal })),
-      total: info.total||0,
-      data: info.data || whenIso.slice(0,10),
-      origem: { kind: info.origem }
-    });
-
-    logStatus('XML processado e salvo no Drive/Firestore ✅');
-    alert('XML processado com sucesso!');
+    status('OK! XML e PDF enviados ao Drive.');
+    toast('XML processado e salvo no Drive.');
   }catch(e){
-    console.error(e);
-    alert('Erro ao processar XML.');
-    logStatus('Erro: '+ e.message);
+    console.error(e); status('Erro ao enviar XML ao Drive.'); toast('Falha ao salvar XML.');
   }
+}
+
+/* ---------- Boot ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  wireHeader();
+  hydrateCats();
+  wireProdutos();
+  wireCamera();
+
+  $('#btnSalvarManual')?.addEventListener('click', handleSalvarManual);
+  $('#btnProcessarNfce')?.addEventListener('click', processarNfceUrl);
+  $('#btnProcessarNfe')?.addEventListener('click', handleProcessarNfe);
+
+  status('Pronto.');
 });
