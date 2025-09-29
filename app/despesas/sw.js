@@ -1,11 +1,11 @@
-// Service Worker — DESPESAS v1 (entry=js/app.js)
-const APP_VERSION  = '1.0.4';
+// Service Worker — DESPESAS v1.1
+const APP_VERSION  = '1.1.0';
 const CACHE_TAG    = 'despesas';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
 const OFFLINE_URL  = './index.html';
 
-// Precaching (somente arquivos estáticos que existem)
+// Precaching (somente arquivos estáticos existentes)
 const ASSETS = [
   './',
   './index.html',
@@ -13,19 +13,22 @@ const ASSETS = [
 
   // JS
   './js/app.js',
+  './js/firebase.js',
+  './js/drive.js',
   './js/nfce.js',
   './js/nfe.js',
   './js/scanner.js',
   './js/store.js',
-  // proxy local do firebase (se você criou):
-  './js/firebase.js',
 
   // CSS
-  './css/style.css',
+  './css/style.css'
 ];
 
 async function putInCache(cacheName, req, res) {
-  try { const c = await caches.open(cacheName); await c.put(req, res); } catch {}
+  try {
+    const c = await caches.open(cacheName);
+    await c.put(req, res);
+  } catch {}
 }
 async function limitCache(cacheName, max = 150) {
   try {
@@ -44,7 +47,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -70,12 +73,6 @@ self.addEventListener('fetch', (event) => {
   const sameOrigin = url.origin === self.location.origin;
   const path = url.pathname.replace(/\/+/g,'/');
 
-  // Nunca servir/armazenar backend público por engano
-  if (path.startsWith('/app/despesas/functions/')) {
-    // Deixa a navegação acontecer; a página tem um guard que redireciona
-    return;
-  }
-
   // Navegação
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
@@ -95,7 +92,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Estáticos precacheados (same-origin)
+  // Estáticos precacheados
   if (sameOrigin) {
     const isPrecached = ASSETS.some(p => url.pathname.endsWith(p.replace('./', '/')));
     if (isPrecached) {
