@@ -15,14 +15,16 @@ export {
 };
 
 /* ========= App/Auth/DB compartilhados ========= */
-export const app  = rootApp;         // <- export explícito para evitar erro de import
+export const app  = rootApp;         // <- export explícito (evita o erro "does not provide an export named 'app'")
 export const auth = rootAuth;
 export const db   = getFirestore(app);
 
-/* ========= Tenant =========
-   Para Pedidos você vinha usando um tenant fixo.
-   Ainda assim consultamos as claims e caímos no fixo se vazio. */
+/* ========= Tenant ========= */
 export const TENANT_FIXED = "serranobrecarnes.com.br";
+
+// >>> ADIÇÃO: export para manter compatibilidade com módulos antigos (clientes.js)
+export const TENANT_ID = TENANT_FIXED;
+
 let cachedTenantId = TENANT_FIXED;
 export async function getTenantId() {
   const u = getCurrentUser();
@@ -68,6 +70,8 @@ export function getCurrentUser(){ return currentUser; }
 export function isLoggedIn(){ return !!currentUser; }
 export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser) : new Promise(r => waiters.add(r)); }
 
-/* ========= Helpers convenientes de path (opcional) ========= */
-export const colTenants = (name, tenantId) => collection(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name);
-export const docTenants = (name, id, tenantId) => doc(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name, id);
+/* ========= Helpers de path ========= */
+export const colTenants = (name, tenantId) =>
+  collection(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name);
+export const docTenants = (name, id, tenantId) =>
+  doc(db, "tenants", tenantId || cachedTenantId || TENANT_FIXED, name, id);
