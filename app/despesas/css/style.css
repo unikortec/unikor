@@ -1,46 +1,145 @@
-*{box-sizing:border-box}html,body{margin:0;height:100%}
-:root{--brand:#1e7f46;--ink:#163b27;--line:#e4efe8;--card:#fff}
-body{font-family:system-ui,Segoe UI,Roboto,Inter,Arial;background:#f6fbf8;color:var(--ink)}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+:root {
+  --brand:#1e7f46;
+  --ink:#163b27;
+  --line:#e4efe8;
+  --card:#fff;
+}
+body {
+  font-family: system-ui, Segoe UI, Roboto, Inter, Arial;
+  background: #f6fbf8;
+  color: var(--ink);
+}
 
-.topbar{
-  position:sticky; top:0; z-index:10;
-  display:grid;
-  grid-template-columns:40px 1fr 40px;
-  align-items:center;
-  background:var(--brand); color:#fff; padding:10px 14px;
+/* Topo verde */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--brand);
+  color: #fff;
+  padding: 10px 16px;
 }
-.topbar .logo{
-  height:56px; /* ~3x do seu anterior */
-  justify-self:start;
-  cursor:pointer;
+.topbar .logo {
+  height: 84px; /* 3x maior que antes */
+  cursor: pointer;
 }
-.titlebox{
-  text-align:center; justify-self:center; line-height:1.1;
+.topbar .titleBox {
+  margin-left: auto;
+  text-align: right;
 }
-.titlebox .title{ font-size:28px; font-weight:800; }
-.titlebox .subtitle{ font-size:12px; opacity:.9 }
-.btn-back{
-  background:#fff; color:var(--brand); font-size:18px; font-weight:bold;
-  border-radius:8px; padding:4px 10px; cursor:pointer; border:2px solid #fff;
-  box-shadow:0 1px 0 rgba(0,0,0,.06); justify-self:start;
+.topbar .appTitle {
+  font-size: 28px;
+  font-weight: 700;
 }
-.btn-back:hover{ filter:brightness(.95) }
+.topbar .userMini {
+  font-size: 13px;
+  opacity: 0.9;
+}
 
-.wrap{max-width:900px;margin:16px auto;padding:0 12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:16px}
-h1,h2{margin:6px 0}
-.row{display:grid;grid-template-columns:140px 1fr;align-items:center;margin:8px 0}
-.row input, .row select{padding:10px;border:1px solid var(--line);border-radius:10px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
-.btn{padding:12px;border-radius:12px;border:1px solid #cfe7da;background:#fff;cursor:pointer;font-weight:800}
-.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
-.btn.outline{background:#fff}
-.file.lbl{display:inline-flex;align-items:center;justify-content:center}
-.scan-area{margin:10px 0;padding:10px;border:1px dashed var(--line);border-radius:12px;background:#fff}
-.qr{width:100%;max-width:420px;margin:auto}
-.preview{padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace}
-.actions{display:flex;justify-content:flex-end;margin-top:10px}
+/* Botão voltar */
+.btn-back {
+  background: transparent;
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.btn-back:hover { filter: brightness(0.9); }
 
-.produto-linha{display:flex;gap:8px;margin-bottom:8px}
-.produto-linha input{flex:1}
-.produto-linha button{background:var(--brand);color:#fff;font-weight:bold}
+/* Layout principal */
+.wrap {
+  max-width: 900px;
+  margin: 16px auto;
+  padding: 0 12px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+h1,h2 { margin: 6px 0; }
+
+/* Campos */
+.row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  margin: 8px 0;
+  gap: 6px;
+}
+.row input, .row select {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: 100%;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+/* Botões */
+.btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #cfe7da;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn.primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.btn.outline { background: #fff; }
+
+/* Linha de produto */
+.produto-linha {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.produto-linha input { flex: 1; }
+.produto-linha button {
+  background: var(--brand);
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.produto-linha button:hover {
+  filter: brightness(0.9);
+}
+
+/* Área QR */
+.scan-area {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.qr {
+  width: 100%;
+  max-width: 420px;
+  margin: auto;
+}
+.preview {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  white-space: pre-wrap;
+  font-family: ui-monospace, Consolas, monospace;
+}
