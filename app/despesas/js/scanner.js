@@ -3,16 +3,12 @@ let JSQR = null;
 
 async function ensureJSQR(){
   if (JSQR) return JSQR;
-  // Fallback leve via CDN (podes “vendorizar” depois em /vendor/jsqr.js)
   const mod = await import('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
   JSQR = mod.default || mod;
   return JSQR;
 }
 
-function hasBarcodeDetector(){
-  // Alguns navegadores expõem mas não suportam 'qr_code' — testamos modos
-  return 'BarcodeDetector' in window;
-}
+function hasBarcodeDetector(){ return 'BarcodeDetector' in window; }
 
 async function supportsQRFormat(){
   if (!hasBarcodeDetector()) return false;
@@ -36,13 +32,9 @@ export class QRScanner {
 
   async start(){
     try{
-      // Permissões + câmera traseira
       this._stream = await navigator.mediaDevices.getUserMedia({
         audio:false,
-        video:{
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 }, height: { ideal: 720 }
-        }
+        video:{ facingMode:{ ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
       });
       this.video.srcObject = this._stream;
       this.video.setAttribute('playsinline','');
@@ -51,14 +43,13 @@ export class QRScanner {
 
       this._useBD = await supportsQRFormat();
       if (this._useBD){
-        this._detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+        this._detector = new window.BarcodeDetector({ formats:['qr_code'] });
         this._scanWithBarcodeDetector();
       } else {
         await ensureJSQR();
         this._scanWithJSQR();
       }
     }catch(e){
-      // Dicas frequentes
       if (location.protocol !== 'https:' && location.hostname !== 'localhost'){
         this.onError(new Error('Câmera exige HTTPS ou localhost.'));
       } else {
@@ -82,20 +73,15 @@ export class QRScanner {
     }
   }
 
-  _emit(text){
-    try{ this.onResult(String(text||'').trim()); }catch(e){ this.onError(e); }
-  }
+  _emit(text){ try{ this.onResult(String(text||'').trim()); }catch(e){ this.onError(e); } }
 
   _scanWithBarcodeDetector = async ()=>{
     const tick = async ()=>{
       if (!this.video || this.video.readyState < 2) { this._loop = requestAnimationFrame(tick); return; }
       try{
         const dets = await this._detector.detect(this.video);
-        if (dets && dets.length){
-          this._emit(dets[0].rawValue || dets[0].rawValue);
-          return; // encerra após primeiro resultado
-        }
-      }catch(e){ /* ignora frame */ }
+        if (dets && dets.length){ this._emit(dets[0].rawValue || dets[0].rawValue); return; }
+      }catch(e){}
       this._loop = requestAnimationFrame(tick);
     };
     this._loop = requestAnimationFrame(tick);
@@ -112,11 +98,8 @@ export class QRScanner {
       const img = ctx.getImageData(0, 0, vw, vh);
       try{
         const res = JSQR(img.data, vw, vh, { inversionAttempts: 'dontInvert' });
-        if (res && res.data){
-          this._emit(res.data);
-          return;
-        }
-      }catch(e){ /* ignora frame */ }
+        if (res && res.data){ this._emit(res.data); return; }
+      }catch(e){}
       this._loop = requestAnimationFrame(tick);
     };
     this._loop = requestAnimationFrame(tick);
