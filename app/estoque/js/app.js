@@ -1,18 +1,15 @@
-// app/estoque/js/app.js — entrypoint único
 import { $, dtFile } from "./constants.js";
 import { bootFromFirestoreIfNeeded, mountUI, render } from "./ui.js";
 import { snapshotNow, pdfEstoqueBlob, pdfPosicaoBlob } from "./pdf.js";
 import { clearSession } from "./store.js";
 import { fbBatchUpsertSnapshot, ensureAuth } from "./firebase.js";
 
-// Garantir auth (anônima) antes de buscar Firestore
-await ensureAuth();
+await ensureAuth();                 // exige login do usuário
 await bootFromFirestoreIfNeeded();
-
 mountUI();
 render();
 
-/* ===== Ações do topo ===== */
+/* ===== Ações de topo ===== */
 $('#btnExportar').onclick = async ()=>{
   const blob = await pdfEstoqueBlob();
   await salvarSnapshotComoUltimoEEnviar();
@@ -52,7 +49,6 @@ $('#btnLimpar').onclick = ()=>{
   render();
 };
 
-/* ===== Persistência: salvar snapshot local + Firestore ===== */
 async function salvarSnapshotComoUltimoEEnviar(){
   const snap = snapshotNow();
   localStorage.setItem("estoque_v3_last_report", JSON.stringify(snap));
@@ -60,7 +56,7 @@ async function salvarSnapshotComoUltimoEEnviar(){
   catch(e){ console.warn('Falha ao enviar snapshot:', e); }
 }
 
-/* ===== Service Worker (escopo /app/estoque/) ===== */
+/* Service Worker */
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').then(async reg=>{
     try{
