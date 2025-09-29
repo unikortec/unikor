@@ -8,21 +8,20 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
 
-  <!-- jsPDF (PDF) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- Google API + Identity -->
+  <!-- Google APIs (Drive) + OAuth -->
   <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Tesseract (OCR) -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+
+  <!-- jsPDF para gerar PDFs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <button id="btnVoltar" class="btn-back" aria-label="Voltar">←</button>
-    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+    <button id="btnVoltar" class="btn-back" aria-label="Voltar">&larr;</button>
+    <img class="logo" id="logoBtn" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
     <div class="topbar-right">
-      <div class="topbar-title">Despesa</div>
-      <div id="usuarioLogado" class="topbar-user">Usuário: —</div>
+      <div class="title">Despesa</div>
+      <div id="usuarioLogado" class="subtitle">Usuário: —</div>
     </div>
   </header>
 
@@ -31,21 +30,23 @@
     <!-- Despesa Manual -->
     <div class="card">
       <h2>Despesa Manual</h2>
+
       <div class="row">
-        <label>Categoria:</label>
-        <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte" autocomplete="off"/>
+        <label for="categoriaManual">Categoria:</label>
+        <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte"/>
         <datalist id="listaCategorias"></datalist>
       </div>
+
       <div class="row">
-        <label>Estabelecimento:</label>
-        <input id="estabelecimento" placeholder="Nome do local da compra" autocomplete="off"/>
+        <label for="estabelecimento">Estabelecimento:</label>
+        <input id="estabelecimento" placeholder="Nome do local da compra"/>
       </div>
 
       <div id="produtosBox">
         <div class="produto-linha">
-          <input class="produto-nome" placeholder="Produto" autocomplete="off"/>
+          <input class="produto-nome" placeholder="Produto"/>
           <input class="produto-valor" type="number" step="0.01" placeholder="Valor (R$)"/>
-          <button type="button" class="btn btn-add-linha" title="Adicionar linha">+</button>
+          <button type="button" class="btn btn-add-linha" title="Adicionar">+</button>
         </div>
       </div>
 
@@ -54,72 +55,50 @@
       </div>
     </div>
 
-    <!-- NFC-e (URL + Câmera) -->
+    <!-- NFC-e (QR) -->
     <div class="card">
-      <h2>Capturar NFC-e</h2>
+      <h2>Capturar NFC-e (QR)</h2>
+
       <div class="row">
-        <label>Categoria:</label>
-        <input id="categoriaNfce" value="GERAL" autocomplete="off"/>
+        <label for="categoriaNfce">Categoria:</label>
+        <input id="categoriaNfce" value="GERAL"/>
       </div>
 
       <div class="grid2">
         <input id="qrUrl" placeholder="Cole a URL do QR da NFC-e"/>
-        <button id="btnProcessarNfce" class="btn">Processar URL</button>
+        <button id="btnProcessarNfceUrl" class="btn">Processar URL</button>
       </div>
 
-      <!-- Scanner por Câmera -->
       <div class="scan-area">
-        <div class="grid2">
-          <button id="btnAbrirCamera" class="btn outline">Usar câmera</button>
-          <button id="btnFecharCamera" class="btn outline" disabled>Fechar câmera</button>
-        </div>
         <video id="qrVideo" class="qr" playsinline muted></video>
+        <canvas id="qrCanvas" style="display:none"></canvas>
         <div class="grid2" style="margin-top:8px">
-          <button id="btnRodarOCR" class="btn" disabled>Usar OCR (foto atual)</button>
-          <button id="btnPararLeitura" class="btn" disabled>Parar leitura</button>
+          <button id="btnStartCam" class="btn outline">Usar câmera</button>
+          <button id="btnStopCam" class="btn outline">Fechar câmera</button>
         </div>
       </div>
-
-      <div class="preview" id="nfcePreview" style="display:none"></div>
     </div>
 
     <!-- NFe 55 (XML) -->
     <div class="card">
-      <h2>Enviar XML (NFe-55 / NFC-e)</h2>
+      <h2>Enviar XML (NFe-55)</h2>
       <div class="grid2">
-        <input type="file" id="xmlFile" accept=".xml,text/xml" />
+        <label class="btn file lbl">
+          <input type="file" id="xmlFile" accept=".xml" hidden/>
+          Escolher Arquivo
+        </label>
         <button id="btnProcessarNfe" class="btn">Processar XML</button>
       </div>
-      <div class="preview" id="nfePreview" style="display:none"></div>
     </div>
 
     <div class="card">
       <h2>Status</h2>
-      <pre id="statusBox">—</pre>
+      <pre id="statusBox" class="preview">—</pre>
     </div>
 
   </div>
 
-  <!-- App -->
+  <!-- módulos -->
   <script type="module" src="./js/app.js"></script>
-
-  <!-- SW -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' })
-          .then(reg => {
-            reg.addEventListener('updatefound', () => {
-              const nw = reg.installing;
-              nw && nw.addEventListener('statechange', () => {
-                if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-                  reg.waiting && reg.waiting.postMessage({ type:'SKIP_WAITING' });
-                }
-              });
-            });
-          }).catch(()=>{});
-      });
-    }
-  </script>
 </body>
 </html>
