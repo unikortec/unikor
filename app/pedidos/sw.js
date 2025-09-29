@@ -1,67 +1,89 @@
-const CACHE_NAME = 'unikor-pedidos-v1.3.3';
+// /app/pedidos/sw.js
+const APP_VER   = '1.1.0';
+const TAG       = 'pedidos';
+const STATIC    = `${TAG}-static-${APP_VER}`;
+const OFFLINE   = './index.html';
 
-const STATIC_ASSETS = [
+// Shell mínimo para não quebrar APIs do Firebase/Google
+const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './manifest.json',
+
+  // JS essenciais do app (adicione/retire se necessário)
+  './js/app.js',
+  './js/firebase.js',
   './js/utils.js',
   './js/ui.js',
-  './js/firebase.js',
   './js/itens.js',
   './js/clientes.js',
   './js/frete.js',
   './js/pdf.js',
   './js/modal-cliente.js',
-  './js/app.js',
-  '/assets/logo/unikorbranco-logo.svg',
-  '/assets/logo/favicon.ico',
-  '/assets/logo/apple-touch-icon.png'
 ];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(STATIC_ASSETS))
-      .then(() => self.skipWaiting())
-  );
+// utilidades
+async function put(cacheName, req, res) {
+  try { const c = await caches.open(cacheName); await c.put(req, res); } catch {}
+}
+
+self.addEventListener('install', (evt) => {
+  evt.waitUntil((async () => {
+    const c = await caches.open(STATIC);
+    await c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })));
+    self.skipWaiting();
+  })());
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((names) =>
-      Promise.all(names.map((n) => n !== CACHE_NAME && caches.delete(n)))
-    ).then(() => self.clients.claim())
-  );
+self.addEventListener('activate', (evt) => {
+  evt.waitUntil((async () => {
+    // limpa versões antigas
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC)
+      .map(k => caches.delete(k)));
+    await self.clients.claim();
+  })());
 });
 
-// Network-first para HTML/JS (evita prender versão antiga).
-// Cache-first para demais GETs.
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+// recebe mensagem do page script para ativar imediatamente
+self.addEventListener('message', (evt) => {
+  if (evt.data === 'SKIP_WAITING') self.skipWaiting();
+});
 
-  const { request } = event;
-  const isHTML = request.mode === 'navigate' || request.destination === 'document';
-  const isJS   = request.destination === 'script';
+// network-first para navegação; fallback p/ offline
+self.addEventListener('fetch', (evt) => {
+  const req = evt.request;
+  if (req.method !== 'GET') return;
 
-  if (isHTML || isJS) {
-    event.respondWith(
-      fetch(request)
-        .then((resp) => {
-          const copy = resp.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(request, copy));
-          return resp;
-        })
-        .catch(() => caches.match(request))
-    );
+  // navegação
+  if (req.mode === 'navigate') {
+    evt.respondWith((async () => {
+      try {
+        const net = await fetch(req);
+        // guarda última index para offline
+        put(STATIC, './index.html', net.clone());
+        return net;
+      } catch {
+        return (await caches.match('./index.html')) || Response.error();
+      }
+    })());
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
-  );
-});
-
-self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  // estáticos do shell
+  const url = new URL(req.url);
+  const same = url.origin === location.origin;
+  if (same) {
+    const hit = ASSETS.some(p => url.pathname.endsWith(p.replace('./','/')));
+    if (hit) {
+      evt.respondWith((async () => {
+        const cached = await caches.match(req, { ignoreSearch: true });
+        if (cached) return cached;
+        const net = await fetch(req);
+        put(STATIC, req, net.clone());
+        return net;
+      })());
+    }
+  }
 });
