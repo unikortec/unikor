@@ -1,44 +1,75 @@
 // /app/despesas/js/firebase.js
-// Proxy para usar a MESMA sessão Firebase do portal (+ helpers locais)
-
-export { app, auth } from '/js/firebase.js';
-
+// Reaproveita o MESMO app/auth da raiz (sessão única no portal)
+import { app as rootApp, auth as rootAuth } from '/js/firebase.js';
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore,
-  collection, addDoc, serverTimestamp
-} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
-import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
+  collection, addDoc, getDocs, doc, setDoc, getDoc,
+  query, where, orderBy, limit, serverTimestamp, updateDoc
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-// Firestore compartilhado pelo app raiz
-import { app as _rootApp } from '/js/firebase.js';
-export const db = getFirestore(_rootApp);
+/* ========= Reexports úteis ========= */
+export {
+  collection, addDoc, getDocs, doc, setDoc, getDoc,
+  query, where, orderBy, limit, serverTimestamp, updateDoc
+};
 
-// Bus simplificado de auth (para tela mostrar nome/email)
-let _user = null;
-const _subs = new Set();
-onAuthStateChanged(auth, (u) => {
-  _user = u || null;
-  _subs.forEach(fn => { try{ fn(_user); }catch{} });
-});
-export function onAuthUser(cb){ if(typeof cb==='function'){ _subs.add(cb); cb(_user); return ()=>_subs.delete(cb); } return ()=>{}; }
-export function getCurrentUser(){ return _user; }
-export const TENANT_ID = 'serranobrecarnes.com.br';
+/* ========= App/Auth/DB compartilhados ========= */
+export const app  = rootApp;         // <- export explícito para evitar erro de import
+export const auth = rootAuth;
+export const db   = getFirestore(app);
 
-// Salvar “Despesa Manual” no Firestore (respeita suas rules por tenant)
-export async function saveManualToFirestore({ categoria, estabelecimento, itens, total }) {
-  const user = getCurrentUser();
-  if (!user) throw new Error('Sem login');
-  const doc = {
-    tenantId: TENANT_ID,
-    tipo: 'manual',
-    categoria: String(categoria||'GERAL').toUpperCase(),
-    estabelecimento: estabelecimento||'',
-    itens: itens||[],
-    total: Number(total)||0,
-    createdAt: serverTimestamp(),
-    createdBy: user.uid,
-    updatedAt: serverTimestamp(),
-    updatedBy: user.uid
-  };
-  return addDoc(collection(db, `tenants/${TENANT_ID}/despesas`), doc);
+/* ========= Tenant =========
+   Pegamos do token (custom claim tenantId). Se não existir,
+   usamos um fallback (ajuste se quiser outro padrão). */
+const TENANT_FALLBACK = "serranobrecarnes.com.br";
+let cachedTenantId = null;
+export async function getTenantId() {
+  const u = getCurrentUser();
+  if (!u) return TENANT_FALLBACK;
+  try {
+    const t = await u.getIdTokenResult(true);
+    cachedTenantId = t.claims?.tenantId || TENANT_FALLBACK;
+  } catch {
+    cachedTenantId = TENANT_FALLBACK;
+  }
+  return cachedTenantId;
 }
+
+/* ========= AUTH BUS ========= */
+let currentUser = null;
+const subs = new Set();
+const waiters = new Set();
+
+let _init = false;
+let _resolveReady;
+export const authReady = new Promise(res => (_resolveReady = res));
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user || null;
+  console.log("[DESPESAS] Auth:", currentUser ? `Logado (${currentUser.email || currentUser.uid})` : "Não logado");
+
+  if (!_init) {
+    _init = true;
+    try { _resolveReady(currentUser); } catch {}
+  }
+
+  // notifica listeners
+  subs.forEach(fn => { try { fn(currentUser); } catch {} });
+
+  // resolve esperas
+  if (currentUser) {
+    waiters.forEach(r => { try { r(currentUser); } catch {} });
+    waiters.clear();
+  }
+});
+
+// API pública
+export function onAuthUser(cb){ if (typeof cb === 'function'){ subs.add(cb); cb(currentUser); return ()=>subs.delete(cb); } return ()=>{}; }
+export function getCurrentUser(){ return currentUser; }
+export function isLoggedIn(){ return !!currentUser; }
+export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser) : new Promise(r => waiters.add(r)); }
+
+/* ========= Helpers convenientes de path (opcional) ========= */
+export const colTenants = (name, tenantId) => collection(db, "tenants", tenantId || cachedTenantId || TENANT_FALLBACK, name);
+export const docTenants = (name, id, tenantId) => doc(db, "tenants", tenantId || cachedTenantId || TENANT_FALLBACK, name, id);
