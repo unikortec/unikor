@@ -173,5 +173,20 @@
   </script>
 
   <datalist id="listaProdutos"></datalist>
+  <script type="module">
+  // Garante que o input #cliente aceite espaço mesmo se houver listeners globais
+  function desbloquearEspacoNoCliente() {
+    const el = document.getElementById('cliente');
+    if (!el) return;
+    // Captura antes de handlers globais e impede que eles bloqueiem
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === ' ') {
+        // não preventDefault — apenas bloqueia outros handlers que impediriam
+        ev.stopPropagation();
+      }
+    }, true);
+  }
+  document.addEventListener('DOMContentLoaded', desbloquearEspacoNoCliente);
+</script>
 </body>
 </html>
