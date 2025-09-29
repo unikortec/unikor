@@ -1,94 +1,127 @@
+/* ====== Tema Unikor (Estoque) ====== */
 :root{
-  --brand:#1e7f46;      /* verde Unikor */
-  --brand-600:#17693a;
-  --brand-700:#135830;
+  --brand:#1e7f46;      /* primary */
+  --brand-600:#17693a;  /* hover/contorno */
+  --brand-700:#135830;  /* header/botão forte */
 
   --bg:#edf9f1; --card:#ffffff; --line:#e2e8f0;
   --ink:#0e2b14; --muted:#2e5a2e;
 
-  /* Paletas (iguais) */
-  --fam0-soft:#e7fbf0; --fam0-strong:#10b981;
-  --fam1-soft:#edfdf3; --fam1-strong:#22c55e;
-  --fam2-soft:#f5fde8; --fam2-strong:#84cc16;
-  --fam3-soft:#eef7ff; --fam3-strong:#2ea8ff;
-  --fam4-soft:#fff7ed; --fam4-strong:#f59e0b;
-  --fam5-soft:#fef2f2; --fam5-strong:#ef4444;
-  --fam6-soft:#f0f9ff; --fam6-strong:#06b6d4;
-  --fam7-soft:#fdf4ff; --fam7-strong:#a855f7;
-  --fam8-soft:#f1f5f9; --fam8-strong:#334155;
-  --fam9-soft:#fff1f2; --fam9-strong:#f43f5e;
+  /* Paletas das famílias */
+  --fam0-soft:#e7fbf0; --fam0-strong:#10b981;  /* Bovino Gancho */
+  --fam1-soft:#edfdf3; --fam1-strong:#22c55e;  /* Bovino Cortes */
+  --fam2-soft:#f5fde8; --fam2-strong:#84cc16;  /* Caixarias */
+  --fam3-soft:#eef7ff; --fam3-strong:#2ea8ff;  /* Cordeiro */
+  --fam4-soft:#fff7ed; --fam4-strong:#f59e0b;  /* Embutidos */
+  --fam5-soft:#fef2f2; --fam5-strong:#ef4444;  /* Miúdos */
+  --fam6-soft:#f0f9ff; --fam6-strong:#06b6d4;  /* Frango */
+  --fam7-soft:#fdf4ff; --fam7-strong:#a855f7;  /* Peixe */
+  --fam8-soft:#f1f5f9; --fam8-strong:#334155;  /* Queijos */
+  --fam9-soft:#fff1f2; --fam9-strong:#f43f5e;  /* Suíno */
+  --fam10-soft:#fffbe7; --fam10-strong:#d97706;/* DIVERSOS (nova paleta) */
 }
 
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;background:var(--bg);color:var(--ink)}
+body{
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;
+  background:var(--bg);
+  color:var(--ink);
+}
 
 /* ===== Header verde Unikor (50% maior) ===== */
 header.hdr{
   position:sticky;top:0;z-index:5;
-  background:var(--brand);
+  background:var(--brand-700);
   border-bottom:1px solid rgba(255,255,255,.15);
-  padding:18px 16px;                 /* antes 12px → ~50% maior */
-  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  padding:20px 18px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap;
   min-height:70px;
 }
-.hdr .brand{display:flex;align-items:center;gap:10px}
-.hdr .logo{height:28px;width:auto;display:block}
-.hdr .ttl{font-size:20px;margin:0;color:#fff;letter-spacing:.4px}
+.hdr .logo{height:48px;width:auto;cursor:pointer}
+.hdr .ttl{font-size:22px;margin:0;letter-spacing:.5px;color:#fff;font-weight:900}
 .hdr .spacer{flex:1}
-
-.btn{
-  border:2px solid var(--brand-600);
-  background:#ffffff;color:var(--ink);
-  border-radius:12px;padding:10px 14px;cursor:pointer;
-}
-.btn:hover{box-shadow:0 6px 16px rgba(23,68,46,.15)}
-.btn.success{background:var(--brand);color:#fff;border-color:var(--brand)}
 
 .wrap{max-width:980px;margin:16px auto;padding:0 12px}
 
 .toolbar{display:flex;gap:8px;flex-wrap:wrap}
 
-/* ===== Busca: ~metade do tamanho anterior ===== */
+/* Busca ~50% menor */
 .search{
   display:flex;align-items:center;gap:8px;
   border:2px solid var(--brand-600);
-  background:#fff;border-radius:12px;padding:8px 12px;
-  min-width:160px;                    /* antes 220px */
+  background:#fff;border-radius:12px;padding:8px 12px;min-width:160px
 }
-.search input{border:none;outline:none;width:160px} /* antes 220px */
-
+.search input{border:none;outline:none;width:160px}
 @media (max-width:640px){
   .search input{width:140px}
 }
 
-/* ===== Cards / linhas — iguais ao seu CSS ===== */
+/* Botões gerais */
+.btn{
+  border:2px solid var(--brand-600);
+  background:#ffffff;
+  color:var(--ink);
+  border-radius:12px;
+  padding:10px 14px;
+  cursor:pointer;
+}
+.btn:hover{box-shadow:0 6px 16px rgba(23,68,46,.15)}
+.btn.success{
+  background:var(--brand);
+  color:#fff;
+  border-color:var(--brand);
+}
+/* Compartilhar: texto negrito, contorno branco, sem fill */
+.btn.share{
+  border:2px solid #fff;
+  background:transparent;
+  color:#fff;
+  font-weight:700;
+}
+
+/* ===== Cards / Famílias ===== */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;margin-bottom:16px;overflow:hidden}
-.fam-head{display:flex;align-items:center;gap:10px;padding:12px 14px;color:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.fam-head{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px;color:#fff;border-bottom:1px solid var(--line);flex-wrap:wrap
+}
 .fam-title{font-weight:900;letter-spacing:.6px;font-size:18px}
 .fam-body{padding:0 12px 10px}
 .fam-meta{margin-left:auto;font-size:12px;color:#fff;opacity:.95}
 
+/* ===== Linhas ===== */
 .row{
-  display:grid;grid-template-columns: 1fr auto;
+  display:grid;
+  grid-template-columns: 1fr auto;
   grid-template-areas:
     "name last"
     "chips qty"
     "result result";
-  gap:10px;padding:10px 8px;border-bottom:1px dashed var(--line);align-items:center;
+  gap:10px;
+  padding:10px 8px;
+  border-bottom:1px dashed var(--line);
+  align-items:center;
 }
 .name{grid-area:name;font-weight:800}
 .last{grid-area:last;font-size:12px;color:var(--muted);justify-self:end}
 .chips{grid-area:chips;display:flex;gap:8px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);padding:6px 10px;border-radius:999px;background:#fff;cursor:pointer;user-select:none;font-size:12px}
+.chip{
+  border:1px solid var(--line);padding:6px 10px;border-radius:999px;
+  background:#fff;cursor:pointer;user-select:none;font-size:12px
+}
 .chip.active{border-color:var(--brand-700);background:var(--brand-700);color:#fff}
 .qty{grid-area:qty;display:flex;gap:8px;align-items:center;justify-self:end}
 .qty input{width:130px;padding:10px;border:1px solid var(--line);border-radius:10px}
 .result{grid-area:result;font-size:13px;color:var(--ink);padding:4px 2px 6px}
 
-.divider{height:1px;background:var(--line);margin:12px 0}
+/* Ações menores e com espaçamento */
+.actions{display:flex;gap:8px;margin-top:6px}
+.btn.xs{font-size:12px;padding:6px 10px;font-weight:700;border-radius:10px}
+.btn-edit{color:#fff;border-color:transparent}
+.btn-clear{background:#ef4444;color:#fff;border-color:#ef4444}
 
-/* Alternância por família (igual) */
+/* Alternância de fundo por família + cor do botão Editar */
 .fam-0 .fam-head{background:var(--fam0-strong)} .fam-0 .fam-body .row:nth-child(even){background:var(--fam0-soft)}
 .fam-1 .fam-head{background:var(--fam1-strong)} .fam-1 .fam-body .row:nth-child(even){background:var(--fam1-soft)}
 .fam-2 .fam-head{background:var(--fam2-strong)} .fam-2 .fam-body .row:nth-child(even){background:var(--fam2-soft)}
@@ -99,3 +132,17 @@ header.hdr{
 .fam-7 .fam-head{background:var(--fam7-strong)} .fam-7 .fam-body .row:nth-child(even){background:var(--fam7-soft)}
 .fam-8 .fam-head{background:var(--fam8-strong)} .fam-8 .fam-body .row:nth-child(even){background:var(--fam8-soft)}
 .fam-9 .fam-head{background:var(--fam9-strong)} .fam-9 .fam-body .row:nth-child(even){background:var(--fam9-soft)}
+.fam-10 .fam-head{background:var(--fam10-strong)} .fam-10 .fam-body .row:nth-child(even){background:var(--fam10-soft)}
+
+/* cor do botão Editar por família */
+.fam-0  .btn-edit{background:var(--fam0-strong)}
+.fam-1  .btn-edit{background:var(--fam1-strong)}
+.fam-2  .btn-edit{background:var(--fam2-strong)}
+.fam-3  .btn-edit{background:var(--fam3-strong)}
+.fam-4  .btn-edit{background:var(--fam4-strong)}
+.fam-5  .btn-edit{background:var(--fam5-strong)}
+.fam-6  .btn-edit{background:var(--fam6-strong)}
+.fam-7  .btn-edit{background:var(--fam7-strong)}
+.fam-8  .btn-edit{background:var(--fam8-strong)}
+.fam-9  .btn-edit{background:var(--fam9-strong)}
+.fam-10 .btn-edit{background:var(--fam10-strong)}
