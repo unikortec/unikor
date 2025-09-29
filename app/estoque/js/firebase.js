@@ -1,39 +1,35 @@
-// app/estoque/js/firebase.js
-import { getAuth } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+// Firebase (sem anônimo) — requer usuário logado
 import {
   initializeApp, getApps, getApp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
   getFirestore, serverTimestamp, doc, runTransaction, collection,
   addDoc, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-// Importa APENAS o config do app raiz (não exporta 'app' aí)
+// O projeto raiz expõe apenas firebaseConfig
 import { firebaseConfig } from "../../../js/firebase.js";
 
-// Instância única do Firebase App
+// Instância única
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
-// URL de login do seu portal (ajuste se necessário)
-const LOGIN_URL = "/"; // ex.: "/login" se você tiver rota dedicada
+// URL do dashboard/login (ajuste se necessário)
+const LOGIN_URL = "/app/";
 
-// Garante que o usuário esteja logado (sem anônimo)
+// Garante usuário autenticado
 export async function ensureAuth(){
-  const user = auth.currentUser;
-  if (user) return user;
-
-  // Espera uma virada curta do onAuthStateChanged
-  const waited = await new Promise(resolve=>{
+  if (auth.currentUser) return auth.currentUser;
+  const u = await new Promise((resolve)=>{
     const t = setTimeout(()=>resolve(null), 1500);
-    import("https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js").then(({onAuthStateChanged})=>{
-      onAuthStateChanged(auth, u=>{ clearTimeout(t); resolve(u||null); });
-    }).catch(()=>resolve(null));
+    onAuthStateChanged(auth, (user)=>{ clearTimeout(t); resolve(user||null); });
   });
-
-  if (waited) return waited;
-  // Sem usuário → manda para login
+  if (u) return u;
+  // Sem usuário → redireciona
   window.location.href = LOGIN_URL;
   throw new Error("Usuário não autenticado.");
 }
@@ -41,6 +37,7 @@ export async function ensureAuth(){
 export const invId = (family, product) =>
   `${family}__${product}`.toUpperCase().replace(/\s+/g,' ').trim();
 
+// Atualiza/insere inventário (KG) por item
 export async function fbUpsertItemKG({ family, product, resfriado_kg, congelado_kg }){
   await ensureAuth();
   const id  = invId(family, product);
@@ -72,6 +69,7 @@ export async function fbUpsertItemKG({ family, product, resfriado_kg, congelado_
   });
 }
 
+// Grava um snapshot completo (família → produto → kg)
 export async function fbBatchUpsertSnapshot(snapshotData){
   await ensureAuth();
   const batch = writeBatch(db);
