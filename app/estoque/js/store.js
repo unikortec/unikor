@@ -1,4 +1,4 @@
-// app/estoque/js/store.js — estado local (catálogo, sessão, preços) + helpers
+// store.js — estado local (catálogo, sessão, preços) + helpers
 import {
   STORAGE_KEY, LAST_REPORT_KEY, PRICE_DB_KEY, SESSION_KEY,
   loadJSON, saveJSON
