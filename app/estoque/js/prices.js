@@ -1,10 +1,5 @@
-// app/estoque/js/prices.js — geração de planilha e importação de preços/mínimos
 import { getPriceKg, getMinKg, setPriceMin } from "./store.js";
 
-/**
- * Gera planilha modelo (CONFIG) com colunas:
- * FAMILIA | PRODUTO | PRECO_KG | ESTOQUE_MINIMO
- */
 export function gerarModeloConfigXLSX(FAMILIAS){
   const wb = window.XLSX.utils.book_new();
   const linhas = [["FAMILIA","PRODUTO","PRECO_KG","ESTOQUE_MINIMO"]];
@@ -25,9 +20,6 @@ export function gerarModeloConfigXLSX(FAMILIAS){
   return new Blob([wbout], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
 
-/**
- * Importa planilha CONFIG e aplica atualizações parciais
- */
 export async function importarConfigXLS(file, ensureCatalogEntry){
   const data = await file.arrayBuffer();
   const wb = window.XLSX.read(data, {type:'array'});
