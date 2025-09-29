@@ -1,5 +1,5 @@
 // Service Worker — DESPESAS (Auto-Refresh)
-const APP_VERSION  = '1.1.1'; // ↑↑ sempre incremente quando publicar
+const APP_VERSION  = '1.1.2'; // ↑↑ sempre incremente quando publicar
 const CACHE_TAG    = 'despesas';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
 const DYN_CACHE    = `${CACHE_TAG}-dyn-${APP_VERSION}`;
