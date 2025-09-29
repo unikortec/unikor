@@ -4,19 +4,19 @@ import { snapshotNow, pdfEstoqueBlob, pdfPosicaoBlob } from "./pdf.js";
 import { clearSession } from "./store.js";
 import { fbBatchUpsertSnapshot, ensureAuth } from "./firebase.js";
 
-await ensureAuth();                 // exige login do usuário
+await ensureAuth();                 // exige usuário logado
 await bootFromFirestoreIfNeeded();
+
 mountUI();
 render();
 
-/* ===== Ações de topo ===== */
+/* ===== Ações do topo ===== */
 $('#btnExportar').onclick = async ()=>{
   const blob = await pdfEstoqueBlob();
   await salvarSnapshotComoUltimoEEnviar();
   const fname=`ESTOQUE ${dtFile(new Date())}.pdf`;
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 };
 
@@ -38,8 +38,7 @@ $('#btnPosicao').onclick = async ()=>{
   const blob = await pdfPosicaoBlob();
   const fname=`POSIÇÃO ESTOQUE ${dtFile(new Date())}.pdf`;
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  const a=document.createElement('a'); a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 };
 
@@ -49,6 +48,7 @@ $('#btnLimpar').onclick = ()=>{
   render();
 };
 
+/* ===== Persistência: salvar snapshot local + Firestore ===== */
 async function salvarSnapshotComoUltimoEEnviar(){
   const snap = snapshotNow();
   localStorage.setItem("estoque_v3_last_report", JSON.stringify(snap));
@@ -56,7 +56,7 @@ async function salvarSnapshotComoUltimoEEnviar(){
   catch(e){ console.warn('Falha ao enviar snapshot:', e); }
 }
 
-/* Service Worker */
+/* ===== Service Worker (escopo /app/estoque/) ===== */
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').then(async reg=>{
     try{
