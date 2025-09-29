@@ -1,243 +1,59 @@
-/** 
- * Cloud Functions – ingestão de despesas por NFC-e (QR) e NFe 55 (XML).
- * - Salva documento em users/{uid}/expenses/{docId}
- * - (Opcional) Envia HTML/XML para o Google Drive e guarda links.
- *
- * Pré-requisitos:
- * - Ativar Drive API no projeto
- * - Compartilhar a pasta alvo no Drive com a Service Account
- * - Definir env var: DRIVE_PARENT=<folderId> (opcional; se vazio, não sobe arquivo)
- *   firebase functions:config:set app.drive_parent="1AbC..."
- */
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>UNIKOR • Despesas</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#1e7f46">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <img class="logo" src="/assets/logo/unikorverde-logo.svg" alt="UNIKOR" onerror="this.remove()">
+    <div>Despesas • NFC-e (QR) & NFe-55 (XML)</div>
+  </header>
 
-const functions = require("firebase-functions");
-const admin     = require("firebase-admin");
-const cheerio   = require("cheerio");
-const { parseStringPromise } = require("xml2js");
-const { google } = require("googleapis");
+  <main class="wrap">
+    <section class="card">
+      <h2>Capturar NFC-e (QR)</h2>
+      <div class="row">
+        <label>Categoria</label>
+        <select id="inpCat">
+          <option>ALIMENTAÇÃO</option><option>MANUTENÇÃO</option>
+          <option>COMBUSTÍVEL</option><option>LIMPEZA</option>
+          <option>EMBALAGENS</option><option selected>GERAL</option>
+        </select>
+      </div>
+      <div class="grid2">
+        <input id="inpQr" placeholder="Cole a URL do QR da NFC-e"/>
+        <button id="btnQrIngest" class="btn primary">Processar NFC-e</button>
+      </div>
+    </section>
 
-// node-fetch v3 (ESM) em módulo CommonJS → usar import dinâmico:
-const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
+    <section class="card">
+      <h2>Enviar XML (NFe-55)</h2>
+      <div class="grid2">
+        <input id="inpXml" type="file" accept=".xml"/>
+        <button id="btnXmlIngest" class="btn">Processar XML</button>
+      </div>
+    </section>
 
-admin.initializeApp();
-const db = admin.firestore();
+    <section class="card">
+      <h2>Status</h2>
+      <pre id="outMsg" class="preview">Pronto.</pre>
+      <div class="actions">
+        <button class="btn outline" onclick="location.reload()">Recarregar</button>
+        <button class="btn outline" onclick="navigator.serviceWorker?.getRegistration().then(r=>r?.active?.postMessage({type:'SKIP_WAITING'})).then(()=>location.reload())">Atualizar SW</button>
+      </div>
+    </section>
+  </main>
 
-const DRIVE_PARENT =
-  process.env.DRIVE_PARENT || (functions.config().app?.drive_parent || "");
-
-// --- Utils ---
-const allowCors = (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
-  return false;
-};
-
-function streamFromBuffer(buf){
-  const { Readable } = require("stream");
-  const s = new Readable();
-  s.push(buf); s.push(null);
-  return s;
-}
-
-async function driveUpload(name, mime, dataBuffer){
-  if (!DRIVE_PARENT) return null; // desativado se não configurado
-  const auth  = await google.auth.getClient({ scopes: ["https://www.googleapis.com/auth/drive.file"] });
-  const drive = google.drive({ version: "v3", auth });
-  const res = await drive.files.create({
-    requestBody: { name, parents: [DRIVE_PARENT] },
-    media: { mimeType: mime, body: streamFromBuffer(dataBuffer) },
-    fields: "id, webViewLink, webContentLink"
-  });
-  return res.data;
-}
-
-// --- NFC-e (HTML) ---
-async function fetchNfceHtml(qrUrl){
-  const r = await fetch(qrUrl, { redirect: "follow", headers:{'User-Agent':'Mozilla/5.0'} });
-  if (!r.ok) throw new Error(`NFC-e fetch ${r.status}`);
-  return await r.text();
-}
-
-function parseNfceFromHtml(html, accessKey, category, uid, userName){
-  const $ = cheerio.load(html);
-
-  const emitter = {
-    name:
-      ($("td:contains('Emitente'), td:contains('Razão Social')").next().text().trim()) ||
-      ($("td:contains('Emitente')").parent().next().find("td").first().text().trim()) ||
-      ($("h3, .txtTopo, .razaoSocial").first().text().trim()) ||
-      null,
-    cnpj:
-      ($("td:contains('CNPJ')").next().text().replace(/\D/g,'').slice(0,14)) ||
-      ($(":contains('CNPJ')").first().text().replace(/\D/g,'').slice(0,14)) ||
-      null,
-    address:
-      ($("td:contains('Endereço')").next().text().trim()) ||
-      ($(":contains('Endere')").first().next().text().trim()) ||
-      null
-  };
-
-  const dateStr =
-    ($("td:contains('Emissão'), td:contains('Data de Emissão')").next().text().trim()) ||
-    (html.match(/(\d{2}\/\d{2}\/\d{4})[^\d]{1,5}(\d{2}:\d{2}:\d{2})/)?.[0]) ||
-    "";
-  const date = dateStr ? new Date(dateStr) : new Date();
-
-  let pgMethod = ($("td:contains('Forma de Pagamento')").next().text().trim()) || null;
-  const totalStr =
-    ($("td:contains('Valor a Pagar'), td:contains('Valor Total')").next().text().trim()) ||
-    (html.match(/Total\s*R\$\s*([\d\.,]+)/i)?.[1]) || "";
-  const amount = parseFloat((String(totalStr).match(/[\d.,]+/)||["0"])[0].replace(/\./g,'').replace(',','.')) || 0;
-
-  const items = [];
-  $("table, .table").each((_, tbl)=>{
-    const rows = $(tbl).find('tr'); if (rows.length < 2) return;
-    const head = $(rows[0]).text().toUpperCase();
-    const isItems = (head.includes('DESCRI') || head.includes('PROD')) &&
-                    (head.includes('QTD') || head.includes('QUANT')) &&
-                    (head.includes('UNIT')) &&
-                    (head.includes('TOTAL'));
-    if (!isItems) return;
-    for (let i=1;i<rows.length;i++){
-      const tds = $(rows[i]).find('td,th'); if (tds.length < 4) continue;
-      const txts = tds.map((__,td)=>$(td).text().trim()).get();
-      const [descr, qtd, un, vUnit, vTot] = txts;
-      if (!descr) continue;
-      const qty = parseFloat(String(qtd).replace(',','.')) || null;
-      const unitPrice = parseFloat(String(vUnit).replace(/\./g,'').replace(',','.')) || null;
-      const lineTotal = vTot ? parseFloat(String(vTot).replace(/\./g,'').replace(',','.')) :
-                        (qty && unitPrice ? qty*unitPrice : null);
-      items.push({ description: descr, qty, unit: (un||'UN').replace(/\s+/g,''), unitPrice, lineTotal });
+  <script type="module" src="./js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js'));
     }
-  });
-
-  const doc = {
-    type: "NFCe",
-    model: 65,
-    category,
-    accessKey,
-    emitter,
-    payment: { method: pgMethod, amount },
-    date: admin.firestore.Timestamp.fromDate(date),
-    totals: { items: items.length, amount },
-    items,
-    sources: { qrUrl: true },
-    status: "captured",
-    created_by: uid,
-    created_by_name: userName || null,
-    created_at: admin.firestore.FieldValue.serverTimestamp()
-  };
-  return doc;
-}
-
-// --- NFe 55 (XML) ---
-async function parseNfe55Xml(xml, category, uid, userName, accessKeyGuess){
-  const j = await parseStringPromise(xml, { explicitArray:false, ignoreAttrs:false });
-  const nfe = j?.nfeProc?.NFe || j?.NFe;
-  const inf = nfe?.infNFe;
-  const ide = inf?.ide || {};
-  const emit= inf?.emit || {};
-  const det = Array.isArray(inf?.det) ? inf.det : (inf?.det ? [inf.det] : []);
-
-  const accessKey = accessKeyGuess || (inf?.["$"]?.Id || "").replace(/^NFe/,'') || null;
-  const date = new Date(ide?.dhEmi || ide?.dEmi || Date.now());
-
-  const items = det.map(d=>{
-    const p = d?.prod || {};
-    const q = parseFloat(String(p.qCom || p.qTrib || '').replace(',','.')) || null;
-    const v = parseFloat(String(p.vUnCom || p.vUnTrib || '').replace(',','.')) || null;
-    const t = parseFloat(String(p.vProd || '').replace(',','.')) || (q && v ? q*v : null);
-    return {
-      description: p.xProd || null,
-      qty: q,
-      unit: p.uCom || null,
-      unitPrice: v,
-      lineTotal: t
-    };
-  });
-
-  const amount = items.reduce((s,i)=>s+(i.lineTotal||0),0);
-
-  const doc = {
-    type: "NFe",
-    model: 55,
-    category,
-    accessKey,
-    emitter: {
-      name: emit.xNome || null,
-      cnpj: (emit.CNPJ || "").replace(/\D/g,'') || null,
-      address: [
-        emit.enderEmit?.xLgr, emit.enderEmit?.nro, emit.enderEmit?.xBairro,
-        emit.enderEmit?.xMun, emit.enderEmit?.UF
-      ].filter(Boolean).join(", ") || null
-    },
-    payment: { method: null, amount },
-    date: admin.firestore.Timestamp.fromDate(date),
-    totals: { items: items.length, amount },
-    items,
-    sources: { xml: true },
-    status: "captured",
-    created_by: uid,
-    created_by_name: userName || null,
-    created_at: admin.firestore.FieldValue.serverTimestamp()
-  };
-  return doc;
-}
-
-// --- HTTP FUNCTIONS ---
-exports.ingestNfceByQr = functions
-  .region("southamerica-east1")
-  .https.onRequest(async (req, res)=>{
-    try{
-      if (allowCors(req,res)) return;
-      if (req.method !== "POST") return res.status(405).send("POST only");
-      const { uid, userName, category, qrUrl, accessKey } = req.body || {};
-      if (!uid || !qrUrl || !accessKey) return res.status(400).json({ error: "uid/qrUrl/accessKey required" });
-
-      const html = await fetchNfceHtml(qrUrl);
-      const doc  = parseNfceFromHtml(html, accessKey, (category||"GERAL").toUpperCase(), uid, userName);
-
-      try{
-        const up = await driveUpload(`${accessKey}.html`, "text/html", Buffer.from(html,"utf8"));
-        if (up?.id) { doc.sources.driveFileId = up.id; doc.sources.driveWebView = up.webViewLink; }
-      }catch(e){ console.warn("Drive upload NFC-e falhou:", e.message); }
-
-      const ref = db.collection("users").doc(uid).collection("expenses").doc(accessKey);
-      await ref.set(doc, { merge: true });
-
-      return res.json({ ok: true, docId: ref.id, doc });
-    }catch(e){
-      console.error(e);
-      return res.status(500).json({ error: e.message||String(e) });
-    }
-  });
-
-exports.ingestNfe55Xml = functions
-  .region("southamerica-east1")
-  .https.onRequest(async (req, res)=>{
-    try{
-      if (allowCors(req,res)) return;
-      if (req.method !== "POST") return res.status(405).send("POST only");
-      const { uid, userName, category, accessKey, xmlBase64 } = req.body || {};
-      if (!uid || !xmlBase64) return res.status(400).json({ error: "uid/xmlBase64 required" });
-
-      const xml = Buffer.from(xmlBase64, "base64").toString("utf8");
-      const doc = await parseNfe55Xml(xml, (category||"GERAL").toUpperCase(), uid, userName, accessKey);
-
-      try{
-        const up = await driveUpload(`${doc.accessKey||"nfe"}.xml`, "application/xml", Buffer.from(xml,"utf8"));
-        if (up?.id) { doc.sources.driveFileId = up.id; doc.sources.driveWebView = up.webViewLink; }
-      }catch(e){ console.warn("Drive upload NFe55 falhou:", e.message); }
-
-      const id = doc.accessKey || db.collection("_tmp").doc().id;
-      const ref = db.collection("users").doc(uid).collection("expenses").doc(id);
-      await ref.set(doc, { merge: true });
-
-      return res.json({ ok: true, docId: ref.id, doc });
-    }catch(e){
-      console.error(e);
-      return res.status(500).json({ error: e.message||String(e) });
-    }
-  });
+  </script>
+</body>
+</html>
