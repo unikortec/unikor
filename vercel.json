@@ -1,18 +1,12 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/app/despesas/functions/.*", "status": 404 },
-    { "src": "/app/pedidos/functions/.*", "status": 404 },
-    { "src": "/app/estoque/functions/.*", "status": 404 },
+    { "src": "/app/despesas/functions/.*",   "status": 404 },
+    { "src": "/app/pedidos/functions/.*",    "status": 404 },
+    { "src": "/app/estoque/functions/.*",    "status": 404 },
     { "src": "/app/relatorios/functions/.*", "status": 404 },
     { "src": "/app/financeiro/functions/.*", "status": 404 },
 
-    { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/[^/]+\\.(js|css|json|png|svg|ico|jpg|jpeg|webp|gif)$", "dest": "/$1" },
-    { "src": "/.*", "dest": "/index.html" }
-  ]
-}
     { "handle": "filesystem" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/[^/]+\\.(js|css|json|png|svg|ico|jpg|jpeg|webp|gif)$", "dest": "/$1" },
