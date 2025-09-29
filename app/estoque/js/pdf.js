@@ -1,10 +1,9 @@
-// app/estoque/js/pdf.js — geração dos PDFs
 import { fmt3, round3, dtLabel } from "./constants.js";
 import { FAMILIAS, itensDigitadosDaFamilia } from "./catalog.js";
 import { getPriceKg, getMinKg } from "./prices.js";
 import { sessao, ultimo } from "./store.js";
 
-/* ===== Helpers visuais ===== */
+/* Paletas para PDF (não depende do CSS) */
 const PALETAS = [
   {soft:'#ecfdf5',strong:'#10b981'},
   {soft:'#f0fdf4',strong:'#22c55e'},
@@ -15,7 +14,8 @@ const PALETAS = [
   {soft:'#f0f9ff',strong:'#06b6d4'},
   {soft:'#fdf4ff',strong:'#a855f7'},
   {soft:'#f1f5f9',strong:'#334155'},
-  {soft:'#fff1f2',strong:'#f43f5e'}
+  {soft:'#fff1f2',strong:'#f43f5e'},
+  {soft:'#fffbe7',strong:'#d97706'} // Diversos
 ];
 const hex2rgb=h=>{h=h.replace('#','');return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}};
 
@@ -28,7 +28,6 @@ function headerCell2(doc, text, xCenter, topY, boxH, maxW){
   return topY + boxH;
 }
 
-/* ===== Snapshots ===== */
 export function snapshotFromSession(){
   const s={};
   for(const fam of FAMILIAS){
@@ -50,7 +49,6 @@ export function snapshotNow(){
   return {dateISO:now.toISOString(), dateLabel:dtLabel(now), data:snapshotFromSession()};
 }
 
-/* ===== PDF ESTOQUE ===== */
 export async function pdfEstoqueBlob(){
   const { jsPDF } = window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
@@ -67,7 +65,6 @@ export async function pdfEstoqueBlob(){
   const colW = (W - margin*2) / cols;
   const X = (i)=> margin + colW*(i+0.5);
 
-  // barra verde Unikor
   const headerTop = y, headerBoxH = 30;
   doc.setFillColor(30,127,70);
   doc.rect(margin, headerTop, W - margin*2, headerBoxH, 'F');
@@ -89,12 +86,10 @@ export async function pdfEstoqueBlob(){
 
     if(y>540){ doc.addPage(); y=margin; }
 
-    const pal=PALETAS[i%PALETAS.length]; 
-    const soft=hex2rgb(pal.soft); 
-    const strong=hex2rgb(pal.strong);
-    doc.setFillColor(soft.r,soft.g,soft.b); 
-    doc.rect(margin,y,W-margin*2,22,'F');
-    doc.setTextColor(strong.r,strong.g,strong.b); 
+    const pal=PALETAS[i%PALETAS.length];
+    const soft=hex2rgb(pal.soft); const strong=hex2rgb(pal.strong);
+    doc.setFillColor(soft.r,soft.g,soft.b); doc.rect(margin,y,W-margin*2,22,'F');
+    doc.setTextColor(strong.r,strong.g,strong.b);
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
     doc.text(fam, W/2, y+15, {align:'center'});
     doc.setTextColor(0,0,0);
@@ -147,7 +142,6 @@ export async function pdfEstoqueBlob(){
   return doc.output('blob');
 }
 
-/* ===== PDF POSIÇÃO (R$) ===== */
 export async function pdfPosicaoBlob(){
   const { jsPDF } = window.jspdf;
   const doc=new jsPDF({unit:'pt', format:'a4', orientation:'landscape'});
@@ -186,12 +180,11 @@ export async function pdfPosicaoBlob(){
 
     if(y>540){ doc.addPage(); y=margin; }
 
-    const pal=PALETAS[i%PALETAS.length]; 
-    const soft=hex2rgb(pal.soft); 
-    const strong=hex2rgb(pal.strong);
-    doc.setFillColor(soft.r,soft.g,soft.b); 
+    const pal=PALETAS[i%PALETAS.length];
+    const soft=hex2rgb(pal.soft); const strong=hex2rgb(pal.strong);
+    doc.setFillColor(soft.r,soft.g,soft.b);
     doc.rect(margin,y,W-margin*2,22,'F');
-    doc.setTextColor(strong.r,strong.g,strong.b); 
+    doc.setTextColor(strong.r,strong.g,strong.b);
     doc.setFont('helvetica','bold'); doc.setFontSize(14);
     doc.text(fam, W/2, y+14, {align:'center'});
     doc.setTextColor(0,0,0);
@@ -222,7 +215,7 @@ export async function pdfPosicaoBlob(){
       y+=16;
     }
 
-    doc.setFillColor(235, 250, 240); 
+    doc.setFillColor(235, 250, 240);
     doc.rect(margin,y-10,W-margin*2,18,'F');
     doc.setFont('helvetica','bold');
     doc.text('TOTAL',                X(0), y, {align:'center'});
