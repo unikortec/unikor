@@ -1,198 +1,125 @@
-const functions = require('firebase-functions');
-const admin = require('firebase-admin');
-const fetch = (...a) => import('node-fetch').then(({default: f}) => f(...a));
-const cheerio = require('cheerio');
-const { parseStringPromise } = require('xml2js');
+// /functions/index.js  (ESM – Node 18)
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
 
-admin.initializeApp();
-const db = admin.firestore();
-const bucket = admin.storage().bucket();
+try { admin.app(); } catch { admin.initializeApp(); }
 
-// ---------- helpers ----------
-const allowCors = (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  if (req.method === 'OPTIONS') { res.status(204).end(); return true; }
-  return false;
-};
-const yyyymm = (d=new Date())=>{
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  return `${d.getFullYear()}-${m}`;
-};
-const normalizeMoney = (s='')=>{
-  const n = String(s).replace(/\./g,'').replace(',','.');
-  const v = parseFloat(n); return isNaN(v) ? 0 : v;
-};
-async function saveToStorage(path, data, contentType){
-  const file = bucket.file(path);
-  await file.save(data, { contentType, resumable:false, public:true });
-  const publicUrl = `https://storage.googleapis.com/${bucket.name}/${encodeURIComponent(path)}`;
-  return { path, publicUrl };
+/* =============== CORS / Helpers =============== */
+const ALLOWED_ORIGINS = [
+  'https://app.unikor.com.br',
+  'https://unikor.vercel.app',     // mantenha se usa staging
+  'http://localhost:5173',         // dev local (opcional)
+  'http://localhost:3000'
+];
+
+function applyCors(req, res) {
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  return origin;
 }
-function parseNfceHtml(html){
-  const $ = cheerio.load(html);
 
-  const emitter = {
-    name: ($('h3, .txtTopo, .razaoSocial').first().text() || '').trim() || undefined,
-    cnpj: ($(':contains("CNPJ")').first().text().replace(/\D/g,'').slice(0,14)) || undefined,
-    address: ($(':contains("Endere")').first().text() || '').replace(/\s+/g,' ').trim() || undefined
-  };
+function handlePreflight(req, res) {
+  applyCors(req, res);
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+}
 
-  const dateMatch = html.match(/(\d{2}\/\d{2}\/\d{4})[^\d]{1,5}(\d{2}:\d{2}:\d{2})/);
-  const dateStr = dateMatch ? `${dateMatch[1]} ${dateMatch[2]}` : undefined;
+async function fetchText(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': 'UNIKOR/1.0' } });
+  const ct = r.headers.get('content-type') || '';
+  const body = await r.text();
+  return { status: r.status, contentType: ct, body };
+}
 
-  const totalMatch = html.match(/VALOR\s*(?:TOTAL)?\s*\(R\$\)\s*[:\-]?\s*([\d\.,]+)/i) ||
-                     html.match(/Total\s*R\$\s*([\d\.,]+)/i);
-  const amount = totalMatch ? normalizeMoney(totalMatch[1]) : undefined;
-  const payment = {
-    method: ($(':contains("Forma de pagamento")').next().text() || '').trim() || undefined,
-    amount
-  };
+/* =============== Rotas HTTP =============== */
 
-  let items = [];
-  $('table, .table').each((_, el)=>{
-    const rows = $(el).find('tr');
-    if (rows.length < 2) return;
-    const head = $(rows[0]).text().toUpperCase();
-    const isItems = (head.includes('DESCRI') || head.includes('PROD')) &&
-                    (head.includes('QTD') || head.includes('QUANT')) &&
-                    (head.includes('UNIT')) &&
-                    (head.includes('TOTAL'));
-    if (!isItems) return;
+/**
+ * POST /nfceProxy
+ * body: { url: "https://dfe-portal...." }
+ * -> Faz proxy da página/HTML da NFC-e para contornar CORS no browser.
+ */
+export const nfceProxy = functions
+  .region('southamerica-east1')
+  .https.onRequest(async (req, res) => {
+    handlePreflight(req, res);
+    applyCors(req, res);
 
-    for (let i=1;i<rows.length;i++){
-      const tds = $(rows[i]).find('td,th'); if (tds.length < 4) continue;
-      const txts = tds.map((__,td)=>$(td).text().trim()).get();
-      const [descr, qtd, un, vUnit, vTot] = txts;
-      if (!descr) continue;
-      const qty = normalizeMoney(qtd);
-      const unitPrice = normalizeMoney(vUnit);
-      const lineTotal = normalizeMoney(vTot) || +(qty*unitPrice).toFixed(2);
-      items.push({ code: undefined, description: descr, qty, unit: (un||'UN').replace(/\s+/g,''), unitPrice, lineTotal });
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      const { url } = body;
+      if (!url || !/^https:\/\/[a-z0-9.-]+/i.test(url)) {
+        return res.status(400).json({ error: 'URL inválida' });
+      }
+
+      const { status, contentType, body: html } = await fetchText(url);
+      res.setHeader('Content-Type', contentType || 'text/html; charset=utf-8');
+      return res.status(status).send(html);
+    } catch (e) {
+      console.error('nfceProxy error:', e);
+      return res.status(500).json({ error: String(e?.message || e) });
     }
   });
 
-  if (items.length === 0){
-    const rx = /(\d+[^\S\r\n]+)?([A-Z0-9 \-\/\.,]+?)\s+(\d+(?:[.,]\d+)?)\s+([A-Z]{1,4})\s+x\s+([\d\.,]+)\s+([\d\.,]+)/gi;
-    let m; while((m = rx.exec(html)) !== null){
-      items.push({
-        code: m[1]?.trim()||undefined,
-        description: m[2]?.trim(),
-        qty: normalizeMoney(m[3]),
-        unit: m[4],
-        unitPrice: normalizeMoney(m[5]),
-        lineTotal: normalizeMoney(m[6])
-      });
+/**
+ * POST /nfe55Proxy
+ * body: { url: "https://.../xml" }
+ * -> Baixa o XML via backend e retorna como texto (ou usa upload direto no front).
+ */
+export const nfe55Proxy = functions
+  .region('southamerica-east1')
+  .https.onRequest(async (req, res) => {
+    handlePreflight(req, res);
+    applyCors(req, res);
+
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+      const { url } = body;
+      if (!url || !/^https:\/\/[a-z0-9.-]+/i.test(url)) {
+        return res.status(400).json({ error: 'URL inválida' });
+      }
+
+      const r = await fetch(url, { headers: { 'User-Agent': 'UNIKOR/1.0' } });
+      const xml = await r.text();
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+      return res.status(r.status).send(xml);
+    } catch (e) {
+      console.error('nfe55Proxy error:', e);
+      return res.status(500).json({ error: String(e?.message || e) });
     }
-  }
+  });
 
-  const totals = {
-    items: items.reduce((s,it)=>s+(it.lineTotal||0),0),
-    amount: amount ?? undefined
-  };
+/**
+ * POST /injetarSessao
+ * -> Endpoint compatível com o que seu front já chama.
+ *    Hoje só responde OK; se você precisa realmente
+ *    criar cookies/sessão, implemente aqui.
+ */
+export const injetarSessao = functions
+  .region('southamerica-east1')
+  .https.onRequest(async (req, res) => {
+    handlePreflight(req, res);
+    applyCors(req, res);
 
-  return { emitter, dateStr, payment, items, totals };
-}
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-// ---------- NFC-e (65) via QR ----------
-exports.ingestNfceByQr = functions.region('southamerica-east1').https.onRequest(async (req,res)=>{
-  if (allowCors(req,res)) return;
-  try{
-    const { uid, category, qrUrl, accessKey } = req.body || {};
-    if (!uid || !category || !qrUrl || !accessKey) return res.status(400).json({ error:'uid, category, qrUrl e accessKey são obrigatórios.' });
+    try {
+      // TODO: validar token do usuário se necessário
+      // const authHeader = req.headers.authorization;
 
-    const r = await fetch(qrUrl, { headers:{'User-Agent':'Mozilla/5.0'} });
-    if (!r.ok) throw new Error(`Falha ao baixar QR: ${r.status}`);
-    const html = await r.text();
-
-    const parsed = parseNfceHtml(html);
-    const yymm = yyyymm(new Date());
-    const { path, publicUrl } = await saveToStorage(
-      `despesas/${uid}/${yymm}/${category}/NOTA 65/${accessKey}.html`,
-      html,
-      'text/html; charset=utf-8'
-    );
-
-    const doc = {
-      type: 'NFCe',
-      model: 65,
-      category,
-      accessKey,
-      emitter: parsed.emitter,
-      payment: parsed.payment,
-      date: parsed.dateStr || new Date().toISOString(),
-      totals: parsed.totals,
-      items: parsed.items,
-      sources: { qrUrl, htmlPath: path, htmlUrl: publicUrl },
-      created_by: uid,
-      created_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    const ref = await db.collection('users').doc(uid).collection('expenses').add(doc);
-    res.json({ ok:true, id: ref.id, docUrl: publicUrl, doc });
-  }catch(e){
-    console.error(e); res.status(500).json({ error:String(e.message||e) });
-  }
-});
-
-// ---------- NFe (55) XML ----------
-exports.ingestNfe55Xml = functions.region('southamerica-east1').https.onRequest(async (req,res)=>{
-  if (allowCors(req,res)) return;
-  try{
-    const { uid, category, accessKey, xmlBase64 } = req.body || {};
-    if (!uid || !category || !accessKey || !xmlBase64) return res.status(400).json({ error:'uid, category, accessKey e xmlBase64 são obrigatórios.' });
-
-    const xml = Buffer.from(xmlBase64, 'base64').toString('utf8');
-    const yymm = yyyymm(new Date());
-    const { path, publicUrl } = await saveToStorage(
-      `despesas/${uid}/${yymm}/${category}/NOTA 55/${accessKey}.xml`,
-      xml,
-      'application/xml'
-    );
-
-    const j = await parseStringPromise(xml, { explicitArray:false, ignoreAttrs:false });
-    const nfe = j?.nfeProc?.NFe || j?.NFe || {};
-    const inf = nfe?.infNFe || {};
-    const emit = inf?.emit || {};
-    const ide  = inf?.ide  || {};
-    const pag  = inf?.pag  || {};
-
-    const items = []
-      .concat(inf?.det || [])
-      .map(det=>{
-        const p = det.prod || {};
-        const vUn = parseFloat(p.vUnCom || 0);
-        const q   = parseFloat(p.qCom || 0);
-        return {
-          code: p.cProd,
-          description: p.xProd,
-          qty: q,
-          unit: p.uCom,
-          unitPrice: vUn,
-          lineTotal: parseFloat(p.vProd || (vUn*q) || 0)
-        };
-      });
-
-    const totalValor = parseFloat(inf?.total?.ICMSTot?.vNF || items.reduce((s,i)=>s+i.lineTotal,0));
-    const doc = {
-      type: 'NFe55',
-      model: 55,
-      category,
-      accessKey,
-      emitter: { name: emit.xNome, cnpj: emit.CNPJ, address: `${emit.xLgr||''}, ${emit.nro||''}`.trim() },
-      payment: { method: pag?.detPag?.tPag, amount: parseFloat(pag?.detPag?.vPag || totalValor) },
-      date: `${ide.dhEmi || ide.dEmi || new Date().toISOString()}`,
-      totals: { items: totalValor, amount: totalValor },
-      items,
-      sources: { xmlPath: path, xmlUrl: publicUrl },
-      created_by: uid,
-      created_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    const ref = await db.collection('users').doc(uid).collection('expenses').add(doc);
-    res.json({ ok:true, id: ref.id, xmlUrl: publicUrl, doc });
-  }catch(e){
-    console.error(e); res.status(500).json({ error:String(e.message||e) });
-  }
-});
+      return res.json({ ok: true, ts: Date.now() });
+    } catch (e) {
+      console.error('injetarSessao error:', e);
+      return res.status(500).json({ error: String(e?.message || e) });
+    }
+  });
