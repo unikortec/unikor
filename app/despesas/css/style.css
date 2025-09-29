@@ -2,27 +2,38 @@
 :root{--brand:#1e7f46;--ink:#163b27;--line:#e4efe8;--card:#fff}
 body{font-family:system-ui,Segoe UI,Roboto,Inter,Arial;background:#f6fbf8;color:var(--ink)}
 
-.topbar{display:flex;align-items:center;gap:10px;background:var(--brand);color:#fff;padding:10px 14px}
+.topbar{
+  display:flex;align-items:center;gap:12px;
+  background:var(--brand);color:#fff;padding:10px 14px
+}
 .topbar .logo{height:84px} /* 3x */
-.topbar .btn-back{font-size:18px;padding:4px 10px;border-radius:8px;border:2px solid #fff;background:#fff;color:var(--brand);font-weight:700}
 .topbar-right{margin-left:auto;text-align:right}
-.topbar-title{font-size:22px;font-weight:800;line-height:1}
-.topbar-user{font-size:12px;opacity:.95}
+.topbar-right .title{font-size:22px;font-weight:800;line-height:1}
+.topbar-right .subtitle{font-size:12px;opacity:.9}
+
+.btn-back{
+  background:#fff;color:var(--brand);font-size:18px;font-weight:700;
+  border-radius:8px;padding:4px 10px;cursor:pointer;border:2px solid #fff;
+  box-shadow:0 1px 0 rgba(0,0,0,.06)
+}
+.btn-back:hover{filter:brightness(.95)}
 
 .wrap{max-width:900px;margin:16px auto;padding:0 12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:16px}
 h1,h2{margin:6px 0}
-.row{display:grid;grid-template-columns:140px 1fr;align-items:center;margin:8px 0}
-.row select,.row input{padding:10px;border:1px solid var(--line);border-radius:10px}
+.row{display:grid;grid-template-columns:140px 1fr;align-items:center;margin:8px 0;gap:8px}
+.row input, .row select{padding:10px;border:1px solid var(--line);border-radius:10px}
+
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
 .btn{padding:12px;border-radius:12px;border:1px solid #cfe7da;background:#fff;cursor:pointer;font-weight:800}
 .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
 .btn.outline{background:#fff}
+
 .scan-area{margin:10px 0;padding:10px;border:1px dashed var(--line);border-radius:12px;background:#fff}
 .qr{width:100%;max-width:420px;margin:auto}
+
 .preview{padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace}
-.actions{display:flex;justify-content:flex-end;margin-top:10px}
 
 .produto-linha{display:flex;gap:8px;margin-bottom:8px}
 .produto-linha input{flex:1}
-.produto-linha button{background:var(--brand);color:#fff;font-weight:700;border:1px solid var(--brand);border-radius:10px;padding:8px 12px}
+.produto-linha button{background:var(--brand);color:#fff;font-weight:700;border:1px solid var(--brand)}
