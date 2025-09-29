@@ -1,7 +1,4 @@
 // Service Worker — UNIKOR Estoque V1.0.3
-// Estratégias: precache + navigation network-first, CDNs S-W-R, dinâmico p/ same-origin.
-// Atualização imediata via postMessage {type:'SKIP_WAITING'}.
-
 const APP_VERSION  = '1.0.3';
 const CACHE_TAG    = 'estoque';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
@@ -22,8 +19,6 @@ const ASSETS = [
   BASE + 'js/prices.js',
   BASE + 'js/pdf.js',
   BASE + 'js/firebase.js',
-
-  // Ícones globais (PNG) – reuso do portal
   '/assets/logo/android-chrome-192x192.png',
   '/assets/logo/android-chrome-512x512.png',
   '/assets/logo/apple-touch-icon.png',
@@ -64,11 +59,9 @@ self.addEventListener('activate', (event) => {
       try { await self.registration.navigationPreload.enable(); } catch {}
     }
     const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter(k => k.startsWith(`${CACHE_TAG}-`) && ![STATIC_CACHE, DYN_CACHE].includes(k))
-        .map(k => caches.delete(k))
-    );
+    await Promise.all(keys
+      .filter(k => k.startsWith(`${CACHE_TAG}-`) && ![STATIC_CACHE, DYN_CACHE].includes(k))
+      .map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -85,7 +78,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   const sameOrigin = url.origin === self.location.origin;
 
-  // Navegações → network-first (+ preload) + fallback offline
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
@@ -104,7 +96,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Pré-cacheados → cache-first
   if (sameOrigin) {
     const isPrecached = ASSETS.some(p => url.pathname === p || (p.endsWith('index.html') && url.pathname === BASE));
     if (isPrecached) {
@@ -119,7 +110,6 @@ self.addEventListener('fetch', (event) => {
     }
   }
 
-  // CDNs → stale-while-revalidate
   const isCDN = /(^|\.)(?:gstatic|googleapis|jsdelivr|unpkg|cloudflare|cdnjs)\.com$/i.test(url.hostname);
   if (!sameOrigin || isCDN) {
     event.respondWith((async () => {
@@ -132,7 +122,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin não precacheado → network, fallback cache
   event.respondWith((async () => {
     try {
       const net = await fetch(request);
