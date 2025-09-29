@@ -1,8 +1,6 @@
-// app/estoque/js/catalog.js
 import { fmt3, round3 } from "./constants.js";
 import { catalogo, sessao, persist } from "./store.js";
 
-// Adiciona DIVERSOS (vazio para inclusão em tempo de uso)
 export const FAMILIAS = [
   { nome:"BOVINO GANCHO", itens:["CASADO GANCHO","DIANTEIRO GANCHO","COSTELA GANCHO","CHULETA GANCHO","COXA GANCHO"]},
   { nome:"BOVINO CORTES", itens:["ALCATRA","CARNE CABEÇA","CHULETA PRONTA","COXÃO DURO","COXÃO MOLE","MAMINHA","RETALHO OU NABA","VAZIO"]},
@@ -14,12 +12,11 @@ export const FAMILIAS = [
   { nome:"PEIXE", itens:["PANGA","PESCADO"]},
   { nome:"QUEIJOS", itens:["QUEIJO FATIADO","QUEIJO INTEIRO","QUEIJO COLONIAL","QUEIJO COALHO PEÇA","QUEIJO COALHO PALITO"]},
   { nome:"SUINO", itens:["CARRE SUINO","COSTELINHA SUINA","FILEZINHO SUINO","PALETA SUINA","PERNIL SUINO","SOBREPALETA SUINA"]},
-  { nome:"DIVERSOS", itens:[] } // <— família solicitada (vazia)
+  { nome:"DIVERSOS", itens:[] }
 ];
 
 export const PADROES = Object.fromEntries(FAMILIAS.map(f => [f.nome, new Set(f.itens)]));
 
-// ---- helpers de catálogo/sessão ----
 export function ensureCatalogEntry(fam, prod){
   catalogo[fam] ??= {};
   catalogo[fam][prod] ??= { RESFRIADO_KG: 0, CONGELADO_KG: 0 };
@@ -51,7 +48,6 @@ export function clearItem(fam, prod){
     persist();
   }
 }
-// remove do catálogo **apenas** se não for item padrão
 export function deleteIfCustom(fam, prod){
   if (!PADROES[fam]?.has(prod)) {
     if (catalogo[fam]) delete catalogo[fam][prod];
