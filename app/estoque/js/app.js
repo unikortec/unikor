@@ -1,13 +1,14 @@
-// app/estoque/js/app.js
+// app/estoque/js/app.js — entrypoint único
 import { $, dtFile } from "./constants.js";
 import { bootFromFirestoreIfNeeded, mountUI, render } from "./ui.js";
 import { snapshotNow, pdfEstoqueBlob, pdfPosicaoBlob } from "./pdf.js";
 import { clearSession } from "./store.js";
-import { fbBatchUpsertSnapshot } from "./firebase.js";
-import { ensureAuth } from "./firebase.js";
+import { fbBatchUpsertSnapshot, ensureAuth } from "./firebase.js";
 
+// Garantir auth (anônima) antes de buscar Firestore
 await ensureAuth();
 await bootFromFirestoreIfNeeded();
+
 mountUI();
 render();
 
@@ -71,4 +72,3 @@ if('serviceWorker' in navigator){
     }catch(e){}
   }).catch(()=>{});
 }
-
