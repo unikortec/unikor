@@ -8,14 +8,17 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
 
-  <!-- Google APIs (OAuth + Drive) -->
-  <script src="https://apis.google.com/js/api.js"></script>
-  <!-- jsPDF para gerar PDFs no cliente -->
+  <!-- jsPDF (PDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Google API + Identity -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Tesseract (OCR) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <button id="btnVoltar" class="btn-back" title="Voltar">&larr;</button>
+    <button id="btnVoltar" class="btn-back" aria-label="Voltar">←</button>
     <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
     <div class="topbar-right">
       <div class="topbar-title">Despesa</div>
@@ -30,18 +33,18 @@
       <h2>Despesa Manual</h2>
       <div class="row">
         <label>Categoria:</label>
-        <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte" />
+        <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte" autocomplete="off"/>
         <datalist id="listaCategorias"></datalist>
       </div>
       <div class="row">
         <label>Estabelecimento:</label>
-        <input id="estabelecimento" placeholder="Nome do local da compra" />
+        <input id="estabelecimento" placeholder="Nome do local da compra" autocomplete="off"/>
       </div>
 
       <div id="produtosBox">
         <div class="produto-linha">
-          <input class="produto-nome" placeholder="Produto" />
-          <input class="produto-valor" type="number" step="0.01" placeholder="Valor (R$)" />
+          <input class="produto-nome" placeholder="Produto" autocomplete="off"/>
+          <input class="produto-valor" type="number" step="0.01" placeholder="Valor (R$)"/>
           <button type="button" class="btn btn-add-linha" title="Adicionar linha">+</button>
         </div>
       </div>
@@ -51,58 +54,71 @@
       </div>
     </div>
 
-    <!-- NFC-e -->
+    <!-- NFC-e (URL + Câmera) -->
     <div class="card">
-      <h2>Capturar NFC-e (QR)</h2>
+      <h2>Capturar NFC-e</h2>
       <div class="row">
         <label>Categoria:</label>
-        <input id="categoriaNfce" list="listaCategorias" value="GERAL" />
+        <input id="categoriaNfce" value="GERAL" autocomplete="off"/>
       </div>
+
       <div class="grid2">
-        <input id="qrUrl" placeholder="Cole a URL do QR da NFC-e" />
-        <div class="grid2-buttons">
-          <button id="btnAbrirCamera" class="btn outline">Abrir câmera</button>
-          <button id="btnProcessarNfce" class="btn">Processar NFC-e</button>
+        <input id="qrUrl" placeholder="Cole a URL do QR da NFC-e"/>
+        <button id="btnProcessarNfce" class="btn">Processar URL</button>
+      </div>
+
+      <!-- Scanner por Câmera -->
+      <div class="scan-area">
+        <div class="grid2">
+          <button id="btnAbrirCamera" class="btn outline">Usar câmera</button>
+          <button id="btnFecharCamera" class="btn outline" disabled>Fechar câmera</button>
+        </div>
+        <video id="qrVideo" class="qr" playsinline muted></video>
+        <div class="grid2" style="margin-top:8px">
+          <button id="btnRodarOCR" class="btn" disabled>Usar OCR (foto atual)</button>
+          <button id="btnPararLeitura" class="btn" disabled>Parar leitura</button>
         </div>
       </div>
 
-      <div id="scanBox" class="scan-area" hidden>
-        <video id="qrVideo" class="qr" playsinline></video>
-        <div class="actions">
-          <button id="btnFecharScan" class="btn">Fechar</button>
-        </div>
-      </div>
+      <div class="preview" id="nfcePreview" style="display:none"></div>
     </div>
 
-    <!-- NFe 55 -->
+    <!-- NFe 55 (XML) -->
     <div class="card">
-      <h2>Enviar XML (NFe-55)</h2>
-      <div class="row">
-        <label>Categoria:</label>
-        <input id="categoriaNfe" list="listaCategorias" value="GERAL" />
-      </div>
+      <h2>Enviar XML (NFe-55 / NFC-e)</h2>
       <div class="grid2">
         <input type="file" id="xmlFile" accept=".xml,text/xml" />
         <button id="btnProcessarNfe" class="btn">Processar XML</button>
       </div>
+      <div class="preview" id="nfePreview" style="display:none"></div>
     </div>
 
     <div class="card">
       <h2>Status</h2>
       <pre id="statusBox">—</pre>
     </div>
+
   </div>
 
-  <!-- overlay "pensando" -->
-  <div id="busy" class="overlay hidden"><div class="spinner"></div><div class="overlay-msg">Gerando arquivo…</div></div>
-
-  <!-- app -->
+  <!-- App -->
   <script type="module" src="./js/app.js"></script>
 
   <!-- SW -->
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(()=>{});
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(reg => {
+            reg.addEventListener('updatefound', () => {
+              const nw = reg.installing;
+              nw && nw.addEventListener('statechange', () => {
+                if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                  reg.waiting && reg.waiting.postMessage({ type:'SKIP_WAITING' });
+                }
+              });
+            });
+          }).catch(()=>{});
+      });
     }
   </script>
 </body>
