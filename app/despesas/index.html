@@ -1,82 +1,125 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UNIKOR • Despesas</title>
-  <meta name="theme-color" content="#1e7f46" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>UNIKOR • Despesa</title>
+  <meta name="theme-color" content="#1e7f46">
+
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="/assets/logo/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png">
+  <link rel="stylesheet" href="./css/style.css">
+
+  <!-- libs necessárias: Drive API + OAuth + jsPDF -->
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <!-- Topbar -->
+
+  <!-- TOP BAR -->
   <header class="topbar">
-    <button id="btnVoltar" class="btn-back">←</button>
-    <img src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" class="logo" id="logoUnikor">
-    <h1>Despesa</h1>
+    <div class="topbar-left">
+      <button id="btnVoltar" class="btn-back" title="Voltar">←</button>
+      <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR">
+    </div>
+
+    <div class="topbar-right">
+      <h1 class="app-title">Despesa</h1>
+      <div class="user-line"><span id="usuarioLogado">Usuário: —</span></div>
+    </div>
   </header>
-  <div class="wrap">
-    <div id="usuarioLogado">Usuário: —</div>
+
+  <main class="wrap">
 
     <!-- DESPESA MANUAL -->
-    <div class="card">
+    <section class="card">
       <h2>Despesa Manual</h2>
+
       <div class="row">
         <label for="categoriaManual">Categoria:</label>
-        <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte">
-        <datalist id="listaCategorias"></datalist>
-      </div>
-      <div class="row">
-        <label for="estabelecimento">Estabelecimento:</label>
-        <input id="estabelecimento" placeholder="Nome do local da compra">
-      </div>
-      <div id="produtosContainer">
-        <div class="produto-linha">
-          <input type="text" class="produto-nome" placeholder="Produto">
-          <input type="number" class="produto-valor" placeholder="Valor (R$)" step="0.01">
-          <button type="button" class="btn-add-linha">+</button>
+        <div>
+          <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte"/>
+          <datalist id="listaCategorias"></datalist>
         </div>
       </div>
+
+      <div class="row">
+        <label for="estabelecimento">Estabelecimento:</label>
+        <input id="estabelecimento" placeholder="Nome do local da compra"/>
+      </div>
+
+      <div class="grid2" id="linhasProdutos">
+        <div class="produto-linha">
+          <input class="produto-nome" placeholder="Produto"/>
+          <input class="produto-valor" inputmode="decimal" placeholder="Valor (R$)"/>
+          <button class="btn btn primary btn-add-linha" type="button" title="Adicionar linha">+</button>
+        </div>
+      </div>
+
       <div class="actions">
         <button id="btnSalvarManual" class="btn primary">Salvar despesa manual</button>
       </div>
-    </div>
+    </section>
 
-    <!-- NFC-e -->
-    <div class="card">
+    <!-- NFC-e (QR) -->
+    <section class="card">
       <h2>Capturar NFC-e (QR)</h2>
       <div class="row">
-        <label for="categoriaNfce">Categoria:</label>
-        <input id="categoriaNfce" list="listaCategorias" placeholder="GERAL">
+        <label for="categoriaNFCe">Categoria:</label>
+        <div>
+          <input id="categoriaNFCe" list="listaCategorias" value="GERAL"/>
+        </div>
       </div>
+
       <div class="row">
-        <label for="urlNfce">Cole a URL do QR da NFC-e:</label>
-        <input type="text" id="urlNfce" placeholder="Cole a URL do QR da NFC-e">
-        <button id="btnProcessarNfce" class="btn outline">Processar NFC-e</button>
+        <label for="urlNFCe">QR/URL:</label>
+        <input id="urlNFCe" placeholder="Cole a URL do QR da NFC-e">
       </div>
-      <div class="scan-area">
-        <video id="videoQR" class="qr" autoplay playsinline></video>
+
+      <div class="grid2">
+        <button id="btnAbrirCamera" class="btn outline" type="button">Abrir câmera</button>
+        <button id="btnProcessarNFCe" class="btn primary" type="button">Processar NFC-e</button>
       </div>
-    </div>
+
+      <div class="scan-area" id="scanArea" style="display:none">
+        <video id="videoQR" class="qr" playsinline></video>
+        <canvas id="canvasQR" style="display:none"></canvas>
+      </div>
+    </section>
 
     <!-- NFe-55 -->
-    <div class="card">
+    <section class="card">
       <h2>Enviar XML (NFe-55)</h2>
-      <input type="file" id="arquivoNfe" accept=".xml">
-      <button id="btnProcessarNfe" class="btn outline">Processar XML</button>
-    </div>
+      <div class="row">
+        <label class="file lbl" for="xmlFile">Escolher Arquivo</label>
+        <input id="xmlFile" type="file" accept=".xml" />
+        <button id="btnProcessarXML" class="btn outline" type="button">Processar XML</button>
+      </div>
+    </section>
 
-    <!-- STATUS -->
-    <div class="card">
+    <!-- Status / prévia -->
+    <section class="card">
       <h2>Status</h2>
       <pre id="statusBox" class="preview">—</pre>
-      <div class="actions">
-        <button onclick="location.reload()" class="btn outline">Recarregar</button>
-      </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
-  <!-- Scripts -->
-  <script type="module" src="./js/app.js"></script>
+  <!-- módulos -->
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/drive.js"></script>
+  <script type="module" src="./js/nfce.js"></script>
+  <script type="module" src="./js/nfe.js"></script>
   <script type="module" src="./js/scanner.js"></script>
+  <script type="module" src="./js/store.js"></script>
+  <script type="module" src="./js/app.js"></script>
+
+  <!-- SW -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+  </script>
 </body>
 </html>
