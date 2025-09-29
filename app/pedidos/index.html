@@ -171,22 +171,49 @@
       });
     }
   </script>
-
-  <datalist id="listaProdutos"></datalist>
-  <script type="module">
-  // Garante que o input #cliente aceite espaço mesmo se houver listeners globais
-  function desbloquearEspacoNoCliente() {
+<script>
+(function enableSpacesOnCliente(){
+  function patch(){
     const el = document.getElementById('cliente');
-    if (!el) return;
-    // Captura antes de handlers globais e impede que eles bloqueiem
-    el.addEventListener('keydown', (ev) => {
-      if (ev.key === ' ') {
-        // não preventDefault — apenas bloqueia outros handlers que impediriam
-        ev.stopPropagation();
+    if (!el) { requestAnimationFrame(patch); return; }
+
+    // 1) Impede handlers globais de interceptarem a barra de espaço
+    ['keydown','keypress','keyup'].forEach(type=>{
+      el.addEventListener(type, (ev)=>{
+        if (ev.key === ' ') { ev.stopImmediatePropagation(); }
+      }, true); // capture = true => roda antes dos outros
+    });
+
+    // 2) iOS/Safari: beforeinput funciona melhor que keydown
+    el.addEventListener('beforeinput', (ev)=>{
+      if (ev.inputType === 'insertText' && ev.data === ' ') {
+        // deixa passar, só bloqueia propagação
+        ev.stopImmediatePropagation();
       }
     }, true);
+
+    // 3) Se algum script estiver trocando espaço por "_" ou removendo,
+    //    normalizamos de volta durante a digitação
+    el.addEventListener('input', ()=>{
+      const caret = el.selectionStart;
+      const v = el.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
+      if (v !== el.value) {
+        el.value = v;
+        try { el.setSelectionRange(caret, caret); } catch {}
+      }
+    });
+
+    // 4) Garante que o campo é texto puro (sem pattern restritivo)
+    el.setAttribute('type','text');
+    el.setAttribute('inputmode','text');
+    el.removeAttribute('pattern');
   }
-  document.addEventListener('DOMContentLoaded', desbloquearEspacoNoCliente);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', patch);
+  } else {
+    patch();
+  }
+})();
 </script>
 </body>
 </html>
