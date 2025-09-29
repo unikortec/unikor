@@ -4,6 +4,7 @@ app/pedidos/functions
 app/estoque/functions
 app/relatorios/functions
 app/financeiro/functions
+functions
 
 # Ignorar também a pasta raiz functions se existir
 functions
