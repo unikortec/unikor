@@ -1,52 +1,44 @@
 // /app/despesas/js/firebase.js
-// Reusa o app/auth global e adiciona helpers locais (onAuthUser, getGoogleAccessToken)
+// Proxy para usar a MESMA sessão Firebase do portal (+ helpers locais)
 
-import { app as rootApp, auth as rootAuth } from '/js/firebase.js';
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+export { app, auth } from '/js/firebase.js';
 
-// re-export para quem precisar
-export const app  = rootApp;
-export const auth = rootAuth;
+import {
+  getFirestore,
+  collection, addDoc, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js';
 
-/* =============== Auth subscribers (mostrar usuário, etc.) =============== */
+// Firestore compartilhado pelo app raiz
+import { app as _rootApp } from '/js/firebase.js';
+export const db = getFirestore(_rootApp);
+
+// Bus simplificado de auth (para tela mostrar nome/email)
 let _user = null;
 const _subs = new Set();
-
 onAuthStateChanged(auth, (u) => {
   _user = u || null;
-  _subs.forEach(fn => { try { fn(_user); } catch {} });
+  _subs.forEach(fn => { try{ fn(_user); }catch{} });
 });
+export function onAuthUser(cb){ if(typeof cb==='function'){ _subs.add(cb); cb(_user); return ()=>_subs.delete(cb); } return ()=>{}; }
+export function getCurrentUser(){ return _user; }
+export const TENANT_ID = 'serranobrecarnes.com.br';
 
-export function onAuthUser(cb){
-  if (typeof cb === 'function') {
-    _subs.add(cb);
-    // chama imediatamente com o estado atual
-    try { cb(_user); } catch {}
-    return ()=>_subs.delete(cb);
-  }
-  return ()=>{};
-}
-
-export function currentUser(){ return _user; }
-
-/* =============== Google OAuth (Drive) via GSI =============== */
-// Coloque aqui o CLIENT_ID do OAuth que você me passou:
-const GOOGLE_OAUTH_CLIENT_ID = "329806123621-p2ttq9g7th9fdul74u6t7gntla0q2gcm.apps.googleusercontent.com";
-
-/** Solicita um access_token para o escopo desejado (ex.: https://www.googleapis.com/auth/drive.file) */
-export function getGoogleAccessToken(scope) {
-  return new Promise((resolve, reject) => {
-    if (!window.google || !google.accounts || !google.accounts.oauth2) {
-      return reject(new Error('Google OAuth não disponível'));
-    }
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_OAUTH_CLIENT_ID,
-      scope,
-      callback: (resp) => {
-        if (resp && resp.access_token) resolve(resp.access_token);
-        else reject(new Error('Falha ao obter token OAuth'));
-      }
-    });
-    client.requestAccessToken();
-  });
+// Salvar “Despesa Manual” no Firestore (respeita suas rules por tenant)
+export async function saveManualToFirestore({ categoria, estabelecimento, itens, total }) {
+  const user = getCurrentUser();
+  if (!user) throw new Error('Sem login');
+  const doc = {
+    tenantId: TENANT_ID,
+    tipo: 'manual',
+    categoria: String(categoria||'GERAL').toUpperCase(),
+    estabelecimento: estabelecimento||'',
+    itens: itens||[],
+    total: Number(total)||0,
+    createdAt: serverTimestamp(),
+    createdBy: user.uid,
+    updatedAt: serverTimestamp(),
+    updatedBy: user.uid
+  };
+  return addDoc(collection(db, `tenants/${TENANT_ID}/despesas`), doc);
 }
