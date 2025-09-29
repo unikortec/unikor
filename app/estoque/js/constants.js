@@ -1,4 +1,3 @@
-// app/estoque/js/constants.js
 export const APP_VERSION = "1.0.3";
 
 export const $ = (s) => document.querySelector(s);
@@ -24,10 +23,7 @@ export const PRICE_DB_KEY = "estoque_v3_precos";
 export const SESSION_KEY = "estoque_v3_sessao";
 
 export const loadJSON = (k, f) => {
-  try {
-    return JSON.parse(localStorage.getItem(k)) ?? f;
-  } catch {
-    return f;
-  }
+  try { return JSON.parse(localStorage.getItem(k)) ?? f; }
+  catch { return f; }
 };
 export const saveJSON = (k, v) => localStorage.setItem(k, JSON.stringify(v));
