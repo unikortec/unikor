@@ -12,7 +12,6 @@ function twoFirstNamesCamel(client){
   const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
   return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase()).join('').replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
 }
-// >>> Nome com "H" antes da hora
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
   const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
@@ -37,7 +36,7 @@ function lerItensDaTela(){
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso em UN por kg
+    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
@@ -97,8 +96,11 @@ async function construirPDF(){
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
   const margemX=2, larguraCaixa=68;
-  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5; // <-- manter um único bloco
   const SAFE_BOTTOM=280;
+
+  // Larguras da tabela (declaradas UMA vez)
+  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
+
   let y=12;
   const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
 
@@ -176,12 +178,13 @@ async function construirPDF(){
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
   doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 6);
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text(pagamento || "-", margemX + larguraCaixa - 3, y + 6, { align: "right" });
+  doc.text((pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
   y += 12;
 
   // Tabela itens - Cabeçalho
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  // (usamos as mesmas constantes W_* declaradas antes)
   doc.rect(margemX, y, W_PROD, 10, "S");
   doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
   doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
