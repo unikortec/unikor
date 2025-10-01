@@ -173,42 +173,20 @@
     }
   </script>
 
-  <!-- Habilitar espaço no campo Cliente (prioridade máxima; sem travar a digitação) -->
-  <script>
-  (function enableSpacesOnCliente(){
-    function patch(){
-      const el = document.getElementById('cliente');
-      if (!el) { requestAnimationFrame(patch); return; }
-
-      const stopIfSpace = (ev) => {
-        const isSpaceKey  = ev.key === ' ' || ev.code === 'Space';
-        const isSpaceData = ev.inputType === 'insertText' && ev.data === ' ';
-        if (isSpaceKey || isSpaceData) ev.stopImmediatePropagation(); // deixa digitar, bloqueia handlers externos
-      };
-      ['keydown','keypress','keyup','beforeinput'].forEach(type=>{
-        el.addEventListener(type, stopIfSpace, true); // capture
-      });
-
-      // normaliza "_" -> espaço e múltiplos espaços
-      el.addEventListener('input', ()=>{
-        const caret = el.selectionStart;
-        const v = el.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
-        if (v !== el.value) {
-          el.value = v;
-          try { el.setSelectionRange(caret, caret); } catch {}
-        }
-      });
-
-      el.setAttribute('type','text');
-      el.setAttribute('inputmode','text');
-      el.removeAttribute('pattern');
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', patch);
-    } else {
-      patch();
-    }
-  })();
-  </script>
+<script>
+(function enableSpacesOnCliente(){
+  function insertAtCaret(el, txt){
+    ...
+  }
+  function patch(){
+    ...
+  }
+  if (document.readyState === 'loading') {
+    ...
+  } else {
+    patch();
+  }
+})();
+</script>
 </body>
 </html>
