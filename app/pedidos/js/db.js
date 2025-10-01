@@ -3,7 +3,7 @@
 // Se a API não responder, tenta fallback direto no Firestore (id fixo por hash da idemKey).
 
 import {
-  db, TENANT_ID,
+  db, getTenantId,
   collection, doc, setDoc, serverTimestamp
 } from './firebase.js';
 import { up } from './utils.js';
@@ -50,13 +50,14 @@ function hash32(s){
 /* ============== Salvamento ============== */
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
+  const tenantId = await getTenantId(); // usa claim do usuário; se não houver, cai no fallback do firebase.js
 
-  // 1) Tenta pela API (rota que você tem: /api/tenant-pedidos/salvar)
+  // 1) Tenta pela API (rota: /api/tenant-pedidos/salvar)
   try{
     const r = await fetch("/api/tenant-pedidos/salvar", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
+      body: JSON.stringify({ tenantId, payload, idempotencyKey })
     });
     if (!r.ok) throw new Error(`API ${r.status}`);
     const j = await r.json();
@@ -66,15 +67,15 @@ export async function savePedidoIdempotente(payload){
     console.warn("[DB] API indisponível, tentando fallback direto no Firestore:", e?.message || e);
   }
 
-  // 2) Fallback direto no Firestore (pode falhar se rules não permitirem — tudo bem)
+  // 2) Fallback direto no Firestore (respeita rules: precisa tenantId no doc)
   try{
     const docId = "idem_" + hash32(idempotencyKey);
-    const col = collection(db, "tenants", TENANT_ID, "pedidos");
+    const col = collection(db, "tenants", tenantId, "pedidos");
 
     const toSave = {
       ...payload,
       idempotencyKey,
-      tenantId: TENANT_ID,
+      tenantId,
       createdAt: serverTimestamp(),
       dataEntregaDia: payload?.dataEntregaISO
         ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
