@@ -3,95 +3,25 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Unikor — Relatórios</title>
-
+  <title>Relatórios — UNIKOR</title>
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#1e7f46" />
-  <base href="./" />
+  <link rel="stylesheet" href="./css/style.css" />
 
-  <style>
-    :root{
-      --brand:#1e7f46; --brand-600:#166c3a;
-      --ink:#0f172a; --muted:#64748b; --bg:#f1f5f9; --line:#e2e8f0;
-      --danger:#dc2626; --gray:#475569;
-    }
-    *{box-sizing:border-box}
-    body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; background:var(--bg); color:var(--ink) }
-
-    /* HEADER */
-    .brandbar{ background:var(--brand); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:12px }
-    .brandbar__logo{ height:34px }
-    .brandbar__title{ font-weight:800; letter-spacing:.02em; font-size:18px; margin-left:6px }
-    .brandbar__spacer{ flex:1 }
-    .brandbar__user{ font-weight:700; opacity:.95 }
-    .brandbar__btn{ background:#fff; color:var(--brand-600); border:2px solid #fff; border-radius:999px; padding:6px 14px; font-weight:700; text-decoration:none; margin-left:12px; box-shadow:0 2px 6px #0001 }
-
-    main{ max-width:1200px; margin:16px auto 40px; padding:0 12px }
-    .card{ background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.06); padding:14px; border:1px solid var(--line) }
-
-    /* filtros */
-    .filters{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px }
-    label{ font-size:12px; color:#334155; display:block; margin-bottom:4px }
-    input, select, button{ font:inherit }
-    input, select{ width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; outline:0 }
-
-    /* ações */
-    .actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap }
-    .btn{ border:1px solid var(--brand-600); background:var(--brand-600); color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:8px }
-    .btn.ghost{ background:#fff; color:var(--brand-600) }
-    .btn.gray{ background:var(--gray); border-color:var(--gray) }
-    .btn[disabled]{ opacity:.75; cursor:default }
-    .spinner{ width:14px; height:14px; border:2px solid #ffffff80; border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite }
-    @keyframes spin{ to{ transform:rotate(360deg) } }
-
-    /* tabela */
-    .table-wrap{ margin-top:14px; overflow:auto; border-radius:10px; border:1px solid var(--line) }
-    table{ width:100%; min-width:980px; border-collapse:collapse; background:#fff; table-layout:fixed }
-    thead th{ position:sticky; top:0; background:#f8fafc; border-bottom:1px solid var(--line); text-align:left; font-size:12px; color:#334155; padding:10px }
-    thead th:nth-child(1){width:90px}
-    thead th:nth-child(2){width:70px}
-    thead th:nth-child(3){width:260px}
-    thead th:nth-child(4){width:70px}
-    thead th:nth-child(5){width:110px}
-    thead th:nth-child(6){width:120px}
-    thead th:nth-child(7){width:130px}
-    thead th:nth-child(8){width:100px}
-    tbody td{ border-bottom:1px solid #f1f5f9; padding:10px; font-size:14px; vertical-align:top; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-    tfoot td{ background:#f8fafc; font-weight:600; padding:10px; border-top:1px solid var(--line) }
-    .muted{ color:var(--muted); font-size:12px }
-    .cell-client{ color:var(--brand-600); cursor:pointer; text-decoration:underline }
-    .right{ text-align:right }
-
-    @media (max-width: 980px){ .filters{grid-template-columns:repeat(3,minmax(0,1fr))} }
-    @media (max-width: 560px){ .filters{grid-template-columns:repeat(2,minmax(0,1fr))} }
-  </style>
-
-  <!-- SheetJS + jsPDF -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
-  <script>
-    // Fallback se o CDN acima falhar (Safari móvel às vezes bloqueia)
-    (function(){
-      function ensureXLSX(){
-        if (window.XLSX) return;
-        var s = document.createElement('script');
-        s.src = "https://unpkg.com/xlsx@0.19.3/dist/xlsx.full.min.js";
-        document.head.appendChild(s);
-      }
-      if (!window.XLSX) {
-        if (document.readyState === 'complete') ensureXLSX();
-        else window.addEventListener('load', ensureXLSX);
-      }
-    })();
-  </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- jsPDF sempre local -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <!-- NÃO carregamos SheetJS aqui: o js/export.js faz um loader resiliente com spinner -->
 </head>
 <body>
+  <!-- HEADER (igual Pedidos) -->
   <header class="brandbar">
-    <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
-    <div class="brandbar__title">Relatórios</div>
-    <div class="brandbar__spacer"></div>
-    <div id="userMini" class="brandbar__user">—</div>
-    <a class="brandbar__btn" href="/app/">Voltar</a>
+    <div class="brandbar__left">
+      <a href="/" class="brandbar__btn" title="Voltar para o portal">Voltar</a>
+      <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR">
+      <div class="brandbar__title">Relatórios</div>
+    </div>
+    <div class="brandbar__right">
+      <div class="brandbar__user"><span class="brandbar__user-label" id="userTag">—</span></div>
+    </div>
   </header>
 
   <main id="app">
@@ -103,7 +33,7 @@
         <div><label>Horário — até</label><input type="time" id="fHoraFim"></div>
         <div><label>Cliente (contém)</label><input type="text" id="fCliente" placeholder="ex.: mercado"></div>
         <div>
-          <label>Tipo</label>
+          <label>Tipo (Entrega/Retirada)</label>
           <select id="fTipo">
             <option value="">Todos</option>
             <option value="ENTREGA">ENTREGA</option>
@@ -120,9 +50,9 @@
       </div>
 
       <div class="actions">
-        <button class="btn" id="btnBuscar">Buscar</button>
-        <button class="btn ghost" id="btnLimpar">Limpar</button>
-        <button class="btn" id="btnXLSX" title="Exportar resultados para XLSX"><span class="lbl">Exportar XLSX</span></button>
+        <button class="btn" id="btnBuscar"><span class="lbl">Buscar</span></button>
+        <button class="btn ghost" id="btnLimpar"><span class="lbl">Limpar</span></button>
+        <button class="btn warning" id="btnXLSX" title="Exportar para XLSX"><span class="lbl">Exportar XLSX</span></button>
         <button class="btn gray" id="btnPDF" title="Gerar PDF"><span class="lbl">Gerar PDF</span></button>
       </div>
 
@@ -138,6 +68,7 @@
               <th>Tipo</th>
               <th>Pagamento</th>
               <th>Nº do Cupom</th>
+              <th>Cancelar</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -145,7 +76,7 @@
             <tr>
               <td colspan="4" id="ftCount">0 pedidos</td>
               <td id="ftTotal">R$ 0,00</td>
-              <td colspan="3"></td>
+              <td colspan="4"></td>
             </tr>
           </tfoot>
         </table>
@@ -153,99 +84,147 @@
     </section>
   </main>
 
-  <!-- módulos -->
-  <script type="module" src="./js/firebase.js"></script>
-  <script type="module" src="./js/db.js"></script>
-  <script type="module" src="./js/render.js"></script>
-  <script type="module" src="./js/modal.js"></script>
-  <script type="module" src="./js/export.js"></script>
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header><h2 id="modalTitle">Editar Pedido</h2></header>
+
+      <div class="grid">
+        <div><label>ID do Pedido</label><input type="text" id="mId" readonly /></div>
+        <div><label>Cliente</label><input type="text" id="mCliente" /></div>
+        <div><label>Data Entrega (ISO)</label><input type="date" id="mDataEntregaISO" /></div>
+        <div><label>Hora Entrega</label><input type="time" id="mHoraEntrega" /></div>
+        <div><label>Tipo</label>
+          <select id="mTipo">
+            <option value="ENTREGA">ENTREGA</option>
+            <option value="RETIRADA">RETIRADA</option>
+          </select>
+        </div>
+        <div><label>Pagamento</label><input type="text" id="mPagamento" placeholder="ex.: PIX, DINHEIRO, CRÉDITO" /></div>
+        <div class="span-2"><label>Nº do Cupom Fiscal</label><input type="text" id="mCupomFiscal" placeholder="ex.: 123456-1/001" /></div>
+        <div class="span-4"><label>Observações</label><input type="text" id="mObs" placeholder="(opcional)" /></div>
+      </div>
+
+      <div class="muted">Itens do pedido</div>
+      <table class="items-table" id="itemsTable">
+        <thead><tr>
+          <th style="width:42%">Descrição</th>
+          <th style="width:12%">Qtd</th>
+          <th style="width:12%">Un</th>
+          <th style="width:16%">Preço Unit. (R$)</th>
+          <th style="width:10%">Subtotal</th>
+          <th style="width:8%">Remover</th>
+        </tr></thead>
+        <tbody id="itemsBody"></tbody>
+        <tfoot><tr><td colspan="6"><button class="btn ghost" id="btnAddItem" type="button">+ Adicionar item</button></td></tr></tfoot>
+      </table>
+
+      <div class="grid">
+        <div class="span-3"></div>
+        <div><label>Total do Pedido (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn gray" id="btnFecharModal" type="button"><span class="lbl">Cancelar</span></button>
+        <button class="btn" id="btnSalvar" type="button"><span class="lbl">Salvar alterações</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App (módulo) -->
   <script type="module">
-    import { onAuthUser } from './js/firebase.js';
-    import { pedidos_list, pedidos_get, pedidos_update, pedidos_delete } from './js/db.js';
-    import { $, renderRows } from './js/render.js';
-    import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao } from './js/modal.js';
-    import { exportarXLSX, exportarPDF, setBtnLoading } from './js/export.js';
+    import { onAuthUser } from "./js/firebase.js";
+    import { pedidos_list, pedidos_get, pedidos_update, pedidos_delete } from "./js/db.js";
+    import { renderRows, $, toBR, userPrefix } from "./js/render.js";
+    import { addItemRow, closeModal, carregarPedidoEmModal, salvarEdicao } from "./js/modal.js";
+    import { exportarXLSX, exportarPDF } from "./js/export.js";
 
-    const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
-
-    // usuário no topo (antes do @)
-    onAuthUser((user)=>{
-      const el = document.getElementById('userMini');
-      if (!el) return;
-      if (!user?.email) { el.textContent = "—"; return; }
-      el.textContent = String(user.email).split('@')[0];
-    });
+    const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
     window.__rows = [];
-    window.__currentDocId = null;
+    let __currentDocId = null;
 
     async function buscar(){
-      const di = $("fDataIni").value || undefined;
-      const df = $("fDataFim").value || undefined;
-      const cliente = ($("fCliente").value||"").trim() || undefined;
-      const tipoSel = $("fTipo").value || undefined;
+      const di = $("fDataIni").value || null;
+      const df = $("fDataFim").value || null;
+      const cliente = $("fCliente").value.trim();
+      const tipoSel = $("fTipo").value.trim() || null;
 
-      setBtnLoading(document.getElementById('btnBuscar'), true, 'Buscar');
-      try{
-        const list = await pedidos_list({
-          dataIniISO: di, dataFimISO: df, clienteLike: cliente, tipo: tipoSel, max: 1000
-        });
+      const list = await pedidos_list({
+        dataIniISO: di || undefined,
+        dataFimISO: df || undefined,
+        clienteLike: cliente || undefined,
+        tipo: tipoSel || undefined,
+        max: 1000
+      });
 
-        // filtros de hora client-side
-        const hIni = $("fHoraIni").value || null;
-        const hFim = $("fHoraFim").value || null;
+      const hIni = $("fHoraIni").value || null;
+      const hFim = $("fHoraFim").value || null;
 
-        const out = list.filter(x=>{
-          if (hIni && (x.horaEntrega||"") < hIni) return false;
-          if (hFim && (x.horaEntrega||"") > hFim) return false;
-          return true;
-        });
+      const out = list.filter(x => {
+        if (hIni && (x.horaEntrega||"") < hIni) return false;
+        if (hFim && (x.horaEntrega||"") > hFim) return false;
+        return true;
+      });
 
-        window.__rows = out;
-        renderRows(out);
-      } finally {
-        setBtnLoading(document.getElementById('btnBuscar'), false, 'Buscar');
-      }
+      window.__rows = out;
+      renderRows(out);
     }
 
     function limpar(){
       ["fDataIni","fDataFim","fHoraIni","fHoraFim","fCliente"].forEach(id=>$(id).value="");
-      $("fTipo").value = ""; $("tbody").innerHTML = "";
-      $("ftCount").textContent = "0 pedidos"; $("ftTotal").textContent = "R$ 0,00"; window.__rows = [];
+      $("fTipo").value = "";
+      $("tbody").innerHTML = "";
+      $("ftCount").textContent = "0 pedidos";
+      $("ftTotal").textContent = "R$ 0,00";
+      window.__rows = [];
     }
 
     async function excluirPedido(id){
       if (!id) return;
       const ok = confirm("Gostaria de excluir o pedido?");
       if (!ok) return;
-      await pedidos_delete(id);
-      window.__rows = window.__rows.filter(x => x.id !== id);
-      renderRows(window.__rows);
-      alert("Pedido excluído.");
+      try{
+        await pedidos_delete(id);
+        window.__rows = window.__rows.filter(x => x.id !== id);
+        renderRows(window.__rows);
+        alert("Pedido excluído.");
+      }catch(e){
+        console.error(e); alert("Não foi possível excluir. Verifique conexão/permissões.");
+      }
     }
 
-    document.getElementById('btnBuscar').onclick = buscar;
-    document.getElementById('btnLimpar').onclick = limpar;
-    document.getElementById('btnXLSX').onclick = ()=> exportarXLSX(window.__rows);
-    document.getElementById('btnPDF').onclick  = ()=> exportarPDF(window.__rows);
+    function atualizarListaLocal(id, payload){
+      const idx = window.__rows.findIndex(x=>x.id===id);
+      if (idx>=0){ window.__rows[idx] = { ...window.__rows[idx], ...payload }; }
+      renderRows(window.__rows);
+    }
 
-    document.getElementById('tbody').addEventListener("click", (ev)=>{
+    // Eventos
+    $("btnBuscar").onclick = buscar;
+    $("btnLimpar").onclick = limpar;
+    $("btnXLSX").onclick = ()=> exportarXLSX(window.__rows);
+    $("btnPDF").onclick  = ()=> exportarPDF(window.__rows);
+
+    $("tbody").addEventListener("click", (ev)=>{
       const tdEdit = ev.target.closest(".cell-client");
       if (tdEdit){ const id = tdEdit.getAttribute("data-id"); if (id) carregarPedidoEmModal(id); return; }
       const btnCancel = ev.target.closest(".btn-cancel");
       if (btnCancel){ const id = btnCancel.getAttribute("data-id"); excluirPedido(id); }
     });
 
-    document.getElementById('btnFecharModal')?.addEventListener('click', closeModal);
-    document.getElementById('btnAddItem')?.addEventListener('click', ()=> addItemRow({}));
-    document.getElementById('btnSalvar')?.addEventListener('click', ()=> salvarEdicao((id,payload)=>{
-      const i = window.__rows.findIndex(x=>x.id===id);
-      if (i>=0){ window.__rows[i] = { ...window.__rows[i], ...payload }; }
-      renderRows(window.__rows);
-    }));
+    $("btnFecharModal").addEventListener("click", closeModal);
+    $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
+    $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
+
+    // Mostra apenas o prefixo do email no header
+    onAuthUser((user) => {
+      const tag = document.getElementById('userTag');
+      tag.textContent = user ? userPrefix(user.email || user.uid) : "—";
+    });
   </script>
 
-  <!-- SW (igual antes, sem mudanças de lógica) -->
+  <!-- SW (auto-update) -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
