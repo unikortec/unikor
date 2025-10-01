@@ -197,64 +197,6 @@
     }
   </script>
 
-  <!-- Habilitar espaço no campo Cliente (prioridade máxima; sem travar a digitação) -->
-  <script>
-  (function enableSpacesOnCliente(){
-    function insertAtCaret(el, txt){
-      const start = el.selectionStart ?? el.value.length;
-      const end   = el.selectionEnd   ?? el.value.length;
-      const v1 = el.value.slice(0, start);
-      const v2 = el.value.slice(end);
-      el.value = (v1 + txt + v2).replace(/_/g, ' ');
-      const pos = start + txt.length;
-      try { el.setSelectionRange(pos, pos); } catch {}
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-
-    function patch(){
-      const el = document.getElementById('cliente');
-      if (!el) { requestAnimationFrame(patch); return; }
-
-      el.type = 'text';
-      el.setAttribute('inputmode','text');
-      el.removeAttribute('pattern');
-
-      const onSpaceKey = (ev) => {
-        const isSpace = ev.key === ' ' || ev.code === 'Space';
-        if (!isSpace) return;
-        insertAtCaret(el, ' ');
-        ev.preventDefault();
-        ev.stopImmediatePropagation();
-        ev.stopPropagation();
-      };
-      el.addEventListener('keydown',  onSpaceKey, true);
-      el.addEventListener('keypress', onSpaceKey, true);
-
-      el.addEventListener('beforeinput', (ev)=>{
-        if (ev.inputType === 'insertText' && ev.data === ' ') {
-          insertAtCaret(el, ' ');
-          ev.preventDefault();
-          ev.stopImmediatePropagation();
-          ev.stopPropagation();
-        }
-      }, true);
-
-      el.addEventListener('input', ()=>{
-        const caret = el.selectionStart;
-        const v = el.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
-        if (v !== el.value) {
-          el.value = v;
-          try { el.setSelectionRange(caret, caret); } catch {}
-        }
-      });
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', patch);
-    } else {
-      patch();
-    }
-  })();
-  </script>
+  <!-- Patch removido: input Cliente agora é nativo e aceita espaços normalmente -->
 </body>
 </html>
