@@ -1,12 +1,12 @@
-/* ===== Paleta UNIKOR (mesma do Pedidos) ===== */
+/* ===== Paleta UNIKOR ===== */
 :root{
   --brand: #1e7f46;
   --brand-600: #166c3a;
 
-  --ink:   #0f172a;  /* texto principal */
-  --muted: #64748b;  /* texto secundário */
-  --bg:    #f1f5f9;  /* fundo */
-  --line:  #e2e8f0;  /* bordas/divisórias */
+  --ink:   #0f172a;
+  --muted: #64748b;
+  --bg:    #f1f5f9;
+  --line:  #e2e8f0;
 
   --danger:#dc2626;
   --gray:#475569;
@@ -35,8 +35,7 @@ body{
 .brandbar__logo{ height:52px; max-width:160px; width:auto; display:block }
 .brandbar__title{ font-weight:800; letter-spacing:.02em; font-size: 18px }
 .brandbar__right{ margin-left:auto; display:flex; align-items:center; gap:18px }
-.brandbar__user{ display:flex; align-items:center; gap:8px }
-.brandbar__user-label{ font-weight:700; letter-spacing:.04em; opacity:.95 }
+.brandbar__user{ display:flex; align-items:center; gap:8px; font-weight:700 }
 .brandbar__btn{
   background:#fff; color: var(--brand-600);
   border: 2px solid #ffffff;
@@ -52,7 +51,7 @@ body{
   .brandbar__title{ font-size:16px }
 }
 
-/* ===== LAYOUT GERAL ===== */
+/* ===== LAYOUT ===== */
 main{ max-width:1200px; margin:18px auto 40px; padding:0 12px }
 .card{
   background:#fff;
@@ -133,7 +132,7 @@ tfoot td{ background:#f8fafc; font-weight:600; padding:10px; border-top:1px soli
 @media (max-width: 980px){ .filters{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media (max-width: 560px){
   .filters{grid-template-columns:repeat(2,minmax(0,1fr))}
-  tbody td{ white-space:normal }     /* deixa quebrar no mobile para não “distorcer” */
+  tbody td{ white-space:normal }     /* não “distorce” no mobile */
   thead th:nth-child(3){ width: 200px } /* Cliente */
   thead th:nth-child(8){ width: 200px } /* Cupom  */
 }
