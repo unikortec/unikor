@@ -1,60 +1,93 @@
-// relatorios/js/db.js — acesso multi-tenant às coleções
+// relatorios/js/db.js
+// Multi-tenant para obedecer às rules: /tenants/{tenantId}/pedidos
+
 import {
   db, serverTimestamp,
   collection, doc, setDoc, getDoc, getDocs, query, where, orderBy, limit,
   requireTenantContext
 } from "./firebase.js";
 
-const col = (tenantId, name) => collection(db, "tenants", tenantId, name);
-const docRef = (tenantId, name, id) => doc(db, "tenants", tenantId, name, id);
+function colPath(tenantId, coll) { return collection(db, "tenants", tenantId, coll); }
+function docPath(tenantId, coll, id) { return doc(db, "tenants", tenantId, coll, id); }
 
-function withMeta(data, { uid, tenantId }, isCreate=false){
+function withAuthorAndTenant(base, { uid, tenantId }, { isCreate=false } = {}) {
   const now = serverTimestamp();
-  const base = { ...data, tenantId, updatedBy: uid, updatedAt: now };
-  return isCreate ? { ...base, createdBy: uid, createdAt: now } : base;
+  const payload = { ...base, tenantId };
+  if (isCreate) {
+    if (!("createdAt" in payload) && !("criadoEm" in payload)) payload.createdAt = now;
+    if (!("createdBy" in payload)) payload.createdBy = uid;
+  }
+  if (!("updatedAt" in payload) && !("atualizadoEm" in payload)) payload.updatedAt = now;
+  if (!("updatedBy" in payload)) payload.updatedBy = uid;
+  return payload;
 }
 
-/* LISTAGEM */
+// helper p/ somar quando totalPedido não existir
+function calcTotalFromItens(itens){
+  if (!Array.isArray(itens)) return 0;
+  return itens.reduce((s,it)=>{
+    const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+    const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+    return s + (qtd * pu || 0);
+  },0);
+}
+
+/* ===== PEDIDOS ===== */
 export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, max=1000 } = {}) {
   const { tenantId } = await requireTenantContext();
-  const base = col(tenantId, "pedidos");
+  const base = colPath(tenantId, "pedidos");
+
   const conds = [];
   if (dataIniISO) conds.push(where("dataEntregaISO", ">=", dataIniISO));
   if (dataFimISO) conds.push(where("dataEntregaISO", "<=", dataFimISO));
 
-  const q = conds.length
+  let qRef = conds.length
     ? query(base, ...conds, orderBy("dataEntregaISO","desc"), limit(max))
     : query(base, orderBy("createdAt","desc"), limit(max));
 
-  const s = await getDocs(q);
+  const snap = await getDocs(qRef);
   let list = [];
-  s.forEach(d => list.push({ id:d.id, ...d.data() }));
+  snap.forEach(d => {
+    const data = d.data();
+    const totalPedido = (typeof data.totalPedido === 'number')
+      ? data.totalPedido
+      : calcTotalFromItens(data.itens);
+    list.push({ id: d.id, ...data, totalPedido });
+  });
 
   if (clienteLike) {
-    const n = String(clienteLike).trim().toUpperCase();
-    list = list.filter(x => (x.cliente||"").toUpperCase().includes(n));
+    const needle = String(clienteLike).trim().toUpperCase();
+    list = list.filter(x => (x.cliente || "").toUpperCase().includes(needle));
   }
   if (tipo) {
     const t = String(tipo).toUpperCase();
-    list = list.filter(x => (x?.entrega?.tipo||"").toUpperCase() === t);
+    list = list.filter(x => (x?.entrega?.tipo || "").toUpperCase() === t);
   }
   return list;
 }
 
-/* GET/UPDATE/DELETE */
 export async function pedidos_get(id) {
   const { tenantId } = await requireTenantContext();
-  const r = await getDoc(docRef(tenantId, "pedidos", id));
-  return r.exists() ? { id:r.id, ...r.data() } : null;
+  const ref = docPath(tenantId, "pedidos", id);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  const totalPedido = (typeof data.totalPedido === 'number')
+    ? data.totalPedido
+    : calcTotalFromItens(data.itens);
+  return { id: snap.id, ...data, totalPedido };
 }
 
 export async function pedidos_update(id, data) {
-  const ctx = await requireTenantContext();
-  await setDoc(docRef(ctx.tenantId, "pedidos", id), withMeta(data, { uid: ctx.user.uid, tenantId: ctx.tenantId }), { merge:true });
+  const { user, tenantId } = await requireTenantContext();
+  const ref = docPath(tenantId, "pedidos", id);
+  const payload = withAuthorAndTenant({ ...(data || {}) }, { uid: user.uid, tenantId }, { isCreate:false });
+  await setDoc(ref, payload, { merge:true });
 }
 
 export async function pedidos_delete(id) {
   const { tenantId } = await requireTenantContext();
+  const ref = docPath(tenantId, "pedidos", id);
   const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
-  await deleteDoc(docRef(tenantId, "pedidos", id));
+  await deleteDoc(ref);
 }
