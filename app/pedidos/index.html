@@ -13,6 +13,31 @@
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
+
+  <!-- EARLY GUARD: garante espaço no #cliente antes de qualquer outro handler global -->
+  <script>
+  (function earlyAllowSpaceOnCliente(){
+    function killIfCliente(ev){
+      const el = document.activeElement;
+      const isSpaceKey = ev.key === ' ' || ev.code === 'Space';
+      if (!el || el.id !== 'cliente') return;
+      if (isSpaceKey) {
+        // Não bloqueia o default (para o navegador inserir o espaço),
+        // só impede que outros handlers interceptem.
+        ev.stopImmediatePropagation();
+      }
+    }
+    document.addEventListener('keydown',  killIfCliente, true);
+    document.addEventListener('keypress', killIfCliente, true);
+    document.addEventListener('beforeinput', function(ev){
+      const el = document.activeElement;
+      if (el && el.id === 'cliente' && ev.inputType === 'insertText' && ev.data === ' ') {
+        ev.stopImmediatePropagation();
+      }
+    }, true);
+  })();
+  </script>
+
   <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
@@ -172,64 +197,64 @@
     }
   </script>
 
-<!-- Habilitar espaço no campo Cliente (prioridade máxima; sem travar a digitação) -->
-<script>
-(function enableSpacesOnCliente(){
-  function insertAtCaret(el, txt){
-    const start = el.selectionStart ?? el.value.length;
-    const end   = el.selectionEnd   ?? el.value.length;
-    const v1 = el.value.slice(0, start);
-    const v2 = el.value.slice(end);
-    el.value = (v1 + txt + v2).replace(/_/g, ' ');
-    const pos = start + txt.length;
-    try { el.setSelectionRange(pos, pos); } catch {}
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  }
+  <!-- Habilitar espaço no campo Cliente (prioridade máxima; sem travar a digitação) -->
+  <script>
+  (function enableSpacesOnCliente(){
+    function insertAtCaret(el, txt){
+      const start = el.selectionStart ?? el.value.length;
+      const end   = el.selectionEnd   ?? el.value.length;
+      const v1 = el.value.slice(0, start);
+      const v2 = el.value.slice(end);
+      el.value = (v1 + txt + v2).replace(/_/g, ' ');
+      const pos = start + txt.length;
+      try { el.setSelectionRange(pos, pos); } catch {}
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
 
-  function patch(){
-    const el = document.getElementById('cliente');
-    if (!el) { requestAnimationFrame(patch); return; }
+    function patch(){
+      const el = document.getElementById('cliente');
+      if (!el) { requestAnimationFrame(patch); return; }
 
-    el.type = 'text';
-    el.setAttribute('inputmode','text');
-    el.removeAttribute('pattern');
+      el.type = 'text';
+      el.setAttribute('inputmode','text');
+      el.removeAttribute('pattern');
 
-    const onSpaceKey = (ev) => {
-      const isSpace = ev.key === ' ' || ev.code === 'Space';
-      if (!isSpace) return;
-      insertAtCaret(el, ' ');
-      ev.preventDefault();
-      ev.stopImmediatePropagation();
-      ev.stopPropagation();
-    };
-    el.addEventListener('keydown',  onSpaceKey, true);
-    el.addEventListener('keypress', onSpaceKey, true);
-
-    el.addEventListener('beforeinput', (ev)=>{
-      if (ev.inputType === 'insertText' && ev.data === ' ') {
+      const onSpaceKey = (ev) => {
+        const isSpace = ev.key === ' ' || ev.code === 'Space';
+        if (!isSpace) return;
         insertAtCaret(el, ' ');
         ev.preventDefault();
         ev.stopImmediatePropagation();
         ev.stopPropagation();
-      }
-    }, true);
+      };
+      el.addEventListener('keydown',  onSpaceKey, true);
+      el.addEventListener('keypress', onSpaceKey, true);
 
-    el.addEventListener('input', ()=>{
-      const caret = el.selectionStart;
-      const v = el.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
-      if (v !== el.value) {
-        el.value = v;
-        try { el.setSelectionRange(caret, caret); } catch {}
-      }
-    });
-  }
+      el.addEventListener('beforeinput', (ev)=>{
+        if (ev.inputType === 'insertText' && ev.data === ' ') {
+          insertAtCaret(el, ' ');
+          ev.preventDefault();
+          ev.stopImmediatePropagation();
+          ev.stopPropagation();
+        }
+      }, true);
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', patch);
-  } else {
-    patch();
-  }
-})();
-</script>
+      el.addEventListener('input', ()=>{
+        const caret = el.selectionStart;
+        const v = el.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
+        if (v !== el.value) {
+          el.value = v;
+          try { el.setSelectionRange(caret, caret); } catch {}
+        }
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', patch);
+    } else {
+      patch();
+    }
+  })();
+  </script>
 </body>
 </html>
