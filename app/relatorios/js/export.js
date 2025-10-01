@@ -1,19 +1,16 @@
-// js/export.js
-import { $, moneyBR, toBR, rowTotal } from './render.js';
+import { $, moneyBR, toBR, calcularTotalPedido } from './render.js';
 
 function setLoading(btn, isLoading, labelWhenIdle){
   if (!btn) return;
   const lbl = btn.querySelector(".lbl");
   if (isLoading){
     btn.setAttribute("disabled","true");
-    if (lbl) lbl.textContent = "Gerando…";
+    if (lbl) lbl.textContent = labelWhenIdle || "Gerando…";
     const sp = document.createElement("span"); sp.className = "spinner"; sp.setAttribute("data-spin","1");
     btn.prepend(sp);
   }else{
     btn.removeAttribute("disabled");
-    const sp = btn.querySelector(".spinner[data-spin]");
-    if (sp) sp.remove();
-    if (lbl) lbl.textContent = labelWhenIdle || lbl.textContent;
+    const sp = btn.querySelector(".spinner[data-spin]"); if (sp) sp.remove();
   }
 }
 const nextFrame = () => new Promise(r => setTimeout(r, 0));
@@ -25,12 +22,13 @@ export async function exportarXLSX(rows){
   try{
     const modo = $("fModo").value || "reduzido";
     const data = rows.map(r=>{
+      const total = calcularTotalPedido(r);
       const base = {
         "Data": toBR(r.dataEntregaISO||""),
         "Hora": r.horaEntrega||"",
         "Cliente": r.cliente||"",
         "Itens": Array.isArray(r.itens)? r.itens.length : 0,
-        "Total (R$)": Number(rowTotal(r) || 0),
+        "Total (R$)": total,
         "Tipo": (r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA",
         "Pagamento": r.pagamento||"",
         "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
@@ -84,10 +82,11 @@ export async function exportarPDF(rows){
 
     for (const r of rows){
       x = left;
+      const total = calcularTotalPedido(r);
       const row = [
         toBR(r.dataEntregaISO||""), r.horaEntrega||"", r.cliente||"",
         (Array.isArray(r.itens)? r.itens.length : 0).toString(),
-        moneyBR(rowTotal(r)),
+        moneyBR(total),
         ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA"?"RETIRADA":"ENTREGA"),
         r.pagamento||"", (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
       ];
@@ -119,7 +118,7 @@ export async function exportarPDF(rows){
       }
     }
 
-    const total = rows.reduce((s,r)=> s + Number(rowTotal(r) || 0), 0);
+    const total = rows.reduce((s,r)=> s + calcularTotalPedido(r), 0);
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
     if (y>190){ doc.addPage(); y=top; }
     doc.text(`TOTAL: R$ ${moneyBR(total)}`, left, y+6);
