@@ -1,32 +1,39 @@
-import { $, moneyBR, toBR } from './render.js';
+// js/export.js
+import { $, moneyBR, toBR, rowTotal } from './render.js';
 
-function setLoading(btn, isLoading, label){
+function setLoading(btn, isLoading, labelWhenIdle){
   if (!btn) return;
   const lbl = btn.querySelector(".lbl");
   if (isLoading){
     btn.setAttribute("disabled","true");
-    if (lbl) lbl.textContent = label || lbl.textContent || "Processando…";
+    if (lbl) lbl.textContent = "Gerando…";
     const sp = document.createElement("span"); sp.className = "spinner"; sp.setAttribute("data-spin","1");
     btn.prepend(sp);
-  } else {
+  }else{
     btn.removeAttribute("disabled");
-    btn.querySelector(".spinner[data-spin]")?.remove();
+    const sp = btn.querySelector(".spinner[data-spin]");
+    if (sp) sp.remove();
+    if (lbl) lbl.textContent = labelWhenIdle || lbl.textContent;
   }
 }
 const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
 export async function exportarXLSX(rows){
   if (!rows.length){ alert("Nada para exportar."); return; }
-  const btn = $("btnXLSX"); setLoading(btn, true, "Exportar XLSX");
+  const btn = $("btnXLSX");
+  setLoading(btn, true, "Exportar XLSX");
   try{
     const modo = $("fModo").value || "reduzido";
     const data = rows.map(r=>{
       const base = {
-        "Data": toBR(r.dataEntregaISO||""), "Hora": r.horaEntrega||"",
-        "Cliente": r.cliente||"", "Itens": Array.isArray(r.itens)? r.itens.length : 0,
-        "Total (R$)": Number(r.totalPedido||0),
+        "Data": toBR(r.dataEntregaISO||""),
+        "Hora": r.horaEntrega||"",
+        "Cliente": r.cliente||"",
+        "Itens": Array.isArray(r.itens)? r.itens.length : 0,
+        "Total (R$)": Number(rowTotal(r) || 0),
         "Tipo": (r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA",
-        "Pagamento": r.pagamento||"", "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
+        "Pagamento": r.pagamento||"",
+        "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
         "ID": r.id
       };
       if (modo==="detalhado"){
@@ -42,13 +49,17 @@ export async function exportarXLSX(rows){
     XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
 
     await nextFrame();
-    XLSX.writeFile(wb, `Relatorio_${new Date().toISOString().slice(0,10)}.xlsx`);
-  } finally { setLoading(btn, false); }
+    const nome = `Relatorio_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
+  } finally {
+    setLoading(btn, false, "Exportar XLSX");
+  }
 }
 
 export async function exportarPDF(rows){
   if (!rows.length){ alert("Nada para gerar."); return; }
-  const btn = $("btnPDF"); setLoading(btn, true, "Gerar PDF");
+  const btn = $("btnPDF");
+  setLoading(btn, true, "Gerar PDF");
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
@@ -58,7 +69,7 @@ export async function exportarPDF(rows){
     let y = top;
 
     doc.setFont("helvetica","bold"); doc.setFontSize(14);
-    doc.text("Relatórios — Unikor", left, y); y += 6;
+    doc.text("Relatórios — Serra Nobre", left, y); y += 6;
     doc.setFontSize(9); doc.setFont("helvetica","normal");
     doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 6;
 
@@ -76,10 +87,11 @@ export async function exportarPDF(rows){
       const row = [
         toBR(r.dataEntregaISO||""), r.horaEntrega||"", r.cliente||"",
         (Array.isArray(r.itens)? r.itens.length : 0).toString(),
-        moneyBR(r.totalPedido||0),
+        moneyBR(rowTotal(r)),
         ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA"?"RETIRADA":"ENTREGA"),
         r.pagamento||"", (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
       ];
+
       const clienteLines = doc.splitTextToSize(row[2], colsW[2]-2);
       const cupomLines   = doc.splitTextToSize(row[7], colsW[7]-2);
       const lines = Math.max(1, clienteLines.length, cupomLines.length);
@@ -90,8 +102,11 @@ export async function exportarPDF(rows){
       const cells = [row[0], row[1], clienteLines, row[3], row[4], row[5], row[6], cupomLines];
       for (let i=0;i<cells.length;i++){
         const val = cells[i];
-        if (Array.isArray(val)){ val.forEach((ln,k)=> doc.text(ln, x, y + (k+1)*lineH - 2)); }
-        else { doc.text(String(val), x, y + lineH - 2); }
+        if (Array.isArray(val)){
+          val.forEach((ln,k)=> doc.text(ln, x, y + (k+1)*lineH - 2));
+        } else {
+          doc.text(String(val), x, y + lineH - 2);
+        }
         x += colsW[i];
       }
       y += h;
@@ -104,11 +119,14 @@ export async function exportarPDF(rows){
       }
     }
 
-    const total = rows.reduce((s,r)=> s + Number(r.totalPedido||0), 0);
+    const total = rows.reduce((s,r)=> s + Number(rowTotal(r) || 0), 0);
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
     if (y>190){ doc.addPage(); y=top; }
     doc.text(`TOTAL: R$ ${moneyBR(total)}`, left, y+6);
+
     await nextFrame();
     doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
-  } finally { setLoading(btn, false); }
+  } finally {
+    setLoading(btn, false, "Gerar PDF");
+  }
 }
