@@ -15,7 +15,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <!-- HEADER (mesma linha visual do Pedidos) -->
+  <!-- HEADER -->
   <header class="brandbar">
     <div class="brandbar__left">
       <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
@@ -23,7 +23,6 @@
     </div>
     <div class="brandbar__right">
       <div class="brandbar__user">
-        <span class="brandbar__user-label">Usuário:</span>
         <span id="headerUser">—</span>
       </div>
       <a class="brandbar__btn" href="/app/">Voltar</a>
@@ -142,22 +141,18 @@
   <script type="module" src="./js/modal.js"></script>
   <script type="module" src="./js/app.js"></script>
 
-  <!-- Service Worker (auto-update) -->
+  <!-- Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
         try {
           const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-          document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') reg.update();
-          });
+          document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
           setInterval(() => reg.update(), 10 * 60 * 1000);
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;
             nw && nw.addEventListener('statechange', () => {
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
-              }
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
             });
           });
           navigator.serviceWorker.addEventListener('controllerchange', () => {
