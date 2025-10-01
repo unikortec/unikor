@@ -6,7 +6,8 @@ import {
 
 import {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
-  query, where, orderBy, limit, serverTimestamp
+  query, where, orderBy, limit, serverTimestamp,
+  startAt, endAt
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 export const app = rootApp;
@@ -31,5 +32,6 @@ export async function requireTenantContext() {
 // Reexports Firestore (facilita nos módulos)
 export {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
-  query, where, orderBy, limit, serverTimestamp
+  query, where, orderBy, limit, serverTimestamp,
+  startAt, endAt
 };
