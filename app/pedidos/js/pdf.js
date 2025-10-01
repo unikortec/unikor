@@ -37,7 +37,7 @@ function lerItensDaTela(){
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
+    // Peso em UN por kg
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
@@ -97,7 +97,7 @@ async function construirPDF(){
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
   const margemX=2, larguraCaixa=68;
-  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
+  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5; // <-- manter um único bloco
   const SAFE_BOTTOM=280;
   let y=12;
   const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
@@ -170,7 +170,7 @@ async function construirPDF(){
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // >>> FORMA DE PAGAMENTO (largura total, mesmo espaçamento do dia/contato)
+  // >>> FORMA DE PAGAMENTO
   ensureSpace(12);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
@@ -182,7 +182,6 @@ async function construirPDF(){
   // Tabela itens - Cabeçalho
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
-  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
   doc.rect(margemX, y, W_PROD, 10, "S");
   doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
   doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
