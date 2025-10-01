@@ -197,6 +197,23 @@
     }
   </script>
 
-  <!-- Patch removido: input Cliente agora é nativo e aceita espaços normalmente -->
+  <!-- Força limpeza de listeners diretos no campo Cliente -->
+  <script>
+  (function forceCleanCliente(){
+    function resetClienteInput(){
+      const old = document.getElementById('cliente');
+      if (!old) return;
+      const clone = old.cloneNode(true); // remove todos os listeners diretos
+      if (old.list) clone.setAttribute("list", old.list.id); // preserva datalist
+      old.replaceWith(clone);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', resetClienteInput);
+    } else {
+      resetClienteInput();
+    }
+  })();
+  </script>
+
 </body>
 </html>
