@@ -39,21 +39,16 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
   const { tenantId } = await requireTenantContext();
   const base = colPath(tenantId, "pedidos");
 
-  const conds = [];
-  if (dataIniISO) conds.push(where("dataEntregaISO", ">=", dataIniISO));
-  if (dataFimISO) conds.push(where("dataEntregaISO", "<=", dataFimISO));
-
-  // orderBy por dataEntregaISO (e createdAt, se houver índice composto)
   let qRef;
-  try {
-    qRef = conds.length
-      ? query(base, ...conds, orderBy("dataEntregaISO","asc"), orderBy("createdAt","asc"), limit(max))
-      : query(base, orderBy("createdAt","desc"), limit(max));
-  } catch {
-    // fallback caso não exista índice com createdAt
-    qRef = conds.length
-      ? query(base, ...conds, orderBy("dataEntregaISO","asc"), limit(max))
-      : query(base, orderBy("dataEntregaISO","desc"), limit(max));
+
+  // Se tiver pelo menos uma das bordas de data, usamos orderBy + startAt/endAt
+  if (dataIniISO || dataFimISO) {
+    qRef = query(base, orderBy("dataEntregaISO", "asc"), limit(max));
+    if (dataIniISO) qRef = query(qRef, startAt(dataIniISO));
+    if (dataFimISO) qRef = query(qRef, endAt(dataFimISO));
+  } else {
+    // Sem filtro de data: ordena por createdAt (mais recente primeiro)
+    qRef = query(base, orderBy("createdAt", "desc"), limit(max));
   }
 
   const snap = await getDocs(qRef);
@@ -66,15 +61,18 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
     list.push({ id: d.id, ...data, totalPedido });
   });
 
-  if (clienteLike && String(clienteLike).trim()){
-    const needle = norm(clienteLike.trim());
-    list = list.filter(x => norm(x.clientUpper || x.cliente || "").includes(needle));
+  // Filtros client-side complementares
+  if (clienteLike) {
+    const needle = String(clienteLike).trim().toUpperCase();
+    list = list.filter(x => (x.cliente || "").toUpperCase().includes(needle));
   }
   if (tipo) {
     const t = String(tipo).toUpperCase();
     list = list.filter(x => (x?.entrega?.tipo || "").toUpperCase() === t);
   }
+
   return list;
+}
 }
 
 export async function pedidos_get(id) {
