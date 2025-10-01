@@ -235,10 +235,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-  const inputCliente = document.getElementById('cliente');
+    // Sanitize: remove qualquer listener colado por scripts externos no #cliente
+  let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
+    const val = inputCliente.value;
+    const clone = inputCliente.cloneNode(true); // clona atributos e datalist, mas sem listeners
+    inputCliente.replaceWith(clone);
+    inputCliente = clone;
+    inputCliente.value = val;
+
+    // nosso listener continua funcionando normalmente
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
+
 });
 
 // exposição (mantive)
