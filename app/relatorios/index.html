@@ -3,28 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Relatórios — UNIKOR</title>
+  <title>Unikor — Relatórios</title>
+
+  <!-- paths relativos a /relatorios/ -->
+  <base href="./">
   <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
+  <meta name="theme-color" content="#1e7f46" />
   <link rel="stylesheet" href="./css/style.css" />
-  <!-- libs export -->
+
+  <!-- libs de exportação -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="link" href="/portal/">← Pedidos</a>
-    <h1 class="ttl">Relatórios</h1>
-    <img class="brand" src="/portal/assets/logo/unikor-logo.svg" alt="UNIKOR" />
+  <!-- HEADER (igual padrão Unikor) -->
+  <header class="brandbar">
+    <div class="brandbar__left">
+      <a href="/app/" aria-label="Voltar para o app">
+        <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+      </a>
+      <span class="brandbar__title">Relatórios</span>
+    </div>
+
+    <div class="brandbar__right">
+      <div class="brandbar__user">
+        <span class="brandbar__user-label">Usuário:</span>
+        <span id="usuarioLogado">—</span>
+      </div>
+      <a class="brandbar__btn" href="/app/">← Voltar</a>
+    </div>
   </header>
 
-  <main class="container">
+  <main id="app">
     <section class="card">
+      <!-- FILTROS -->
       <div class="filters">
-        <div><label>Data — de</label><input type="date" id="fDataIni"></div>
-        <div><label>Data — até</label><input type="date" id="fDataFim"></div>
-        <div class="span-2"><label>Cliente</label><input type="text" id="fCliente" placeholder="contém"></div>
+        <div><label>Data entrega — de</label><input type="date" id="fDataIni"></div>
+        <div><label>Data entrega — até</label><input type="date" id="fDataFim"></div>
+        <div><label>Horário — de</label><input type="time" id="fHoraIni"></div>
+        <div><label>Horário — até</label><input type="time" id="fHoraFim"></div>
+        <div><label>Cliente (contém)</label><input type="text" id="fCliente" placeholder="ex.: mercado"></div>
         <div>
-          <label>Tipo</label>
+          <label>Tipo (Entrega/Retirada)</label>
           <select id="fTipo">
             <option value="">Todos</option>
             <option value="ENTREGA">ENTREGA</option>
@@ -40,68 +62,70 @@
         </div>
       </div>
 
+      <!-- AÇÕES -->
       <div class="actions">
-        <button class="btn" id="btnBuscar">Buscar</button>
+        <button class="btn" id="btnBuscar"><span class="lbl">Buscar</span></button>
         <button class="btn ghost" id="btnLimpar">Limpar</button>
-        <button class="btn warning" id="btnXLSX"><span class="lbl">Exportar XLSX</span></button>
-        <button class="btn gray" id="btnPDF"><span class="lbl">Gerar PDF</span></button>
+        <button class="btn warning" id="btnXLSX" title="Exportar XLSX"><span class="lbl">Exportar XLSX</span></button>
+        <button class="btn gray" id="btnPDF" title="Gerar PDF"><span class="lbl">Gerar PDF</span></button>
       </div>
 
+      <!-- TABELA -->
       <div class="table-wrap">
-        <table class="t">
+        <table>
           <thead>
-          <tr>
-            <th>Data</th>
-            <th>Hora</th>
-            <th>Cliente (clique p/ editar)</th>
-            <th>Itens</th>
-            <th>Total (R$)</th>
-            <th>Tipo</th>
-            <th>Pagamento</th>
-            <th>Nº do Cupom</th>
-            <th>Cancelar</th>
-          </tr>
+            <tr>
+              <th>Data</th>
+              <th>Hora</th>
+              <th>Cliente (clique para editar)</th>
+              <th>Itens</th>
+              <th>Total (R$)</th>
+              <th>Tipo</th>
+              <th>Pagamento</th>
+              <th>Nº do Cupom</th>
+              <th>Cancelar</th>
+            </tr>
           </thead>
           <tbody id="tbody"></tbody>
           <tfoot>
-          <tr>
-            <td colspan="4" id="ftCount">0 pedidos</td>
-            <td id="ftTotal">R$ 0,00</td>
-            <td colspan="4"></td>
-          </tr>
+            <tr>
+              <td colspan="4" id="ftCount">0 pedidos</td>
+              <td id="ftTotal">R$ 0,00</td>
+              <td colspan="4"></td>
+            </tr>
           </tfoot>
         </table>
       </div>
     </section>
   </main>
 
-  <!-- MODAL (hidden por padrão) -->
+  <!-- MODAL -->
   <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header><h2 id="modalTitle">Editar Pedido</h2></header>
 
       <div class="grid">
-        <div><label>ID</label><input type="text" id="mId" readonly /></div>
+        <div><label>ID do Pedido</label><input type="text" id="mId" readonly /></div>
         <div><label>Cliente</label><input type="text" id="mCliente" /></div>
-        <div><label>Data</label><input type="date" id="mDataEntregaISO" /></div>
-        <div><label>Hora</label><input type="time" id="mHoraEntrega" /></div>
+        <div><label>Data Entrega (ISO)</label><input type="date" id="mDataEntregaISO" /></div>
+        <div><label>Hora Entrega</label><input type="time" id="mHoraEntrega" /></div>
         <div><label>Tipo</label>
           <select id="mTipo"><option value="ENTREGA">ENTREGA</option><option value="RETIRADA">RETIRADA</option></select>
         </div>
-        <div><label>Pagamento</label><input type="text" id="mPagamento" /></div>
-        <div class="span-2"><label>Nº do Cupom</label><input type="text" id="mCupomFiscal" /></div>
-        <div class="span-4"><label>Obs.</label><input type="text" id="mObs" /></div>
+        <div><label>Pagamento</label><input type="text" id="mPagamento" placeholder="ex.: PIX, DINHEIRO" /></div>
+        <div class="span-2"><label>Nº do Cupom Fiscal</label><input type="text" id="mCupomFiscal" placeholder="ex.: 123456-1/001" /></div>
+        <div class="span-4"><label>Observações</label><input type="text" id="mObs" placeholder="(opcional)" /></div>
       </div>
 
-      <div class="muted">Itens</div>
-      <table class="items" id="itemsTable">
+      <div class="muted">Itens do pedido</div>
+      <table class="items-table" id="itemsTable">
         <thead><tr>
           <th style="width:36%">Descrição</th>
           <th style="width:12%">Qtd</th>
           <th style="width:12%">Un</th>
-          <th style="width:16%">Preço (R$)</th>
-          <th style="width:16%">Subtotal</th>
-          <th>Remover</th>
+          <th style="width:16%">Preço Unit. (R$)</th>
+          <th style="width:16%">Subtotal (R$)</th>
+          <th style="width:8%">Remover</th>
         </tr></thead>
         <tbody id="itemsBody"></tbody>
         <tfoot><tr><td colspan="6"><button class="btn ghost" id="btnAddItem" type="button">+ Adicionar item</button></td></tr></tfoot>
@@ -109,18 +133,54 @@
 
       <div class="grid">
         <div class="span-3"></div>
-        <div><label>Total (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
+        <div><label>Total do Pedido (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
       </div>
 
       <div class="actions">
         <button class="btn gray" id="btnFecharModal" type="button">Cancelar</button>
-        <button class="btn danger" id="btnExcluir" type="button">Excluir pedido</button>
         <button class="btn" id="btnSalvar" type="button">Salvar alterações</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="/portal/js/guard.js"></script>
+  <!-- Auth guard do portal (redireciona se não logado) -->
+  <script type="module" src="/shared/js/auth-guard.js"></script>
+
+  <!-- Módulos do Relatórios -->
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/render.js"></script>
+  <script type="module" src="./js/db.js"></script>
+  <script type="module" src="./js/modal.js"></script>
+  <script type="module" src="./js/export.js"></script>
   <script type="module" src="./js/app.js"></script>
+
+  <!-- SW (auto-update) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async () => {
+        try {
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+          setInterval(() => reg.update(), 5 * 60 * 1000);
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            nw && nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) reg.waiting?.postMessage('SKIP_WAITING');
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
+          });
+        } catch {}
+      });
+    }
+  </script>
+
+  <!-- Mostra e-mail do usuário no header -->
+  <script type="module">
+    import { onAuthUser } from './js/firebase.js';
+    const span = document.getElementById('usuarioLogado');
+    onAuthUser((user) => { span.textContent = user?.email || '—'; });
+  </script>
 </body>
 </html>
