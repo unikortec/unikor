@@ -1,4 +1,4 @@
-// js/export.js
+// relatorios/js/export.js
 import { $, moneyBR, toBR } from './render.js';
 
 function setLoading(btn, isLoading, labelWhenIdle){
@@ -37,7 +37,7 @@ async function ensureXLSX(){
         document.head.appendChild(s);
       });
       if (window.XLSX) return window.XLSX;
-    }catch{ /* tenta o próximo */ }
+    }catch{}
   }
   throw new Error("Falha ao carregar o gerador XLSX (conexão).");
 }
@@ -81,7 +81,7 @@ export async function exportarXLSX(rows){
     console.error(e);
     alert("Não consegui carregar o gerador XLSX (conexão). Tente novamente.");
   } finally {
-    setLoading(btn, false, "Exportar XLSX");
+    setLoading(btn, false, "Gerar XLSX");
   }
 }
 
@@ -94,23 +94,25 @@ export async function exportarPDF(rows){
     // A4 paisagem, margens e alturas ajustadas p/ evitar sobreposição
     const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
 
-    const left=12, top=14, lineH=6, maxW = 270;
+    const left=12, top=14, lineH=7, maxW = 270;
     let y = top;
 
     doc.setFont("helvetica","bold"); doc.setFontSize(16);
-    doc.text("Relatórios — Serra Nobre", left, y); y += 7;
+    doc.text("Relatórios — Serra Nobre", left, y); y += 8;
     doc.setFontSize(9); doc.setFont("helvetica","normal");
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 6;
+    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 7;
 
-    // Colunas com mais espaço para "Cliente"
+    // Colunas (com mais espaço para Cliente e Cupom)
     doc.setFont("helvetica","bold");
     const headers = ["Data","Hora","Cliente","Itens","Total (R$)","Tipo","Pagamento","Cupom"];
-    const colsW   = [22,18,92,14,26,26,36,50];
+    const colsW   = [22,18,96,14,28,26,38,50];
     let x = left;
     headers.forEach((h,i)=>{ doc.text(h, x, y); x += colsW[i]; });
-    y += 2.5;
-    doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce((a,b)=>a+b,0), y); y += 4;
+    y += 3;
+    doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce((a,b)=>a+b,0), y); y += 5;
     doc.setFont("helvetica","normal");
+
+    const pageBottom = 200; // margem de segurança
 
     for (const r of rows){
       x = left;
@@ -125,27 +127,26 @@ export async function exportarPDF(rows){
         (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
       ];
 
-      // Quebras de linha controladas nas colunas "Cliente" e "Cupom"
       const clienteLines = doc.splitTextToSize(row[2], colsW[2]-2);
       const cupomLines   = doc.splitTextToSize(row[7], colsW[7]-2);
       const lines = Math.max(1, clienteLines.length, cupomLines.length);
-      const h = Math.max(lineH, lines*lineH + 1); // +1 de respiro
+      const h = Math.max(lineH + 1, lines*lineH + 2); // respiro extra
 
-      if (y + h > 192){ doc.addPage(); y = top; }
+      if (y + h > pageBottom){ doc.addPage(); y = top; }
 
       const cells = [row[0], row[1], clienteLines, row[3], row[4], row[5], row[6], cupomLines];
       for (let i=0;i<cells.length;i++){
         const val = cells[i];
         if (Array.isArray(val)){
-          val.forEach((ln,k)=> doc.text(ln, x, y + (k+1)*lineH - 1.5));
+          val.forEach((ln,k)=> doc.text(ln, x, y + (k+1)*lineH - 1.2));
         } else {
-          doc.text(String(val), x, y + lineH - 1.5);
+          doc.text(String(val), x, y + lineH - 1.2);
         }
         x += colsW[i];
       }
       y += h;
 
-      // Modo detalhado: lista os itens com espaçamento maior
+      // Modo detalhado: lista os itens com espaçamento maior e respiro
       const modo = (document.getElementById("fModo")?.value || "reduzido");
       if (modo === "detalhado" && Array.isArray(r.itens) && r.itens.length){
         const itemsTxt = r.itens.map(it=>{
@@ -158,17 +159,18 @@ export async function exportarPDF(rows){
 
         const itemsLines = doc.splitTextToSize(itemsTxt, maxW);
         for (const ln of itemsLines){
-          if (y > 192){ doc.addPage(); y = top; }
-          doc.text(ln, left+4, y); y += 4.5;
+          if (y + 6 > pageBottom){ doc.addPage(); y = top; }
+          doc.text(ln, left+4, y + 5);
+          y += 5.2; // mais alto para não "encostar"
         }
-        y += 2; // respiro extra
+        y += 3; // respiro extra após itens
       }
     }
 
     const total = rows.reduce((s,r)=> s + Number(r.totalPedido||0), 0);
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
-    if (y>190){ doc.addPage(); y=top; }
-    doc.text(`TOTAL: R$ ${moneyBR(total)}`, left, y+6);
+    if (y + 10 > pageBottom){ doc.addPage(); y=top; }
+    doc.text(`TOTAL: R$ ${moneyBR(total)}`, left, y+8);
 
     await nextFrame();
     doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
