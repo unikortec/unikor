@@ -73,7 +73,6 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
 
   return list;
 }
-}
 
 export async function pedidos_get(id) {
   const { tenantId } = await requireTenantContext();
