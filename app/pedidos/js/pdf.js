@@ -32,7 +32,7 @@ function lerItensDaTela(){
     const obsInput = itemEl.querySelector('.obsItem');
 
     const produto = produtoInput?.value?.trim() || '';
-    const tipo = (tipoSelect?.value || 'KG').toUpperCase();
+    the tipo = (tipoSelect?.value || 'KG').toUpperCase();
     const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
@@ -84,6 +84,19 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
   return rowH;
 }
 
+/* === [NOVO] Caixa "FORMA DE PAGAMENTO" (mesma largura do “Dia da semana”) === */
+function drawPagamentoBox(doc, x, y, w, pagamento, opts={}){
+  const { rowH=10, titleSize=8, valueSize=9, gapY=1 } = opts;
+  doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x, y, w, rowH, "S");
+  const label = "FORMA DE PAGAMENTO:";
+  doc.setFont("helvetica","bold"); doc.setFontSize(titleSize);
+  doc.text(label, x+3, y+4.2);
+  const lW = doc.getTextWidth(label) + 1.5;
+  doc.setFont("helvetica","normal"); doc.setFontSize(valueSize);
+  doc.text(String(pagamento||"-").toUpperCase(), x+3+lW, y+4.2);
+  return rowH + gapY;
+}
+
 /* ================== Construção do PDF ====================== */
 async function construirPDF(){
   // Garante frete atualizado para o resumo
@@ -113,6 +126,19 @@ async function construirPDF(){
   const contato = digitsOnly(document.getElementById("contato")?.value || "");
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
+
+  // >>> pagamento (OUTRO => pega campo livre)
+  (()=>{ /* escopo isolado para evitar conflitos */
+    const sel = document.getElementById("pagamento");
+    const outro = document.getElementById("pagamentoOutro");
+    let p = (sel?.value || "").trim();
+    if (p.toUpperCase() === "OUTRO") {
+      const liv = (outro?.value || "").trim();
+      if (liv) p = liv;
+    }
+    // expõe localmente (sem poluir global)
+    construirPDF.__PAGAMENTO__ = p;
+  })();
 
   // Cliente
   ensureSpace(14);
@@ -160,6 +186,15 @@ async function construirPDF(){
   doc.text(formatarData(entregaISO), margemX+halfW2/2, y+8, {align:"center"});
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
+
+  /* ===== [NOVO] Caixa “FORMA DE PAGAMENTO” — logo abaixo de Data/Hora ===== */
+  {
+    ensureSpace(10 + 1);
+    const pagamento = (construirPDF.__PAGAMENTO__ || "");
+    y += drawPagamentoBox(doc, margemX, y, larguraCaixa, pagamento, {
+      rowH: 10, titleSize: 8, valueSize: 9, gapY: 1
+    });
+  }
 
   // Tabela itens - Cabeçalho
   ensureSpace(14);
