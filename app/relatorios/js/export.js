@@ -42,6 +42,13 @@ async function ensureXLSX(){
   throw new Error("Falha ao carregar o gerador XLSX (conexão).");
 }
 
+function freteFrom(r){
+  if (typeof r?.freteValor === 'number') return r.freteValor;
+  if (r?.frete?.isento) return 0;
+  return Number(r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? 0) || 0;
+}
+
+/* ================= XLSX ================= */
 export async function exportarXLSX(rows){
   const btn = $("btnXLSX");
   if (!rows.length){ alert("Nada para exportar."); return; }
@@ -50,22 +57,35 @@ export async function exportarXLSX(rows){
     const XLSX = await ensureXLSX();
     const modo = $("fModo").value || "reduzido";
     const data = rows.map(r=>{
+      const itens = Array.isArray(r.itens)? r.itens : [];
+      const frete = freteFrom(r);
       const base = {
         "Data": toBR(r.dataEntregaISO||""),
         "Hora": r.horaEntrega||"",
         "Cliente": r.cliente||"",
-        "Itens": Array.isArray(r.itens)? r.itens.length : 0,
-        "Total (R$)": Number(r.totalPedido||0),
+        "Endereço": r.endereco || "",
+        "CEP": r.cep || "",
+        "Contato": r.contato || "",
+        "Itens": itens.length,
         "Tipo": (r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA",
         "Pagamento": r.pagamento||"",
+        "Frete (R$)": Number(frete||0),
         "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
+        "Total Itens (R$)": Number(r.totalPedido||0),
+        "Total Pedido (R$)": Number((Number(r.totalPedido||0) + Number(frete||0)).toFixed(2)),
         "ID": r.id
       };
       if (modo==="detalhado"){
-        const itensTxt = (Array.isArray(r.itens)? r.itens : [])
-          .map(i => `${i.produto||i.descricao||""} • ${i.quantidade||i.qtd||0} ${i.tipo||i.un||"un"} x ${moneyBR(i.precoUnit||i.preco||0)}`)
-          .join(" | ");
-        return { ...base, "Itens (detalhe)": itensTxt };
+        const linhas = itens.map(i => ({
+          "PRODUTO": i.produto||i.descricao||"",
+          "QDE": Number(i.quantidade||i.qtd||0),
+          "UN": i.tipo||i.un||"UN",
+          "VALOR": Number(i.precoUnit||i.preco||0),
+          "TOTAL": Number(i.subtotal || (Number(i.quantidade||i.qtd||0)*Number(i.precoUnit||i.preco||0)))
+        }));
+        // SheetJS não suporta múltiplas linhas por registro facilmente; então
+        // adicionamos coluna texto com resumo.
+        base["Itens (detalhe)"] = linhas.map(l => `${l.PRODUTO} | ${l.QDE} ${l.UN} | ${moneyBR(l.VALOR)} | ${moneyBR(l.TOTAL)}`).join("  ||  ");
       }
       return base;
     });
@@ -76,65 +96,84 @@ export async function exportarXLSX(rows){
 
     await nextFrame();
     const nome = `Relatorio_${new Date().toISOString().slice(0,10)}.xlsx`;
-    XLSX.writeFile(wb, nome);
+    try{
+      // versões novas
+      if (XLSX.writeFileXLSX) XLSX.writeFileXLSX(wb, nome);
+      else XLSX.writeFile(wb, nome);
+    }catch{
+      // fallback manual
+      const bin = XLSX.write(wb, { type:"array", bookType:"xlsx" });
+      const blob = new Blob([bin], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = nome; a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    }
   } catch (e){
     console.error(e);
     alert("Não consegui carregar o gerador XLSX (conexão). Tente novamente.");
   } finally {
-    setLoading(btn, false, "Gerar XLSX");
+    setLoading(btn, false, "Exportar XLSX");
   }
 }
 
+/* ================= PDF ================= */
 export async function exportarPDF(rows){
   const btn = $("btnPDF");
   if (!rows.length){ alert("Nada para gerar."); return; }
   setLoading(btn, true, "Gerar PDF");
   try{
     const { jsPDF } = window.jspdf;
-    // A4 paisagem, margens e alturas ajustadas p/ evitar sobreposição
     const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
 
-    const left=12, top=14, lineH=7, maxW = 270;
+    const left=12, top=14;
+    const lineH=7.5; // mais alto
     let y = top;
 
+    // Título
     doc.setFont("helvetica","bold"); doc.setFontSize(16);
-    doc.text("Relatórios — Serra Nobre", left, y); y += 8;
+    doc.text("Relatórios — Serra Nobre", left, y); y += 8.5;
     doc.setFontSize(9); doc.setFont("helvetica","normal");
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 7;
+    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 7.5;
 
-    // Colunas (com mais espaço para Cliente e Cupom)
+    // Cabeçalho principal (cliente)
     doc.setFont("helvetica","bold");
-    const headers = ["Data","Hora","Cliente","Itens","Total (R$)","Tipo","Pagamento","Cupom"];
-    const colsW   = [22,18,96,14,28,26,38,50];
+    const headers = ["NOME CLIENTE","ENDEREÇO","QDE ITENS","TIPO","PAGAMENTO","FRETE (R$)","CUPOM"];
+    const colsW   = [56, 86, 22, 22, 36, 26, 52];
     let x = left;
     headers.forEach((h,i)=>{ doc.text(h, x, y); x += colsW[i]; });
-    y += 3;
-    doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce((a,b)=>a+b,0), y); y += 5;
+    y += 3.2;
+    doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce((a,b)=>a+b,0), y); y += 5.2;
     doc.setFont("helvetica","normal");
 
-    const pageBottom = 200; // margem de segurança
+    const pageBottom = 200;
+
+    // acumuladores p/ rodapé
+    let totalPedidos = rows.length;
+    let totalItens = 0;
+    let totalFrete = 0;
+    let totalGeral = 0;
 
     for (const r of rows){
+      const itens = Array.isArray(r.itens) ? r.itens : [];
+      const frete = freteFrom(r);
+      const tipo  = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA")?"RETIRADA":"ENTREGA";
+      const endereco = [r.endereco, r.cep, r.contato].filter(Boolean).join(" • ");
+
+      // linha do cliente
       x = left;
-      const row = [
-        (r.dataEntregaISO? r.dataEntregaISO.split("-").reverse().join("/") : ""),
-        r.horaEntrega||"",
-        r.cliente||"",
-        (Array.isArray(r.itens)? r.itens.length : 0).toString(),
-        moneyBR(r.totalPedido||0),
-        ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA"?"RETIRADA":"ENTREGA"),
-        r.pagamento||"",
-        (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
+      const clienteLines  = doc.splitTextToSize(r.cliente||"", colsW[0]-2);
+      const enderecoLines = doc.splitTextToSize(endereco||"", colsW[1]-2);
+      const lines = Math.max(1, clienteLines.length, enderecoLines.length);
+      const rowH = Math.max(lineH + 2, lines*lineH + 1.5);
+
+      if (y + rowH + 18 > pageBottom){ doc.addPage(); y = top; } // +18 pelo bloco de itens
+
+      // células cliente
+      const cells = [
+        clienteLines, enderecoLines,
+        String(itens.length), tipo, (r.pagamento||""), moneyBR(frete), (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
       ];
-
-      const clienteLines = doc.splitTextToSize(row[2], colsW[2]-2);
-      const cupomLines   = doc.splitTextToSize(row[7], colsW[7]-2);
-      const lines = Math.max(1, clienteLines.length, cupomLines.length);
-      const h = Math.max(lineH + 1, lines*lineH + 2); // respiro extra
-
-      if (y + h > pageBottom){ doc.addPage(); y = top; }
-
-      const cells = [row[0], row[1], clienteLines, row[3], row[4], row[5], row[6], cupomLines];
+      x = left;
       for (let i=0;i<cells.length;i++){
         const val = cells[i];
         if (Array.isArray(val)){
@@ -144,33 +183,57 @@ export async function exportarPDF(rows){
         }
         x += colsW[i];
       }
-      y += h;
+      y += rowH + 2; // respiro após linha de cliente
 
-      // Modo detalhado: lista os itens com espaçamento maior e respiro
-      const modo = (document.getElementById("fModo")?.value || "reduzido");
-      if (modo === "detalhado" && Array.isArray(r.itens) && r.itens.length){
-        const itemsTxt = r.itens.map(it=>{
-          const qtd = Number(it.quantidade ?? it.qtd ?? 0);
-          const un  = (it.tipo ?? it.un ?? "un");
-          const pu  = Number(it.precoUnit ?? it.preco ?? 0);
-          const tot = Number((qtd*pu).toFixed(2));
-          return `• ${(it.produto||it.descricao||"")} — ${qtd} ${un} x ${moneyBR(pu)} = ${moneyBR(tot)}`;
-        }).join("\n");
+      // detalhamento dos itens (tabela)
+      doc.setFont("helvetica","bold");
+      doc.text("PRODUTO", left, y);
+      doc.text("QDE", left+120, y);
+      doc.text("VALOR", left+140, y);
+      doc.text("TOTAL", left+165, y);
+      y += 3;
+      doc.setLineWidth(.2); doc.line(left, y, left+178, y); y += 5;
+      doc.setFont("helvetica","normal");
 
-        const itemsLines = doc.splitTextToSize(itemsTxt, maxW);
-        for (const ln of itemsLines){
-          if (y + 6 > pageBottom){ doc.addPage(); y = top; }
-          doc.text(ln, left+4, y + 5);
-          y += 5.2; // mais alto para não "encostar"
-        }
-        y += 3; // respiro extra após itens
+      for (const it of itens){
+        const prod = (it.produto||it.descricao||"");
+        const un   = (it.tipo||it.un||"UN").toUpperCase();
+        const qde  = Number(it.quantidade||it.qtd||0);
+        const pu   = Number(it.precoUnit||it.preco||0);
+        const sub  = Number(it.subtotal || (qde * pu));
+
+        const prodLines = doc.splitTextToSize(prod, 110);
+        const h = Math.max(lineH, prodLines.length*lineH);
+        if (y + h > pageBottom){ doc.addPage(); y = top; }
+
+        prodLines.forEach((ln,k)=> doc.text(ln, left, y + (k+1)*lineH - 1.2));
+        doc.text(`${qde} ${un}`, left+120, y + lineH - 1.2);
+        doc.text(moneyBR(pu), left+140, y + lineH - 1.2);
+        doc.text(moneyBR(sub), left+165, y + lineH - 1.2);
+
+        y += h + 2;
+        totalItens += 1; // conta linhas de itens
       }
+
+      // linha do frete no detalhamento
+      if (y + lineH > pageBottom){ doc.addPage(); y = top; }
+      doc.setFont("helvetica","bold");
+      doc.text("FRETE", left, y);
+      doc.setFont("helvetica","normal");
+      doc.text(moneyBR(frete), left+165, y);
+      y += lineH + 3;
+
+      totalFrete += Number(frete||0);
+      totalGeral += Number((Number(r.totalPedido||0) + Number(frete||0)) || 0);
     }
 
-    const total = rows.reduce((s,r)=> s + Number(r.totalPedido||0), 0);
+    // Rodapé com totais
+    if (y + 16 > pageBottom){ doc.addPage(); y = top; }
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
-    if (y + 10 > pageBottom){ doc.addPage(); y=top; }
-    doc.text(`TOTAL: R$ ${moneyBR(total)}`, left, y+8);
+    doc.text(`PEDIDOS: ${totalPedidos}`, left, y); y += 6.5;
+    doc.text(`ITENS (linhas): ${totalItens}`, left, y); y += 6.5;
+    doc.text(`TOTAL FRETES: R$ ${moneyBR(totalFrete)}`, left, y); y += 6.5;
+    doc.text(`TOTAL GERAL: R$ ${moneyBR(totalGeral)}`, left, y);
 
     await nextFrame();
     doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
