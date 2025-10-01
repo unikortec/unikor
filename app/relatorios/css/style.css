@@ -21,7 +21,7 @@ body{
   color:var(--ink);
 }
 
-/* ===== HEADER VERDE (igual Pedidos) ===== */
+/* ===== HEADER VERDE ===== */
 .brandbar{
   background: var(--brand);
   color:#fff;
@@ -32,33 +32,24 @@ body{
   gap:16px;
 }
 .brandbar__left{ display:flex; align-items:center; gap:12px }
-.brandbar__logo{ height:52px; display:block }
-
-.brandbar__right{
-  margin-left:auto;
-  display:flex;
-  align-items:center;
-  gap:18px;
-}
+.brandbar__logo{ height:52px; max-width:160px; width:auto; display:block }
+.brandbar__title{ font-weight:800; letter-spacing:.02em; font-size: 18px }
+.brandbar__right{ margin-left:auto; display:flex; align-items:center; gap:18px }
 .brandbar__user{ display:flex; align-items:center; gap:8px }
 .brandbar__user-label{ font-weight:700; letter-spacing:.04em; opacity:.95 }
-
 .brandbar__btn{
-  background:#fff;
-  color: var(--brand-600);
+  background:#fff; color: var(--brand-600);
   border: 2px solid #ffffff;
-  border-radius: 24px;
-  padding: 8px 18px;
-  font-weight:700;
-  text-decoration:none;
+  border-radius: 24px; padding: 8px 18px;
+  font-weight:700; text-decoration:none;
   box-shadow: 0 1px 0 #00000010 inset, 0 2px 6px #0000001a;
 }
 .brandbar__btn:hover{ filter: brightness(0.98) }
 
-.brandbar__title{
-  font-weight:800;
-  letter-spacing:.02em;
-  font-size: 18px;
+@media (max-width: 780px){
+  .brandbar{ padding:14px 12px }
+  .brandbar__logo{ height:40px; max-width:130px }
+  .brandbar__title{ font-size:16px }
 }
 
 /* ===== LAYOUT GERAL ===== */
@@ -104,14 +95,14 @@ input, select{
 .btn.gray{ background:var(--gray); border-color:var(--gray) }
 .btn.danger{ background:var(--danger); border-color:var(--danger) }
 .btn.icon{ padding:4px 8px; line-height:1; font-weight:700; }
-
 .btn[disabled]{ opacity:.75; cursor:default }
+
 .spinner{ width:14px; height:14px; border:2px solid #ffffff80; border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite }
 @keyframes spin{ to{ transform:rotate(360deg) } }
 
 /* ===== Tabela ===== */
 .table-wrap{ margin-top:14px; overflow:auto; border-radius:10px; border:1px solid var(--line) }
-table{ width:100%; min-width:1120px; border-collapse:collapse; background:#fff; table-layout:fixed }
+table{ width:100%; min-width: 880px; border-collapse:collapse; background:#fff; table-layout:fixed }
 thead th{
   position:sticky; top:0;
   background:#f8fafc;
@@ -140,7 +131,12 @@ tfoot td{ background:#f8fafc; font-weight:600; padding:10px; border-top:1px soli
 
 /* ===== Responsivo ===== */
 @media (max-width: 980px){ .filters{grid-template-columns:repeat(3,minmax(0,1fr))} }
-@media (max-width: 560px){ .filters{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width: 560px){
+  .filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+  tbody td{ white-space:normal }     /* deixa quebrar no mobile para não “distorcer” */
+  thead th:nth-child(3){ width: 200px } /* Cliente */
+  thead th:nth-child(8){ width: 200px } /* Cupom  */
+}
 
 /* ===== Modal ===== */
 .modal-backdrop{
