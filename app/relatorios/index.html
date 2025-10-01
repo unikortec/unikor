@@ -84,7 +84,7 @@
     </section>
   </main>
 
-  <!-- Modal -->
+    <!-- Modal -->
   <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header><h2 id="modalTitle">Editar Pedido</h2></header>
@@ -108,20 +108,21 @@
       <div class="muted">Itens do pedido</div>
       <table class="items-table" id="itemsTable">
         <thead><tr>
-          <th style="width:42%">Descrição</th>
-          <th style="width:12%">Qtd</th>
+          <th style="width:38%">Descrição</th>
+          <th style="width:10%">Qtd</th>
           <th style="width:12%">Un</th>
           <th style="width:16%">Preço Unit. (R$)</th>
-          <th style="width:10%">Subtotal</th>
-          <th style="width:8%">Remover</th>
+          <th style="width:14%">Subtotal (editável)</th>
+          <th style="width:10%">Remover</th>
         </tr></thead>
         <tbody id="itemsBody"></tbody>
         <tfoot><tr><td colspan="6"><button class="btn ghost" id="btnAddItem" type="button">+ Adicionar item</button></td></tr></tfoot>
       </table>
 
       <div class="grid">
-        <div class="span-3"></div>
-        <div><label>Total do Pedido (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
+        <div class="span-2"></div>
+        <div><label>Total dos Itens (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
+        <div><label>Frete (R$)</label><input class="right" type="text" id="mFrete" placeholder="0,00" /></div>
       </div>
 
       <div class="actions">
