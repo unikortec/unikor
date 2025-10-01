@@ -1,16 +1,20 @@
 {
-  "name": "Unikor – Relatórios",
+  "name": "Relatórios — UNIKOR",
   "short_name": "Relatórios",
-  "description": "Consulta, edição e exportação de relatórios dos pedidos.",
-  "id": "./index.html",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": ".",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#ffffff",
   "theme_color": "#1e7f46",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/assets/logo/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/logo/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
