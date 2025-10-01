@@ -1,5 +1,5 @@
 // app/pedidos/js/db.js
-// Salva pedido de forma idempotente. Primeiro tenta a API /api/tenant-pedidos/salvar.
+// Salva pedido de forma idempotente. Primeiro tenta a API /api/tenant-pedidos.
 // Se falhar (sem backend, offline, etc.), salva DIRETO no Firestore com docId determinístico.
 
 import {
@@ -43,7 +43,6 @@ export function buildIdempotencyKey(payload){
 function toHexHash(str){
   let h = 5381;
   for (let i=0;i<str.length;i++) h = ((h<<5)+h) ^ str.charCodeAt(i);
-  // h >>> 0 => unsigned; concat com tamanho para reduzir colisão
   return (h >>> 0).toString(16) + '-' + str.length.toString(16);
 }
 
@@ -63,23 +62,22 @@ async function savePedidoDiretoNoFirestore(payload, idempotencyKey){
     updatedBy: user?.uid || null
   };
 
-  // merge:true garante idempotência (repetição não cria novo)
-  await setDoc(ref, base, { merge: true });
-  return { id: docId };
+  await setDoc(ref, base, { merge: true }); // idempotente
+  return { id: docId, ok:true, reused:false };
 }
 
 /* ===== Salvamento via API + fallback ===== */
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
 
-  // Se a mesma chave acabou de ser salva, evita flood de cliques
+  // antirrepique de clique
   if (localStorage.getItem('unikor:lastIdemKey') === idempotencyKey) {
-    return { id: localStorage.getItem('unikor:lastDocId') || null, reused:true };
+    return { id: localStorage.getItem('unikor:lastDocId') || null, ok:true, reused:true };
   }
 
   // 1) tenta backend
   try{
-    const r = await fetch("/api/tenant-pedidos/salvar", {
+    const r = await fetch("/api/tenant-pedidos", { // <<< sem /salvar
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
@@ -90,7 +88,6 @@ export async function savePedidoIdempotente(payload){
       if (json?.id) localStorage.setItem('unikor:lastDocId', json.id);
       return json;
     }
-    // se a API respondeu com erro, cai pro fallback
     console.warn("[savePedido] API retornou", r.status, "— usando fallback Firestore");
   } catch(e){
     console.warn("[savePedido] Falha rede/API — usando fallback Firestore", e?.message);
