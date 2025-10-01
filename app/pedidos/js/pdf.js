@@ -12,6 +12,7 @@ function twoFirstNamesCamel(client){
   const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
   return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase()).join('').replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
 }
+// >>> Nome com "H" antes da hora
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
   const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
@@ -36,7 +37,7 @@ function lerItensDaTela(){
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso em UN por kg
+    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
@@ -85,7 +86,9 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
 
 /* ================== Construção do PDF ====================== */
 async function construirPDF(){
-  await ensureFreteBeforePDF();
+  // Garante frete atualizado para o resumo
+  const freteResp = await ensureFreteBeforePDF();
+
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
   // Cabeçalho
@@ -111,13 +114,13 @@ async function construirPDF(){
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
 
-  // >>> Forma de pagamento (lido do seletor + campo "outro")
+  // >>> pagamento (lido igual usamos no app.js)
   const selPag = document.getElementById("pagamento");
-  const outro  = document.getElementById("pagamentoOutro");
-  let pagamento = (selPag?.value||"").trim();
-  if (pagamento.toUpperCase()==="OUTRO"){
-    const t = (outro?.value||"").trim();
-    if (t) pagamento = t;
+  const outroPag = document.getElementById("pagamentoOutro");
+  let pagamento = (selPag?.value || "").toUpperCase();
+  if (pagamento === "OUTRO") {
+    const txt = (outroPag?.value || "").trim();
+    if (txt) pagamento = txt.toUpperCase();
   }
 
   // Cliente
@@ -167,19 +170,19 @@ async function construirPDF(){
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // >>> *** NOVO BLOCO: FORMA DE PAGAMENTO (largura total) ***
-  ensureSpace(10);
-  doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  // >>> FORMA DE PAGAMENTO (largura total, mesmo espaçamento do dia/contato)
+  ensureSpace(12);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
-  doc.text("FORMA DE PAGAMENTO", margemX+larguraCaixa/2, y+4, { align:"center" });
+  doc.setFont("helvetica","bold"); doc.setFontSize(8);
+  doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 6);
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text((pagamento||"").toUpperCase(), margemX+larguraCaixa/2, y+8, { align:"center" });
-  y += 11;
-  // <<< FIM DO BLOCO NOVO
+  doc.text(pagamento || "-", margemX + larguraCaixa - 3, y + 6, { align: "right" });
+  y += 12;
 
   // Tabela itens - Cabeçalho
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
   doc.rect(margemX, y, W_PROD, 10, "S");
   doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
   doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
@@ -307,6 +310,8 @@ async function construirPDF(){
   }
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
+
+  // Retorna blob p/ salvar/compartilhar/preview
   const blob = doc.output('blob');
   return { blob, nomeArq, doc };
 }
@@ -318,10 +323,13 @@ export async function gerarPDFPreview(){
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
+
 export async function salvarPDFLocal(){
   const { blob, nomeArq } = await construirPDF();
   try{
+    // @ts-ignore
     if (window.showSaveFilePicker){
+      // @ts-ignore
       const handle = await window.showSaveFilePicker({
         suggestedName: nomeArq,
         types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
@@ -335,13 +343,17 @@ export async function salvarPDFLocal(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = nomeArq;
-  document.body.appendChild(a); a.click(); a.remove();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
   return { nome: nomeArq };
 }
+
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
   const file = new File([blob], nomeArq, { type: 'application/pdf' });
+
   try{
     if (navigator.canShare && navigator.canShare({ files:[file] })) {
       await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
@@ -351,6 +363,7 @@ export async function compartilharPDFNativo(){
     if (String(e).includes('AbortError')) return { compartilhado:false, cancelado:true };
     throw e;
   }
+
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
