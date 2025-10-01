@@ -1,12 +1,13 @@
-// relatorios/js/export.js
+// /relatorios/js/export.js
 import { $, moneyBR, toBR } from './render.js';
 
+/* =================== Utilitários UI =================== */
 function setLoading(btn, isLoading, labelWhenIdle){
   if (!btn) return;
   const lbl = btn.querySelector(".lbl");
   if (isLoading){
     btn.setAttribute("disabled","true");
-    if (lbl) lbl.textContent = labelWhenIdle || lbl.textContent || "Processando…";
+    if (lbl && labelWhenIdle) lbl.textContent = labelWhenIdle;
     const sp = document.createElement("span");
     sp.className = "spinner"; sp.setAttribute("data-spin","1");
     btn.prepend(sp);
@@ -18,7 +19,7 @@ function setLoading(btn, isLoading, labelWhenIdle){
 }
 const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
-/** Carrega SheetJS tentando 3 CDNs, com timeout e feedback. */
+/* =================== Loader XLSX (SheetJS) =================== */
 async function ensureXLSX(){
   if (window.XLSX) return window.XLSX;
   const sources = [
@@ -37,77 +38,85 @@ async function ensureXLSX(){
         document.head.appendChild(s);
       });
       if (window.XLSX) return window.XLSX;
-    }catch{}
+    }catch{ /* tenta o próximo */ }
   }
   throw new Error("Falha ao carregar o gerador XLSX (conexão).");
 }
 
-function freteFrom(r){
-  if (typeof r?.freteValor === 'number') return r.freteValor;
-  if (r?.frete?.isento) return 0;
-  return Number(r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? 0) || 0;
+/* =================== Helpers de agregação =================== */
+function getFreteDePedido(r){
+  const f = r?.frete || {};
+  const cobrado = Number(f.valorCobrado ?? f.valorBase ?? 0) || 0;
+  return cobrado;
 }
+function getItensArray(r){
+  return Array.isArray(r.itens) ? r.itens : [];
+}
+function sum(a,b){ return Number(a||0) + Number(b||0); }
 
-/* ================= XLSX ================= */
+/* =================== XLSX =================== */
 export async function exportarXLSX(rows){
   const btn = $("btnXLSX");
-  if (!rows.length){ alert("Nada para exportar."); return; }
+  if (!rows?.length){ alert("Nada para exportar."); return; }
   setLoading(btn, true, "Exportar XLSX");
   try{
     const XLSX = await ensureXLSX();
-    const modo = $("fModo").value || "reduzido";
-    const data = rows.map(r=>{
-      const itens = Array.isArray(r.itens)? r.itens : [];
-      const frete = freteFrom(r);
-      const base = {
+
+    // Sheet 1 — Pedidos
+    const pedidos = rows.map(r=>{
+      const itens = getItensArray(r);
+      const qtdItens = itens.length;
+      const tipo = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
+      const frete = getFreteDePedido(r);
+      return {
         "Data": toBR(r.dataEntregaISO||""),
         "Hora": r.horaEntrega||"",
         "Cliente": r.cliente||"",
-        "Endereço": r.endereco || "",
-        "CEP": r.cep || "",
-        "Contato": r.contato || "",
-        "Itens": itens.length,
-        "Tipo": (r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA",
+        "Endereço": (r?.entrega?.endereco||""),
+        "CEP": (r?.clienteFiscal?.cep || r?.cep || ""),
+        "Telefone": (r?.clienteFiscal?.contato || r?.telefone || ""),
+        "Qtd Itens": qtdItens,
+        "Tipo": tipo,
         "Pagamento": r.pagamento||"",
-        "Frete (R$)": Number(frete||0),
+        "Frete (R$)": Number(frete || 0),
         "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
-        "Total Itens (R$)": Number(r.totalPedido||0),
-        "Total Pedido (R$)": Number((Number(r.totalPedido||0) + Number(frete||0)).toFixed(2)),
+        "Total (R$)": Number(r.totalPedido||0),
         "ID": r.id
       };
-      if (modo==="detalhado"){
-        const linhas = itens.map(i => ({
-          "PRODUTO": i.produto||i.descricao||"",
-          "QDE": Number(i.quantidade||i.qtd||0),
-          "UN": i.tipo||i.un||"UN",
-          "VALOR": Number(i.precoUnit||i.preco||0),
-          "TOTAL": Number(i.subtotal || (Number(i.quantidade||i.qtd||0)*Number(i.precoUnit||i.preco||0)))
-        }));
-        // SheetJS não suporta múltiplas linhas por registro facilmente; então
-        // adicionamos coluna texto com resumo.
-        base["Itens (detalhe)"] = linhas.map(l => `${l.PRODUTO} | ${l.QDE} ${l.UN} | ${moneyBR(l.VALOR)} | ${moneyBR(l.TOTAL)}`).join("  ||  ");
-      }
-      return base;
     });
 
-    const ws = XLSX.utils.json_to_sheet(data);
+    // Sheet 2 — Itens detalhados
+    const itensRows = [];
+    rows.forEach(r=>{
+      const itens = getItensArray(r);
+      itens.forEach(it=>{
+        const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+        const un  = (it.un ?? it.tipo ?? "UN");
+        const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+        const sub = Number((qtd * pu).toFixed(2));
+        itensRows.push({
+          "Pedido ID": r.id,
+          "Cliente": r.cliente || "",
+          "Data": toBR(r.dataEntregaISO||""),
+          "Produto": (it.produto || it.descricao || ""),
+          "QDE": qtd,
+          "UN": un,
+          "Preço Unit. (R$)": pu,
+          "Subtotal (R$)": sub
+        });
+      });
+    });
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
+    const wsPedidos = XLSX.utils.json_to_sheet(pedidos);
+    const wsItens   = XLSX.utils.json_to_sheet(itensRows);
+
+    XLSX.utils.book_append_sheet(wb, wsPedidos, "Pedidos");
+    XLSX.utils.book_append_sheet(wb, wsItens,   "Itens");
 
     await nextFrame();
-    const nome = `Relatorio_${new Date().toISOString().slice(0,10)}.xlsx`;
-    try{
-      // versões novas
-      if (XLSX.writeFileXLSX) XLSX.writeFileXLSX(wb, nome);
-      else XLSX.writeFile(wb, nome);
-    }catch{
-      // fallback manual
-      const bin = XLSX.write(wb, { type:"array", bookType:"xlsx" });
-      const blob = new Blob([bin], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = nome; a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-    }
+    const nome = `Relatorios_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nome);
   } catch (e){
     console.error(e);
     alert("Não consegui carregar o gerador XLSX (conexão). Tente novamente.");
@@ -116,124 +125,165 @@ export async function exportarXLSX(rows){
   }
 }
 
-/* ================= PDF ================= */
+/* =================== PDF =================== */
 export async function exportarPDF(rows){
   const btn = $("btnPDF");
-  if (!rows.length){ alert("Nada para gerar."); return; }
+  if (!rows?.length){ alert("Nada para gerar."); return; }
   setLoading(btn, true, "Gerar PDF");
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
 
-    const left=12, top=14;
-    const lineH=7.5; // mais alto
+    // Margens e espaçamentos
+    const left=12, top=14, lineH=6;
     let y = top;
 
-    // Título
+    // ===== Cabeçalho =====
     doc.setFont("helvetica","bold"); doc.setFontSize(16);
-    doc.text("Relatórios — Serra Nobre", left, y); y += 8.5;
+    doc.text("Relatórios — Serra Nobre", left, y);
     doc.setFontSize(9); doc.setFont("helvetica","normal");
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y); y += 7.5;
+    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, left, y+6);
 
-    // Cabeçalho principal (cliente)
+    // Agregações do período
+    const totais = rows.reduce((acc, r)=>{
+      const itens = getItensArray(r);
+      const qtdItens = itens.length;
+      const frete = getFreteDePedido(r);
+      const totalPedido = Number(r.totalPedido||0);
+
+      // soma subtotais (sem frete) para relatório
+      const somaItens = itens.reduce((s, it)=>{
+        const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+        const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+        return s + (qtd * pu || 0);
+      }, 0);
+
+      acc.qtdPedidos += 1;
+      acc.qtdItens   += qtdItens;
+      acc.totalFrete  = sum(acc.totalFrete, frete);
+      acc.totalItens  = sum(acc.totalItens, somaItens);
+      acc.totalPedidos= sum(acc.totalPedidos, totalPedido);
+      return acc;
+    }, { qtdPedidos:0, qtdItens:0, totalFrete:0, totalItens:0, totalPedidos:0 });
+
+    y += 14;
+
+    // ===== Resumo em linha (horizontal) =====
     doc.setFont("helvetica","bold");
-    const headers = ["NOME CLIENTE","ENDEREÇO","QDE ITENS","TIPO","PAGAMENTO","FRETE (R$)","CUPOM"];
-    const colsW   = [56, 86, 22, 22, 36, 26, 52];
+    const labels = [
+      `QTD. PEDIDOS: ${totais.qtdPedidos}`,
+      `QTD. ITENS: ${totais.qtdItens}`,
+      `TOTAL FRETE: R$ ${moneyBR(totais.totalFrete)}`,
+      `VENDA (ITENS): R$ ${moneyBR(totais.totalItens)}`
+    ];
+    const gap = 8;
     let x = left;
+    labels.forEach((t, i)=>{
+      doc.text(t, x, y);
+      x += doc.getTextWidth(t) + gap + 8; // gap extra entre blocos
+    });
+    y += 6;
+    doc.setLineWidth(.2); doc.line(left, y, 285, y); y += 5;
+
+    // ===== Tabela de clientes (linha por pedido) =====
+    doc.setFont("helvetica","bold"); doc.setFontSize(10);
+    const headers = ["NOME CLIENTE","ENDEREÇO","QDE ITENS","TIPO","PAGAMENTO","FRETE","CUPOM"];
+    // larguras calibradas (paisagem A4)
+    const colsW   = [62, 88, 24, 22, 32, 24, 32];
+    x = left;
     headers.forEach((h,i)=>{ doc.text(h, x, y); x += colsW[i]; });
-    y += 3.2;
-    doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce((a,b)=>a+b,0), y); y += 5.2;
-    doc.setFont("helvetica","normal");
+    y += 2.5; doc.setLineWidth(.2); doc.line(left, y, left+colsW.reduce(sum,0), y); y += 5;
+    doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
-    const pageBottom = 200;
-
-    // acumuladores p/ rodapé
-    let totalPedidos = rows.length;
-    let totalItens = 0;
-    let totalFrete = 0;
-    let totalGeral = 0;
-
+    const safeBottom = 190;
     for (const r of rows){
-      const itens = Array.isArray(r.itens) ? r.itens : [];
-      const frete = freteFrom(r);
-      const tipo  = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA")?"RETIRADA":"ENTREGA";
-      const endereco = [r.endereco, r.cep, r.contato].filter(Boolean).join(" • ");
+      const itens = getItensArray(r);
+      const qtdItens = itens.length;
+      const tipo = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
+      const pagamento = r.pagamento || "";
+      const frete = getFreteDePedido(r);
+      const cupom = (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-";
 
-      // linha do cliente
+      const nome   = r.cliente || "";
+      const end    = (r?.entrega?.endereco || "");
+      const nomeLines = doc.splitTextToSize(nome, colsW[0]-2);
+      const endLines  = doc.splitTextToSize(end,  colsW[1]-2);
+      const lines = Math.max(nomeLines.length, endLines.length);
+      const rowH = Math.max(lineH, lines*lineH);
+
+      if (y + rowH + 18 > safeBottom){ doc.addPage(); y = top; } // 18 para o bloco de itens logo abaixo
+
       x = left;
-      const clienteLines  = doc.splitTextToSize(r.cliente||"", colsW[0]-2);
-      const enderecoLines = doc.splitTextToSize(endereco||"", colsW[1]-2);
-      const lines = Math.max(1, clienteLines.length, enderecoLines.length);
-      const rowH = Math.max(lineH + 2, lines*lineH + 1.5);
+      // Nome
+      nomeLines.forEach((ln, k)=> doc.text(ln, x, y + (k+1)*lineH - 1.5));
+      x += colsW[0];
 
-      if (y + rowH + 18 > pageBottom){ doc.addPage(); y = top; } // +18 pelo bloco de itens
+      // Endereço
+      endLines.forEach((ln, k)=> doc.text(ln, x, y + (k+1)*lineH - 1.5));
+      x += colsW[1];
 
-      // células cliente
-      const cells = [
-        clienteLines, enderecoLines,
-        String(itens.length), tipo, (r.pagamento||""), moneyBR(frete), (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-"
-      ];
-      x = left;
-      for (let i=0;i<cells.length;i++){
-        const val = cells[i];
-        if (Array.isArray(val)){
-          val.forEach((ln,k)=> doc.text(ln, x, y + (k+1)*lineH - 1.2));
-        } else {
-          doc.text(String(val), x, y + lineH - 1.2);
-        }
-        x += colsW[i];
-      }
-      y += rowH + 2; // respiro após linha de cliente
+      doc.text(String(qtdItens), x, y + lineH - 1.5); x += colsW[2];
+      doc.text(tipo,             x, y + lineH - 1.5); x += colsW[3];
+      doc.text(pagamento || "-", x, y + lineH - 1.5); x += colsW[4];
+      doc.text(`R$ ${moneyBR(frete)}`, x, y + lineH - 1.5); x += colsW[5];
+      doc.text(cupom, x, y + lineH - 1.5);
 
-      // detalhamento dos itens (tabela)
+      y += rowH + 3; // respiro extra entre cliente e itens
+
+      // ===== Itens — cabeçalho
       doc.setFont("helvetica","bold");
-      doc.text("PRODUTO", left, y);
-      doc.text("QDE", left+120, y);
-      doc.text("VALOR", left+140, y);
-      doc.text("TOTAL", left+165, y);
-      y += 3;
-      doc.setLineWidth(.2); doc.line(left, y, left+178, y); y += 5;
-      doc.setFont("helvetica","normal");
+      const ih = ["PRODUTO","QDE","VALOR","TOTAL"];
+      const iw = [120, 24, 28, 28];
+      x = left + 4; // indent leve sob o cliente
+      ih.forEach((h,i)=>{ doc.text(h, x, y); x += iw[i]; });
+      y += 2.2; doc.setLineWidth(.2); doc.line(left+4, y, left+4+iw.reduce(sum,0), y); y += 4;
+      doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
+      // ===== Itens — linhas
+      let somaItensPedido = 0;
       for (const it of itens){
-        const prod = (it.produto||it.descricao||"");
-        const un   = (it.tipo||it.un||"UN").toUpperCase();
-        const qde  = Number(it.quantidade||it.qtd||0);
-        const pu   = Number(it.precoUnit||it.preco||0);
-        const sub  = Number(it.subtotal || (qde * pu));
+        const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+        const un  = (it.un ?? it.tipo ?? "UN");
+        const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+        const sub = Number((qtd * pu).toFixed(2));
+        somaItensPedido += sub;
 
-        const prodLines = doc.splitTextToSize(prod, 110);
-        const h = Math.max(lineH, prodLines.length*lineH);
-        if (y + h > pageBottom){ doc.addPage(); y = top; }
+        const prod = (it.produto || it.descricao || "");
+        const prodLines = doc.splitTextToSize(prod, iw[0]-2);
+        const ihRow = Math.max(lineH, prodLines.length*lineH);
 
-        prodLines.forEach((ln,k)=> doc.text(ln, left, y + (k+1)*lineH - 1.2));
-        doc.text(`${qde} ${un}`, left+120, y + lineH - 1.2);
-        doc.text(moneyBR(pu), left+140, y + lineH - 1.2);
-        doc.text(moneyBR(sub), left+165, y + lineH - 1.2);
+        if (y + ihRow > safeBottom){ doc.addPage(); y = top; }
 
-        y += h + 2;
-        totalItens += 1; // conta linhas de itens
+        x = left + 4;
+        prodLines.forEach((ln, k)=> doc.text(ln, x, y + (k+1)*lineH - 1.5));
+        x += iw[0];
+        doc.text(`${qtd} ${un}`, x, y + lineH - 1.5); x += iw[1];
+        doc.text(`R$ ${moneyBR(pu)}`, x, y + lineH - 1.5); x += iw[2];
+        doc.text(`R$ ${moneyBR(sub)}`, x, y + lineH - 1.5);
+
+        y += ihRow + 2;
       }
 
-      // linha do frete no detalhamento
-      if (y + lineH > pageBottom){ doc.addPage(); y = top; }
+      // ===== Frete & Total do pedido (linha de resumo do pedido)
+      const totalPedido = Number(r.totalPedido||0);
+      if (y + 10 > safeBottom){ doc.addPage(); y = top; }
       doc.setFont("helvetica","bold");
-      doc.text("FRETE", left, y);
+      doc.text(`FRETE: R$ ${moneyBR(frete)}   |   SUBTOTAL ITENS: R$ ${moneyBR(somaItensPedido)}   |   TOTAL PEDIDO: R$ ${moneyBR(totalPedido)}`, left+4, y);
       doc.setFont("helvetica","normal");
-      doc.text(moneyBR(frete), left+165, y);
-      y += lineH + 3;
+      y += 8;
 
-      totalFrete += Number(frete||0);
-      totalGeral += Number((Number(r.totalPedido||0) + Number(frete||0)) || 0);
+      // separador entre pedidos
+      doc.setDrawColor(230); doc.line(left, y, 285, y); doc.setDrawColor(0);
+      y += 6;
     }
 
-    // Rodapé com totais
-    if (y + 16 > pageBottom){ doc.addPage(); y = top; }
+    // ===== Rodapé com totais gerais =====
+    if (y > 190){ doc.addPage(); y = top; }
     doc.setFont("helvetica","bold"); doc.setFontSize(11);
-    doc.text(`PEDIDOS: ${totalPedidos}`, left, y); y += 6.5;
-    doc.text(`ITENS (linhas): ${totalItens}`, left, y); y += 6.5;
-    doc.text(`TOTAL FRETES: R$ ${moneyBR(totalFrete)}`, left, y); y += 6.5;
-    doc.text(`TOTAL GERAL: R$ ${moneyBR(totalGeral)}`, left, y);
+    doc.text(
+      `RESUMO — ITENS: ${totais.qtdItens}  |  SOMA SUBTOTAIS: R$ ${moneyBR(totais.totalItens)}  |  TOTAL FRETE: R$ ${moneyBR(totais.totalFrete)}  |  TOTAL PEDIDOS: R$ ${moneyBR(totais.totalPedidos)}`,
+      left, y
+    );
 
     await nextFrame();
     doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
