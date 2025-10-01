@@ -12,7 +12,6 @@ function twoFirstNamesCamel(client){
   const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
   return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase()).join('').replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
 }
-// >>> Nome com "H" antes da hora
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
   const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
@@ -32,12 +31,12 @@ function lerItensDaTela(){
     const obsInput = itemEl.querySelector('.obsItem');
 
     const produto = produtoInput?.value?.trim() || '';
-    the tipo = (tipoSelect?.value || 'KG').toUpperCase();
+    const tipo = (tipoSelect?.value || 'KG').toUpperCase();
     const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
+    // Peso em UN por kg
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
@@ -84,24 +83,9 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
   return rowH;
 }
 
-/* === [NOVO] Caixa "FORMA DE PAGAMENTO" (mesma largura do “Dia da semana”) === */
-function drawPagamentoBox(doc, x, y, w, pagamento, opts={}){
-  const { rowH=10, titleSize=8, valueSize=9, gapY=1 } = opts;
-  doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x, y, w, rowH, "S");
-  const label = "FORMA DE PAGAMENTO:";
-  doc.setFont("helvetica","bold"); doc.setFontSize(titleSize);
-  doc.text(label, x+3, y+4.2);
-  const lW = doc.getTextWidth(label) + 1.5;
-  doc.setFont("helvetica","normal"); doc.setFontSize(valueSize);
-  doc.text(String(pagamento||"-").toUpperCase(), x+3+lW, y+4.2);
-  return rowH + gapY;
-}
-
 /* ================== Construção do PDF ====================== */
 async function construirPDF(){
-  // Garante frete atualizado para o resumo
-  const freteResp = await ensureFreteBeforePDF();
-
+  await ensureFreteBeforePDF();
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
   // Cabeçalho
@@ -127,18 +111,14 @@ async function construirPDF(){
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
 
-  // >>> pagamento (OUTRO => pega campo livre)
-  (()=>{ /* escopo isolado para evitar conflitos */
-    const sel = document.getElementById("pagamento");
-    const outro = document.getElementById("pagamentoOutro");
-    let p = (sel?.value || "").trim();
-    if (p.toUpperCase() === "OUTRO") {
-      const liv = (outro?.value || "").trim();
-      if (liv) p = liv;
-    }
-    // expõe localmente (sem poluir global)
-    construirPDF.__PAGAMENTO__ = p;
-  })();
+  // >>> Forma de pagamento (lido do seletor + campo "outro")
+  const selPag = document.getElementById("pagamento");
+  const outro  = document.getElementById("pagamentoOutro");
+  let pagamento = (selPag?.value||"").trim();
+  if (pagamento.toUpperCase()==="OUTRO"){
+    const t = (outro?.value||"").trim();
+    if (t) pagamento = t;
+  }
 
   // Cliente
   ensureSpace(14);
@@ -187,14 +167,15 @@ async function construirPDF(){
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  /* ===== [NOVO] Caixa “FORMA DE PAGAMENTO” — logo abaixo de Data/Hora ===== */
-  {
-    ensureSpace(10 + 1);
-    const pagamento = (construirPDF.__PAGAMENTO__ || "");
-    y += drawPagamentoBox(doc, margemX, y, larguraCaixa, pagamento, {
-      rowH: 10, titleSize: 8, valueSize: 9, gapY: 1
-    });
-  }
+  // >>> *** NOVO BLOCO: FORMA DE PAGAMENTO (largura total) ***
+  ensureSpace(10);
+  doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  doc.rect(margemX, y, larguraCaixa, 10, "S");
+  doc.text("FORMA DE PAGAMENTO", margemX+larguraCaixa/2, y+4, { align:"center" });
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text((pagamento||"").toUpperCase(), margemX+larguraCaixa/2, y+8, { align:"center" });
+  y += 11;
+  // <<< FIM DO BLOCO NOVO
 
   // Tabela itens - Cabeçalho
   ensureSpace(14);
@@ -326,32 +307,21 @@ async function construirPDF(){
   }
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
-
-  // Retorna blob p/ salvar/compartilhar/preview
   const blob = doc.output('blob');
   return { blob, nomeArq, doc };
 }
 
 /* =================== APIs públicas =================== */
-// Abre uma aba/preview do PDF (sem baixar) — botão "Gerar PDF"
 export async function gerarPDFPreview(){
   const { blob } = await construirPDF();
   const url = URL.createObjectURL(blob);
-  // Abre em nova aba. Em iOS PWA, pode abrir o viewer do Safari.
   window.open(url, '_blank', 'noopener,noreferrer');
-  // Libera URL depois de um tempo
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-
-// Baixa o arquivo localmente — botão "Salvar PDF"
 export async function salvarPDFLocal(){
   const { blob, nomeArq } = await construirPDF();
-
-  // File System Access API (quando disponível)
   try{
-    // @ts-ignore
     if (window.showSaveFilePicker){
-      // @ts-ignore
       const handle = await window.showSaveFilePicker({
         suggestedName: nomeArq,
         types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
@@ -361,40 +331,26 @@ export async function salvarPDFLocal(){
       await writable.close();
       return { nome: nomeArq };
     }
-  }catch{ /* fallback abaixo */ }
-
-  // Fallback: a.href + download
+  }catch{}
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = nomeArq;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
   return { nome: nomeArq };
 }
-
-// Compartilha nativamente — botão "Compartilhar PDF"
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
   const file = new File([blob], nomeArq, { type: 'application/pdf' });
-
   try{
     if (navigator.canShare && navigator.canShare({ files:[file] })) {
-      await navigator.share({
-        title: 'Pedido',
-        text: 'Segue o PDF do pedido.',
-        files: [file]
-      });
+      await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
       return { compartilhado:true };
     }
   }catch(e){
-    // Usuário pode cancelar; tratamos como não fatal
     if (String(e).includes('AbortError')) return { compartilhado:false, cancelado:true };
     throw e;
   }
-
-  // Fallback: abre o PDF em nova aba (usuário pode enviar manualmente)
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
