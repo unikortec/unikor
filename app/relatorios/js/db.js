@@ -3,13 +3,17 @@
 
 import {
   db, serverTimestamp,
-  collection, doc, setDoc, getDoc, getDocs, query, where, orderBy, limit,
+  collection, doc, setDoc, getDoc, getDocs,
+  query, where, orderBy, limit,
+  startAt, endAt,                 // <- vem do relatorios/js/firebase.js
   requireTenantContext
 } from "./firebase.js";
 
+/* ------------ helpers de paths ------------ */
 function colPath(tenantId, coll) { return collection(db, "tenants", tenantId, coll); }
 function docPath(tenantId, coll, id) { return doc(db, "tenants", tenantId, coll, id); }
 
+/* ------------ auditoria/tenant ------------ */
 function withAuthorAndTenant(base, { uid, tenantId }, { isCreate=false } = {}) {
   const now = serverTimestamp();
   const payload = { ...base, tenantId };
@@ -22,51 +26,73 @@ function withAuthorAndTenant(base, { uid, tenantId }, { isCreate=false } = {}) {
   return payload;
 }
 
-function norm(s=""){ return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(); }
+/* ------------ utilidades ------------ */
+const norm = (s="") =>
+  String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
 
-// soma quando totalPedido não existir
 function calcTotalFromItens(itens){
   if (!Array.isArray(itens)) return 0;
   return itens.reduce((s,it)=>{
     const qtd = Number(it.qtd ?? it.quantidade ?? 0);
     const pu  = Number(it.precoUnit ?? it.preco ?? 0);
     return s + (qtd * pu || 0);
-  },0);
+  }, 0);
 }
 
-/* ===== PEDIDOS ===== */
-export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, max=1000 } = {}) {
+/* ===================== PEDIDOS ===================== */
+/**
+ * Lista pedidos com filtros opcionais:
+ * - dataIniISO / dataFimISO (YYYY-MM-DD)
+ * - clienteLike (contém, case-insensitive)
+ * - tipo ("ENTREGA" | "RETIRADA")
+ * - max (limite)
+ *
+ * Observação: usa orderBy(dataEntregaISO) + startAt/endAt para evitar índices compostos.
+ * Se o ambiente exigir, cai para um fallback com where() e 1 orderBy.
+ */
+export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, max=1000 } = {}){
   const { tenantId } = await requireTenantContext();
   const base = colPath(tenantId, "pedidos");
 
   let qRef;
-
-  // Se tiver pelo menos uma das bordas de data, usamos orderBy + startAt/endAt
-  if (dataIniISO || dataFimISO) {
-    qRef = query(base, orderBy("dataEntregaISO", "asc"), limit(max));
-    if (dataIniISO) qRef = query(qRef, startAt(dataIniISO));
-    if (dataFimISO) qRef = query(qRef, endAt(dataFimISO));
-  } else {
-    // Sem filtro de data: ordena por createdAt (mais recente primeiro)
-    qRef = query(base, orderBy("createdAt", "desc"), limit(max));
+  try {
+    if (dataIniISO || dataFimISO) {
+      const parts = [ orderBy("dataEntregaISO","asc") ];
+      if (dataIniISO) parts.push(startAt(dataIniISO));
+      if (dataFimISO) parts.push(endAt(dataFimISO));
+      parts.push(limit(max));
+      qRef = query(base, ...parts);
+    } else {
+      // sem filtro de data: usa createdAt desc
+      qRef = query(base, orderBy("createdAt","desc"), limit(max));
+    }
+  } catch (e) {
+    // fallback (ambiente sem índice adequado)
+    console.warn("[pedidos_list] fallback para where()", e);
+    const conds = [];
+    if (dataIniISO) conds.push(where("dataEntregaISO", ">=", dataIniISO));
+    if (dataFimISO) conds.push(where("dataEntregaISO", "<=", dataFimISO));
+    qRef = conds.length
+      ? query(base, ...conds, orderBy("dataEntregaISO","asc"), limit(max))
+      : query(base, orderBy("dataEntregaISO","desc"), limit(max));
   }
 
   const snap = await getDocs(qRef);
   let list = [];
   snap.forEach(d => {
     const data = d.data();
-    const totalPedido = (typeof data.totalPedido === 'number')
+    const totalPedido = (typeof data.totalPedido === "number")
       ? data.totalPedido
       : calcTotalFromItens(data.itens);
     list.push({ id: d.id, ...data, totalPedido });
   });
 
-  // Filtros client-side complementares
-  if (clienteLike) {
-    const needle = String(clienteLike).trim().toUpperCase();
-    list = list.filter(x => (x.cliente || "").toUpperCase().includes(needle));
+  // filtros client-side complementares
+  if (clienteLike && String(clienteLike).trim()){
+    const needle = norm(clienteLike.trim());
+    list = list.filter(x => norm(x.clientUpper || x.cliente || "").includes(needle));
   }
-  if (tipo) {
+  if (tipo && String(tipo).trim()){
     const t = String(tipo).toUpperCase();
     list = list.filter(x => (x?.entrega?.tipo || "").toUpperCase() === t);
   }
@@ -74,34 +100,36 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
   return list;
 }
 
-export async function pedidos_get(id) {
+export async function pedidos_get(id){
   const { tenantId } = await requireTenantContext();
   const ref = docPath(tenantId, "pedidos", id);
   const snap = await getDoc(ref);
   if (!snap.exists()) return null;
+
   const data = snap.data();
-  const totalPedido = (typeof data.totalPedido === 'number')
+  const totalPedido = (typeof data.totalPedido === "number")
     ? data.totalPedido
     : calcTotalFromItens(data.itens);
+
   return { id: snap.id, ...data, totalPedido };
 }
 
-export async function pedidos_update(id, data) {
+export async function pedidos_update(id, data){
   const { user, tenantId } = await requireTenantContext();
   const ref = docPath(tenantId, "pedidos", id);
 
-  // normalizações úteis
   const patch = { ...(data || {}) };
   if (patch.cliente) patch.clientUpper = norm(patch.cliente);
-  if (typeof patch.totalPedido !== 'number') patch.totalPedido = calcTotalFromItens(patch.itens);
+  if (typeof patch.totalPedido !== "number") patch.totalPedido = calcTotalFromItens(patch.itens);
 
   const payload = withAuthorAndTenant(patch, { uid: user.uid, tenantId }, { isCreate:false });
   await setDoc(ref, payload, { merge:true });
 }
 
-export async function pedidos_delete(id) {
+export async function pedidos_delete(id){
   const { tenantId } = await requireTenantContext();
   const ref = docPath(tenantId, "pedidos", id);
-  const { deleteDoc } = await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
+  const { deleteDoc } =
+    await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
   await deleteDoc(ref);
 }
