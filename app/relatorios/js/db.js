@@ -22,7 +22,9 @@ function withAuthorAndTenant(base, { uid, tenantId }, { isCreate=false } = {}) {
   return payload;
 }
 
-// helper p/ somar quando totalPedido não existir
+function norm(s=""){ return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase(); }
+
+// soma quando totalPedido não existir
 function calcTotalFromItens(itens){
   if (!Array.isArray(itens)) return 0;
   return itens.reduce((s,it)=>{
@@ -41,9 +43,18 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
   if (dataIniISO) conds.push(where("dataEntregaISO", ">=", dataIniISO));
   if (dataFimISO) conds.push(where("dataEntregaISO", "<=", dataFimISO));
 
-  let qRef = conds.length
-    ? query(base, ...conds, orderBy("dataEntregaISO","desc"), limit(max))
-    : query(base, orderBy("createdAt","desc"), limit(max));
+  // orderBy por dataEntregaISO (e createdAt, se houver índice composto)
+  let qRef;
+  try {
+    qRef = conds.length
+      ? query(base, ...conds, orderBy("dataEntregaISO","asc"), orderBy("createdAt","asc"), limit(max))
+      : query(base, orderBy("createdAt","desc"), limit(max));
+  } catch {
+    // fallback caso não exista índice com createdAt
+    qRef = conds.length
+      ? query(base, ...conds, orderBy("dataEntregaISO","asc"), limit(max))
+      : query(base, orderBy("dataEntregaISO","desc"), limit(max));
+  }
 
   const snap = await getDocs(qRef);
   let list = [];
@@ -55,9 +66,9 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
     list.push({ id: d.id, ...data, totalPedido });
   });
 
-  if (clienteLike) {
-    const needle = String(clienteLike).trim().toUpperCase();
-    list = list.filter(x => (x.cliente || "").toUpperCase().includes(needle));
+  if (clienteLike && String(clienteLike).trim()){
+    const needle = norm(clienteLike.trim());
+    list = list.filter(x => norm(x.clientUpper || x.cliente || "").includes(needle));
   }
   if (tipo) {
     const t = String(tipo).toUpperCase();
@@ -81,7 +92,13 @@ export async function pedidos_get(id) {
 export async function pedidos_update(id, data) {
   const { user, tenantId } = await requireTenantContext();
   const ref = docPath(tenantId, "pedidos", id);
-  const payload = withAuthorAndTenant({ ...(data || {}) }, { uid: user.uid, tenantId }, { isCreate:false });
+
+  // normalizações úteis
+  const patch = { ...(data || {}) };
+  if (patch.cliente) patch.clientUpper = norm(patch.cliente);
+  if (typeof patch.totalPedido !== 'number') patch.totalPedido = calcTotalFromItens(patch.itens);
+
+  const payload = withAuthorAndTenant(patch, { uid: user.uid, tenantId }, { isCreate:false });
   await setDoc(ref, payload, { merge:true });
 }
 
