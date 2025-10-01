@@ -1,11 +1,11 @@
 // app/pedidos/js/app.js
 import { up } from './utils.js';
-import { initItens, adicionarItem, getItens } from './itens.js';
+import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
 // >>> novos imports p/ salvar idempotente e garantir frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
-import { getFreteAtual, ensureFreteBeforePDF } from './frete.js';
+import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
 console.log('App inicializado');
@@ -14,21 +14,8 @@ console.log('App inicializado');
 // mantém maiúsculas mas NÃO tira espaços
 function formatarNome(input) {
   if (!input) return;
-  // normaliza múltiplos espaços e mantém espaço
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
-}
-
-// garante que o campo #cliente aceite espaço mesmo se houver algum listener global bloqueando
-function habilitarEspacoNoCliente() {
-  const el = document.getElementById('cliente');
-  if (!el) return;
-  // roda em "capture" para impedir que outros handlers bloqueiem
-  ['keydown','keypress','keyup','beforeinput'].forEach(type=>{
-    el.addEventListener(type, (ev)=>{
-      if ((ev.key === ' ') || (ev.data === ' ')) ev.stopImmediatePropagation();
-    }, true);
-  });
 }
 
 /* ======== Leitura da tela ======== */
@@ -155,7 +142,7 @@ async function gerarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
   showOverlay();
   try {
-    await persistirPedidoSeNecessario();   // <<< novo
+    await persistirPedidoSeNecessario();
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
   } catch (e) {
@@ -179,7 +166,7 @@ async function salvarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
-    await persistirPedidoSeNecessario();   // <<< novo
+    await persistirPedidoSeNecessario();
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
   } catch (e) {
@@ -203,7 +190,7 @@ async function compartilharPDF() {
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
   showOverlay();
   try {
-    await persistirPedidoSeNecessario();   // <<< novo
+    await persistirPedidoSeNecessario();
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
@@ -223,6 +210,10 @@ document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
 
   initItens();
+
+  // ligar itens -> recálculo do frete sempre que editar
+  atualizarFreteAoEditarItem(atualizarFreteUI);
+  setTimeout(() => atualizarFreteUI(), 50);
 
   setTimeout(() => {
     const containerItens = document.getElementById('itens');
@@ -248,9 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (inputCliente) {
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
-
-  // <<< garante espaço no campo Cliente
-  habilitarEspacoNoCliente();
 });
 
 // exposição (mantive)
