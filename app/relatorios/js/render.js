@@ -1,42 +1,30 @@
+// js/render.js
 export const $ = (id)=>document.getElementById(id);
 export const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
 export const toBR = (iso)=> { if(!iso) return ""; const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
 
-/** Calcula o total do pedido.
- *  Regra: usa `totalPedido` se existir e for número.
- *  Se não, soma itens: (subtotal) || (quantidade || qtd) * (precoUnit || preco).
- *  Inclui frete quando existir (numérico).
- */
-export function rowTotal(r){
-  const num = v => (typeof v === 'number' ? v : Number(String(v ?? "").replace(',','.')));
-  if (Number.isFinite(num(r?.totalPedido))) return num(r.totalPedido);
-
-  let total = 0;
-  const itens = Array.isArray(r?.itens) ? r.itens : [];
-  for (const it of itens){
-    const qtd   = num(it.qtd ?? it.quantidade ?? 0);
-    const pu    = num(it.precoUnit ?? it.preco ?? 0);
-    const sub   = Number.isFinite(num(it.subtotal)) ? num(it.subtotal) : (qtd * pu);
-    total += (Number.isFinite(sub) ? sub : 0);
+function calcularTotalPedido(r){
+  if (typeof r.totalPedido === "number" && r.totalPedido > 0) return r.totalPedido;
+  if (typeof r.totalPedido === "string" && parseFloat(r.totalPedido) > 0) return parseFloat(r.totalPedido);
+  if (Array.isArray(r.itens)){
+    return r.itens.reduce((acc,it)=> acc + Number(it.subtotal || (it.qtd||it.quantidade||0) * (it.precoUnit||it.preco||0)),0);
   }
-  const frete = num(r?.frete);
-  if (Number.isFinite(frete)) total += frete;
-
-  return Number.isFinite(total) ? total : 0;
+  return 0;
 }
 
 export function renderRows(docs){
   const tbody = $("tbody");
   const seen  = new Set();
   const rows  = [];
-  let totalGeral = 0;
+  let total   = 0;
 
   for (const r of docs){
     if (seen.has(r.id)) continue;
     seen.add(r.id);
 
     const itens = Array.isArray(r.itens) ? r.itens : [];
-    const tot = rowTotal(r); totalGeral += tot;
+    const tot = calcularTotalPedido(r);
+    total += tot;
     const tipoTxt = ((r?.entrega?.tipo || "").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
     const cupom = (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-";
 
@@ -64,5 +52,7 @@ export function renderRows(docs){
 
   tbody.innerHTML = rows.join("");
   $("ftCount").textContent = `${seen.size} pedido(s)`;
-  $("ftTotal").textContent = `R$ ${moneyBR(totalGeral)}`;
+  $("ftTotal").textContent = `R$ ${moneyBR(total)}`;
 }
+
+export { calcularTotalPedido };
