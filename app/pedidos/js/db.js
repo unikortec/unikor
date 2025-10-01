@@ -1,23 +1,23 @@
 // app/pedidos/js/db.js
-// Salva pedido de forma idempotente. Primeiro tenta a API /api/tenant-pedidos.
-// Se falhar (sem backend, offline, etc.), salva DIRETO no Firestore com docId determinístico.
+// Salva pedido de forma idempotente (via API do tenant).
+// Se a API não responder, tenta fallback direto no Firestore (id fixo por hash da idemKey).
 
 import {
-  db, serverTimestamp, doc, setDoc, waitForLogin
+  db, TENANT_ID,
+  collection, doc, setDoc, serverTimestamp
 } from './firebase.js';
-import { TENANT_ID } from './firebase.js';
 import { up } from './utils.js';
 
-/* ===== Helpers para chave/assinatura ===== */
+/* ============== Helpers ============== */
 function normalizeEnderecoForKey(str){ return up(str).replace(/\s+/g,' ').trim(); }
 function itemsSig(items){
   if (!Array.isArray(items)) return '';
   return items.map(i=>[
     (i.produto||'').trim().replace(/\|/g,'/'),
     (i.tipo||''),
-    Number(i.quantidade||i.qtd||0).toFixed(3),
+    Number(i.quantidade||0).toFixed(3),
     Number(i.preco||i.precoUnit||0).toFixed(2),
-    Number(i.total||i.subtotal||0).toFixed(2)
+    Number(i.total||0).toFixed(2)
   ].join(':')).join(';');
 }
 
@@ -34,68 +34,58 @@ export function buildIdempotencyKey(payload){
     (payload.clienteFiscal?.cnpj||""),
     (payload.clienteFiscal?.ie||""),
     (payload.clienteFiscal?.cep||""),
-    (payload.clienteFiscal?.contato||""),
-    (payload.pagamento||"")
+    (payload.clienteFiscal?.contato||"")
   ].join("|");
 }
 
-/* Pequeno hash estável p/ virar docId determinístico */
-function toHexHash(str){
-  let h = 5381;
-  for (let i=0;i<str.length;i++) h = ((h<<5)+h) ^ str.charCodeAt(i);
-  return (h >>> 0).toString(16) + '-' + str.length.toString(16);
+// hash rápido (docId determinístico para fallback)
+function hash32(s){
+  let h = 2166136261 >>> 0;
+  for (let i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i); h = Math.imul(h, 16777619);
+  }
+  return (h>>>0).toString(16);
 }
 
-/* ===== Salvamento DIRETO no Firestore (fallback) ===== */
-async function savePedidoDiretoNoFirestore(payload, idempotencyKey){
-  const { user } = await waitForLogin();
-  const docId = toHexHash(idempotencyKey);
-  const ref   = doc(db, "tenants", TENANT_ID, "pedidos", docId);
-
-  const base = {
-    ...payload,
-    idempotencyKey,
-    tenantId: TENANT_ID,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdBy: user?.uid || null,
-    updatedBy: user?.uid || null
-  };
-
-  await setDoc(ref, base, { merge: true }); // idempotente
-  return { id: docId, ok:true, reused:false };
-}
-
-/* ===== Salvamento via API + fallback ===== */
+/* ============== Salvamento ============== */
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
 
-  // antirrepique de clique
-  if (localStorage.getItem('unikor:lastIdemKey') === idempotencyKey) {
-    return { id: localStorage.getItem('unikor:lastDocId') || null, ok:true, reused:true };
-  }
-
-  // 1) tenta backend
+  // 1) Tenta pela API (rota que você tem: /api/tenant-pedidos/salvar)
   try{
-    const r = await fetch("/api/tenant-pedidos", { // <<< sem /salvar
+    const r = await fetch("/api/tenant-pedidos/salvar", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
     });
-    if (r.ok){
-      const json = await r.json();
-      localStorage.setItem('unikor:lastIdemKey', idempotencyKey);
-      if (json?.id) localStorage.setItem('unikor:lastDocId', json.id);
-      return json;
-    }
-    console.warn("[savePedido] API retornou", r.status, "— usando fallback Firestore");
-  } catch(e){
-    console.warn("[savePedido] Falha rede/API — usando fallback Firestore", e?.message);
+    if (!r.ok) throw new Error(`API ${r.status}`);
+    const j = await r.json();
+    if (!j?.ok) throw new Error("API retornou erro lógico");
+    return j; // { ok:true, reused?:bool, id }
+  }catch(e){
+    console.warn("[DB] API indisponível, tentando fallback direto no Firestore:", e?.message || e);
   }
 
-  // 2) fallback direto no Firestore
-  const out = await savePedidoDiretoNoFirestore(payload, idempotencyKey);
-  localStorage.setItem('unikor:lastIdemKey', idempotencyKey);
-  localStorage.setItem('unikor:lastDocId', out.id);
-  return out;
+  // 2) Fallback direto no Firestore (pode falhar se rules não permitirem — tudo bem)
+  try{
+    const docId = "idem_" + hash32(idempotencyKey);
+    const col = collection(db, "tenants", TENANT_ID, "pedidos");
+
+    const toSave = {
+      ...payload,
+      idempotencyKey,
+      tenantId: TENANT_ID,
+      createdAt: serverTimestamp(),
+      dataEntregaDia: payload?.dataEntregaISO
+        ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
+        : null,
+    };
+
+    await setDoc(doc(col, docId), toSave, { merge: true });
+    return { ok:true, reused:false, id: docId, local:true };
+  }catch(e2){
+    console.warn("[DB] Fallback Firestore falhou (sem bloquear PDF):", e2?.message || e2);
+    // devolve um id simbólico para não interromper o fluxo do app
+    return { ok:false, localOnly:true, id:"local-"+Date.now() };
+  }
 }
