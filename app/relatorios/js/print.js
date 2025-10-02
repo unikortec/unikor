@@ -9,19 +9,19 @@ export async function printPedido80mm(pedidoId){
   const r = await pedidos_get(pedidoId);
   if (!r){ alert("Pedido não encontrado."); return; }
 
-  // Largura do rolo: 80 mm (use 72~80 conforme a impressora)
+  // Largura do rolo: 80 mm (troque para 70 se precisar)
   const width = 80, margin = 4;
   let y = margin + 2;
 
-  const doc = new jsPDF({ unit:"mm", format:[width, 600] }); // altura grande e cortamos depois
+  const doc = new jsPDF({ unit:"mm", format:[width, 600] }); // altura grande; ajustamos no fim
   const line = ()=> { doc.setLineWidth(.2); doc.line(margin, y, width-margin, y); y += 2; };
 
   doc.setFont("helvetica","bold"); doc.setFontSize(14);
   doc.text("SERRA NOBRE", width/2, y, { align:"center" }); y += 7;
 
   doc.setFont("helvetica","normal"); doc.setFontSize(10);
-  doc.text(`DATA ENTREGA: ${(r.dataEntregaISO||"").split("-").reverse().join("/")}`, margin, y); y += 5;
-  if (r.horaEntrega) { doc.text(`HORA: ${r.horaEntrega}`, margin, y); y += 5; }
+  const dt = (r.dataEntregaISO||"").split("-").reverse().join("/");
+  doc.text(`ENTREGA: ${dt} ${r.horaEntrega||""}`, margin, y); y += 5;
   doc.text(`CLIENTE: ${(r.cliente||"").toUpperCase()}`, margin, y); y += 5;
   const ender = (r?.entrega?.endereco || r.endereco || "").toString().toUpperCase();
   if (ender){ doc.text(`END: ${ender}`, margin, y); y += 5; }
@@ -47,7 +47,7 @@ export async function printPedido80mm(pedidoId){
 
   line();
 
-  const frete = r?.frete?.isento ? 0 : Number(r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? 0);
+  const frete = r?.frete?.isento ? 0 : Number(r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? r?.freteValor ?? 0);
   const total = subtotal + frete;
 
   doc.text(`SUBTOTAL: ${money(subtotal)}`, margin, y); y += 5;
@@ -58,11 +58,10 @@ export async function printPedido80mm(pedidoId){
   if (r.cupomFiscal){ doc.text(`CUPOM: ${String(r.cupomFiscal)}`, margin, y); y += 5; }
   if (r.pagamento){  doc.text(`PAGAMENTO: ${String(r.pagamento).toUpperCase()}`, margin, y); y += 5; }
 
-  // “Corta” o papel ajustando a altura ao conteúdo
+  // Ajusta a altura ao conteúdo para imprimir sem “cauda”
   const finalHeight = y + margin;
   doc.internal.pageSize.height = finalHeight;
 
-  // Abre dialogo de impressão (a maioria das térmicas suporta)
   doc.autoPrint({ variant: 'non-conform' });
   window.open(doc.output('bloburl'), '_blank');
 }
