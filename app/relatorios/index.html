@@ -57,37 +57,41 @@
       </div>
 
       <div class="table-wrap">
-       <thead>
-  <tr>
-    <th>Data</th>
-    <th>Hora</th>
-    <th>Cliente (clique para editar)</th>
-    <th>Itens</th>
-    <th>Total (R$)</th>
-    <th>Tipo</th>
-    <th>Pagamento</th>
-    <th>Frete</th>          <!-- NOVA COLUNA -->
-    <th>Nº do Cupom</th>
-    <th>Cancelar</th>
-  </tr>
-</thead>
-<tfoot>
-  <tr>
-    <td id="ftCount">0 pedidos</td>
-    <td id="ftItens" colspan="2">0 itens</td>     <!-- NOVO: total de itens -->
-    <td></td>
-    <td id="ftTotal">R$ 0,00</td>                 <!-- total dos ITENS (sem frete) -->
-    <td colspan="2"></td>
-    <td id="ftFrete">R$ 0,00</td>                 <!-- NOVO: total de frete -->
-    <td colspan="2"></td>
-  </tr>
-</tfoot>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Hora</th>
+              <th>Cliente (clique para editar)</th>
+              <th>Itens</th>
+              <th>Total (R$)</th>
+              <th>Tipo</th>
+              <th>Pagamento</th>
+              <th>Frete</th>          <!-- NOVA COLUNA -->
+              <th>Nº do Cupom</th>
+              <th>Cancelar</th>
+            </tr>
+          </thead>
+
+          <tbody id="tbody"></tbody>
+
+          <tfoot>
+            <tr>
+              <td id="ftCount">0 pedidos</td>
+              <td id="ftItens" colspan="2">0 itens</td>  <!-- total de itens -->
+              <td></td>
+              <td id="ftTotal">R$ 0,00</td>              <!-- total dos ITENS (sem frete) -->
+              <td colspan="2"></td>
+              <td id="ftFrete">R$ 0,00</td>              <!-- total de frete -->
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </section>
   </main>
 
-    <!-- Modal -->
+  <!-- Modal -->
   <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header><h2 id="modalTitle">Editar Pedido</h2></header>
