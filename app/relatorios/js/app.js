@@ -2,9 +2,9 @@
 import { onAuthUser } from './firebase.js';
 import { pedidos_list, pedidos_delete } from './db.js';
 import { $, renderRows, userPrefix } from './render.js';
-import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao } from './modal.js';
+import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao, gerarPDFDoModal } from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
-import { printPedido80mm } from './print.js';       // ⬅️ reimpressão térmica
+import { printPedido80mm } from './print.js';       // opcional
 
 window.__rows = [];
 window.__currentDocId = null;
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tdEdit = ev.target.closest(".cell-client");
     if (tdEdit){ const id = tdEdit.getAttribute("data-id"); if (id) carregarPedidoEmModal(id); return; }
 
-    const btnPrint = ev.target.closest(".btn-print");  // reimprimir cupom
+    const btnPrint = ev.target.closest(".btn-print");
     if (btnPrint){ const id = btnPrint.getAttribute("data-id"); if (id) printPedido80mm(id); return; }
 
     const btnCancel = ev.target.closest(".btn-cancel");
@@ -86,6 +86,9 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnFecharModal").addEventListener("click", closeModal);
   $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
+
+  // NOVO: PDF do pedido direto do modal
+  $("btnPDFPedido").addEventListener("click", gerarPDFDoModal);
 });
 
 // Mostra apenas a parte antes do @ no header
