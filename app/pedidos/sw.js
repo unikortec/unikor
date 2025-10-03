@@ -1,25 +1,20 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.2.2';             // 🔺 bump pra forçar cache novo
+const APP_VER   = '1.2.2';   // 🔺 incrementado
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
 
-// Shell mínimo
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  // JS essenciais (o app importa o resto)
   './js/app.js',
-  // Estes caminhos só são usados se existirem; ajudam no 1º offline
   './js/firebase.js',
   './js/utils.js',
   './js/ui.js',
   './js/itens.js',
-  './js/clientes.js',
   './js/frete.js',
-  './js/pdf.js',
-  './js/modal-cliente.js',
+  './js/pdf.js'
 ];
 
 async function put(cacheName, req, res) {
@@ -37,9 +32,7 @@ self.addEventListener('install', (evt) => {
 self.addEventListener('activate', (evt) => {
   evt.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys
-      .filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC)
-      .map(k => caches.delete(k)));
+    await Promise.all(keys.filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
@@ -48,7 +41,6 @@ self.addEventListener('message', (evt) => {
   if (evt.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// network-first para navegação; fallback offline
 self.addEventListener('fetch', (evt) => {
   const req = evt.request;
   if (req.method !== 'GET') return;
