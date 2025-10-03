@@ -25,7 +25,7 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
-// Lê itens do DOM
+// Lê itens do DOM (compatível com o itens.js atual)
 function lerItensDaTela(){
   const itensContainer = document.getElementById('itens');
   if (!itensContainer) return [];
@@ -92,7 +92,7 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
 
 /* ================== Construção do PDF ====================== */
 export async function construirPDF(){
-  // Garante frete atualizado
+  // Garante frete atualizado (para total e label)
   await ensureFreteBeforePDF();
 
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
@@ -119,7 +119,7 @@ export async function construirPDF(){
   const ie = (document.getElementById("ie")?.value || "").toUpperCase();
   const cep = digitsOnly(document.getElementById("cep")?.value || "");
   const contato = digitsOnly(document.getElementById("contato")?.value || "");
-  const obsGeralTxt = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase(); // <— renomeado
+  const obsGeralTxt = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase(); // <- nome único
   const tipoEnt = (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase();
 
   // pagamento
@@ -317,6 +317,7 @@ export async function construirPDF(){
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
 
+  // Retorna blob/documento para salvar/compartilhar/Drive
   const blob = doc.output('blob');
   return { blob, nomeArq, doc };
 }
@@ -332,7 +333,9 @@ export async function gerarPDFPreview(){
 export async function salvarPDFLocal(){
   const { blob, nomeArq } = await construirPDF();
   try{
+    // @ts-ignore
     if (window.showSaveFilePicker){
+      // @ts-ignore
       const handle = await window.showSaveFilePicker({
         suggestedName: nomeArq,
         types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
@@ -373,5 +376,5 @@ export async function compartilharPDFNativo(){
   return { compartilhado:false, fallback:true };
 }
 
-// expõe para outros módulos (drive/fila)
+// também exportamos o builder (usado pela fila/drive)
 export { construirPDF };
