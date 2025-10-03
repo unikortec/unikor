@@ -1,4 +1,8 @@
-const API_BASE = "";
+// app/pedidos/js/frete.js
+// Cálculo de frete por distância via /api/calcular-entrega, com fallback para ABS_FRETE_BASE.
+// Mantém suporte a frete manual e sugestão do cadastro.
+
+const API_BASE = ""; // deixa vazio para usar o host atual
 export const ABS_FRETE_BASE = location.origin;
 
 const freteCtrl = { ultimo: null, sugestao: null };
@@ -32,16 +36,28 @@ export async function calcularFrete(enderecoTexto, subtotal){
   const freteManualInput = document.getElementById('freteManual');
   if (freteManualInput && freteManualInput.value.trim()) {
     const valorManual = parseFloat(freteManualInput.value.replace(',', '.')) || 0;
-    return { valorBase: valorManual, valorCobravel: isentar ? 0 : valorManual, isento: isentar, labelIsencao: isentar ? "(ISENTO manual)" : "(manual)", _manual: true };
+    return {
+      valorBase: valorManual,
+      valorCobravel: isentar ? 0 : valorManual,
+      isento: isentar,
+      labelIsencao: isentar ? "(ISENTO manual)" : "(manual)",
+      _manual: true
+    };
   }
 
   // 2) Sugestão do cadastro
   if (freteCtrl.sugestao != null && !isNaN(freteCtrl.sugestao)) {
     const v = Number(freteCtrl.sugestao) || 0;
-    return { valorBase: v, valorCobravel: isentar ? 0 : v, isento: isentar, labelIsencao: isentar ? "(ISENTO)" : "(do cadastro)", _cadastro: true };
+    return {
+      valorBase: v,
+      valorCobravel: isentar ? 0 : v,
+      isento: isentar,
+      labelIsencao: isentar ? "(ISENTO)" : "(do cadastro)",
+      _cadastro: true
+    };
   }
 
-  // 3) API
+  // 3) API distância
   const payload = { enderecoTexto, totalItens: subtotal, clienteIsento: isentar };
   try{
     const r = await fetch(`${API_BASE}/api/calcular-entrega`, {
@@ -98,10 +114,10 @@ export async function ensureFreteBeforePDF(){
     const p = parseFloat(el.querySelector(".preco")?.value || "0") || 0;
     const tipo = (el.querySelector(".tipo-select")?.value || "KG").toUpperCase();
     const prod = (el.querySelector(".produto")?.value || "").toLowerCase();
-    const m = /(\d+(?:[.,]\d+)?)[\s]*(kg|quilo|quilos|g|gr|grama|gramas)\b/.exec(prod);
+    const m = /(\d+(?:[.,]\d+)?)[\s]*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b/.exec(prod);
     if (tipo === "UN" && m){
       const val = parseFloat((m[1]||"").replace(",", ".")) || 0;
-      const kgUn = (m[2] === "kg" || m[2].startsWith("quilo")) ? val : val/1000;
+      const kgUn = (m[2].startsWith("kg") || m[2].startsWith("quilo")) ? val : val/1000;
       subtotal += (q * kgUn) * p;
     } else {
       subtotal += q * p;
