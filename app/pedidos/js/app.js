@@ -3,18 +3,10 @@ import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// Persistência idempotente + frete
+// Persistência idempotente + frete + auth
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
-
-// PDF
-import {
-  gerarPDFPreview,
-  salvarPDFLocal,
-  compartilharPDFNativo,
-  construirPDFBlob, // novo helper: gera {blob, nomeArq, entregaISO}
-} from './pdf.js';
 
 console.log('App inicializado');
 
@@ -22,7 +14,7 @@ console.log('App inicializado');
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
-  input.value = up(v);
+  input.value = up(v); // mantém espaços
 }
 
 /* ======== Leitura da tela ======== */
@@ -41,15 +33,19 @@ function coletarDadosFormulario() {
 
 function validarAntesGerar() {
   const dados = coletarDadosFormulario();
-  if (!dados.cliente.trim()) { alert('Informe o nome do cliente'); return false; }
+  if (!dados.cliente.trim()) {
+    alert('Informe o nome do cliente');
+    return false;
+  }
   const itens = getItens();
   if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
-    alert('Adicione pelo menos um item'); return false;
+    alert('Adicione pelo menos um item');
+    return false;
   }
   return true;
 }
 
-/* ======== Montagem do payload p/ salvar ======== */
+/* ======== Pagamento / Payload ======== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -98,7 +94,7 @@ function montarPayloadPedido(){
     frete: {
       isento: !!(frete.isento || isentoMan),
       valorBase: num(frete.valorBase || 0),
-      valorCobravel: freteCobrado
+      valorCobrado: freteCobrado
     },
     totalPedido: +(subtotal + freteCobrado).toFixed(2),
     pagamento: lerPagamento(),
@@ -114,43 +110,30 @@ function montarPayloadPedido(){
 
 /* ======== Persistência idempotente ======== */
 async function persistirPedidoSeNecessario(){
-  await waitForLogin();
-  await ensureFreteBeforePDF();
+  await waitForLogin();              // mesma sessão do portal
+  await ensureFreteBeforePDF();      // evita divergência de frete
 
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
 
+  // evita re-envio imediato em cliques repetidos
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
 
   try{
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo em Firestore:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
-    localStorage.setItem('unikor:lastPedidoId', id);
+    localStorage.setItem('unikor:lastPedidoId', id); // para reimpressão depois
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
-/* ======== Upload ao Drive ======== */
-// Importamos **dinamicamente** para não quebrar o app quando o módulo não existir
-async function uploadPdfToDrive({ blob, filename, isoDate }) {
-  try{
-    const { initDrivePedidos, uploadPedidoPDF } = await import('./drive-pedidos.js');
-    const { getGoogleAccessToken } = await import('/app/despesas/js/google-auth.js');
-    await initDrivePedidos(getGoogleAccessToken);
-    return await uploadPedidoPDF({ blob, filename, isoDate });
-  }catch(e){
-    // Não quebra o fluxo do usuário
-    console.warn('[Drive] Upload indisponível:', e?.message || e);
-    throw e;
-  }
-}
-
-/* ======== Ações ======== */
+/* ======== Ações (com import DINÂMICO do PDF) ======== */
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
+
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -158,6 +141,7 @@ async function gerarPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
+    const { gerarPDFPreview } = await import('./pdf.js');
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
   } catch (e) {
@@ -173,6 +157,7 @@ async function gerarPDF() {
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
+
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -180,21 +165,9 @@ async function salvarPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-
-    // Gera uma vez e reaproveita para Drive
-    const { blob, nomeArq, entregaISO } = await construirPDFBlob();
-
-    // Salvar local
-    await salvarPDFLocal();
-
-    // Copiar para Drive (best-effort)
-    try {
-      await uploadPdfToDrive({ blob, filename: nomeArq, isoDate: entregaISO });
-      toastOk(`PDF salvo e enviado ao Drive`);
-    } catch {
-      toastOk('PDF salvo (Drive indisponível agora)');
-    }
-
+    const { salvarPDFLocal } = await import('./pdf.js');
+    const { nome } = await salvarPDFLocal();
+    toastOk(`PDF salvo: ${nome}`);
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
@@ -208,6 +181,7 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
+
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -215,24 +189,11 @@ async function compartilharPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-
-    // Gera uma vez e reaproveita para Drive
-    const { blob, nomeArq, entregaISO } = await construirPDFBlob();
-
-    // Compartilhar
+    const { compartilharPDFNativo } = await import('./pdf.js');
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
     else                        toastOk('Abrimos o PDF para envio');
-
-    // Copiar para Drive (best-effort)
-    try {
-      await uploadPdfToDrive({ blob, filename: nomeArq, isoDate: entregaISO });
-      console.info('[Drive] PDF copiado após compartilhar.');
-    } catch {
-      console.info('[Drive] indisponível no momento (após compartilhar).');
-    }
-
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
@@ -247,8 +208,9 @@ async function compartilharPDF() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
 
-  initItens(); // <- com o import dinâmico do Drive fora do topo, isso volta a funcionar
+  initItens();
 
+  // ligar itens -> recálculo do frete sempre que editar
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
@@ -272,19 +234,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-  // Sanitize: limpa handlers estranhos do #cliente, mantendo espaço liberado
+  // Sanitize: remove qualquer listener colado por scripts externos no #cliente
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
-    const clone = inputCliente.cloneNode(true);
+    const clone = inputCliente.cloneNode(true); // remove listeners de terceiros
     inputCliente.replaceWith(clone);
     inputCliente = clone;
     inputCliente.value = val;
+
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
 });
 
-// exposição (se precisar no console)
+// exposição (debug)
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
