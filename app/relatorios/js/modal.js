@@ -1,8 +1,19 @@
+// relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
 
-export function openModal(){ const m = $("modalBackdrop"); m.style.display="flex"; m.setAttribute("aria-hidden","false"); }
-export function closeModal(){ const m = $("modalBackdrop"); m.style.display="none"; m.setAttribute("aria-hidden","true"); window.__currentDocId = null; $("itemsBody").innerHTML = ""; }
+export function openModal(){
+  const m = $("modalBackdrop");
+  m.style.display = "flex";
+  m.setAttribute("aria-hidden","false");
+}
+export function closeModal(){
+  const m = $("modalBackdrop");
+  m.style.display = "none";
+  m.setAttribute("aria-hidden","true");
+  window.__currentDocId = null;
+  $("itemsBody").innerHTML = "";
+}
 
 // ===== helpers numéricos BR (aceita vírgula)
 const parseBRNumber = (val) => {
@@ -304,7 +315,11 @@ export async function gerarPDFDoModal(){
     doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
     doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, rowHi, "S");
 
-    const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
+    const center=(cx, lines)=>{
+      const block=(lines.length-1)*5;
+      const base=y+(rowHi-block)/2;
+      lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"}));
+    };
 
     center(margemX+W_PROD/2, prodLines);
     center(margemX+W_PROD+W_QDE/2, qtdStr ? [qtdStr, tipo] : [""]);
@@ -375,7 +390,8 @@ export async function gerarPDFDoModal(){
     const h = Math.max(12, 6 + linhas.length*5 + 4);
     ensureSpace(h);
     doc.rect(margemX,y,larguraCaixa,h,"S");
-    doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.text("OBSERVAÇÕES", margemX+pad, y+5);
+    doc.setFont("helvetica","bold"); doc.setFontSize(8);
+    doc.text("OBSERVAÇÕES", margemX+pad, y+5);
     doc.setFont("helvetica","normal"); doc.setFontSize(8);
     const baseY = y+9; linhas.forEach((ln,i)=>doc.text(ln, margemX+pad, baseY+i*5));
     y += h;
