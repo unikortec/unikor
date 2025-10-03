@@ -1,7 +1,7 @@
 // relatorios/js/export.js
 import { $, moneyBR } from './render.js';
 
-/* ===== util ===== */
+/* ============== utils de UI ============== */
 function setLoading(btn, isLoading, labelWhenIdle){
   if (!btn) return;
   const lbl = btn.querySelector(".lbl");
@@ -19,7 +19,7 @@ function setLoading(btn, isLoading, labelWhenIdle){
 }
 const nextFrame = () => new Promise(r => setTimeout(r, 0));
 
-/* ===== loader resiliente do SheetJS (XLSX) ===== */
+/* ============== loader resiliente do SheetJS (XLSX) ============== */
 async function ensureXLSX(){
   if (window.XLSX) return window.XLSX;
   const sources = [
@@ -38,12 +38,12 @@ async function ensureXLSX(){
         document.head.appendChild(s);
       });
       if (window.XLSX) return window.XLSX;
-    }catch{ /* tenta próxima CDN */ }
+    }catch{ /* tenta a próxima */ }
   }
   throw new Error("Falha ao carregar o gerador XLSX (conexão).");
 }
 
-/* ===== helpers de domínio ===== */
+/* ============== helpers de domínio ============== */
 function freteFromRow(r){
   const f = r?.frete || {};
   const isento = !!f.isento;
@@ -104,16 +104,17 @@ export async function exportarPDF(rows){
   const btn = $("btnPDF");
   if (!rows || !rows.length){ alert("Nada para gerar."); return; }
   setLoading(btn, true, "Gerar PDF");
+
   try{
     const { jsPDF } = window.jspdf;
 
     // A4 paisagem
     const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
 
-    // ===== layout base (margens e helpers)
+    /* --------- layout base --------- */
     const L = 10;                 // margem esquerda
     const R = 287;                // margem direita
-    const W = R - L;              // largura útil
+    const W = R - L;              // largura útil (= 277mm)
     let y = 16;
 
     // tons
@@ -125,22 +126,46 @@ export async function exportarPDF(rows){
     const fill = g => doc.setFillColor(g,g,g);
     const hline = yy => { doc.setLineWidth(.2); doc.line(L, yy, R, yy); };
 
-    const cellText = (t,x,w,yy)=>{ doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.text(String(t), x+2, yy+6); };
-    const headCell = (t,x,w,yy)=>{ doc.setFont("helvetica","bold");   doc.setFontSize(9);  doc.text(String(t).toUpperCase(), x+2, yy+6); };
+    // helpers de texto
+    const drawHead = (t,x,yy)=>{ doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.text(String(t).toUpperCase(), x, yy); };
+    const setBody  = ()=>{ doc.setFont("helvetica","normal"); doc.setFontSize(10); };
 
-    // ===== totais gerais
+    // Desenha texto **dentro da largura** (trunca com “…” se passar)
+    function drawInCell(t, x, w, yy, alignLeft = true){
+      setBody();
+      const pad = 2;
+      const maxW = Math.max(2, w - pad*2);
+      let txt = String(t||"");
+      // quebra
+      let lines = doc.splitTextToSize(txt, maxW);
+      let first = (lines[0] || "");
+      if (lines.length > 1){
+        // garante que a primeira linha caiba + “…” se precisar
+        // encurta até caber
+        while (doc.getTextWidth(first + "…") > maxW && first.length){
+          first = first.slice(0, -1);
+        }
+        first = first + "…";
+      }
+      const baseX = x + pad;
+      if (alignLeft) doc.text(first, baseX, yy);
+      else doc.text(first, x + w - pad, yy, { align: "right" });
+    }
+
+    const moneyCell = (n, x, w, yy, right=true)=> drawInCell(`R$ ${moneyBR(n)}`, x, w, yy, !right);
+
+    /* --------- totais gerais --------- */
     const totPedidos = rows.length;
     const totItens   = rows.reduce((s,r)=> s + (Array.isArray(r.itens)? r.itens.length : 0), 0);
     const totFrete   = rows.reduce((s,r)=> s + freteFromRow(r), 0);
     const vendaItens = rows.reduce((s,r)=> s + Number(r.totalPedido||0), 0);
 
-    // ===== título
+    /* --------- título e resumo --------- */
     doc.setFont("helvetica","bold"); doc.setFontSize(18);
     doc.text("Relatórios — Serra Nobre", L, y); y += 7;
     doc.setFont("helvetica","normal"); doc.setFontSize(9);
     doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, L, y); y += 8;
 
-    // ===== resumo vertical (à esquerda)
     doc.setFontSize(11);
     const resumo = [
       ["QTD. PEDIDOS:", totPedidos],
@@ -154,46 +179,46 @@ export async function exportarPDF(rows){
       doc.setFont("helvetica","normal"); doc.text(String(v), L+labelW, y);
       y += 6;
     });
-    y += 2;
-    hline(y); y += 3;
+    y += 2; hline(y); y += 3;
 
-    // ===== colunas do cabeçalho do cliente
-    const cols = [
-      { key:"cliente",  label:"NOME CLIENTE", w: 95 },
-      { key:"endereco", label:"ENDEREÇO",     w: 110 },
-      { key:"qtd",      label:"QDE ITENS",    w: 22 },
-      { key:"tipo",     label:"TIPO",         w: 26 },
-      { key:"pag",      label:"PAGAMENTO",    w: 28 },
-      { key:"cupom",    label:"CUPOM",        w: 26 },
-      { key:"user",     label:"USUÁRIO",      w: 26 },
+    /* --------- COLUNAS (AJUSTADAS PARA SOMAR W = 277) --------- */
+    // Cabeçalho do cliente
+    const C = [
+      { k:"cliente",  t:"NOME CLIENTE", w: 80 },
+      { k:"endereco", t:"ENDEREÇO",     w: 92 },
+      { k:"qtd",      t:"QDE ITENS",    w: 20 },
+      { k:"tipo",     t:"TIPO",         w: 24 },
+      { k:"pag",      t:"PAGAMENTO",    w: 28 },
+      { k:"cupom",    t:"CUPOM",        w: 20 },
+      { k:"user",     t:"USUÁRIO",      w: 13 },
     ];
-    const X = cols.reduce((acc,c,i)=>{ acc[i] = i? acc[i-1] + cols[i-1].w : L; return acc; }, []);
+    const CX = C.reduce((acc,c,i)=>{ acc[i] = i? acc[i-1] + C[i-1].w : L; return acc; }, []);
     const headerCliente = (yy)=>{
-      fill(G_CLIENT); doc.rect(L, yy, W, 9, "F");      // fundo de margem a margem
-      cols.forEach((c,i)=> headCell(c.label, X[i], c.w, yy));
+      fill(G_CLIENT); doc.rect(L, yy, W, 9, "F");
+      C.forEach((c,i)=> drawHead(c.t, CX[i]+2, yy+6));
       hline(yy+9);
       return yy+12;
     };
 
-    // ===== colunas do cabeçalho de itens
-    const icol = [
-      { label:"PRODUTO", w: 132 },
-      { label:"QDE",     w: 26  },
-      { label:"VALOR",   w: 28  },
-      { label:"FRETE",   w: 28  },
-      { label:"TOTAL",   w: 28  },
+    // Cabeçalho de itens
+    const I = [
+      { t:"PRODUTO", w: 150 },
+      { t:"QDE",     w: 26  },
+      { t:"VALOR",   w: 26  },
+      { t:"FRETE",   w: 25  },
+      { t:"TOTAL",   w: 50  },
     ];
-    const IX = icol.reduce((acc,c,i)=>{ acc[i] = i? acc[i-1] + icol[i-1].w : L; return acc; }, []);
+    const IX = I.reduce((acc,c,i)=>{ acc[i] = i? acc[i-1] + I[i-1].w : L; return acc; }, []);
     const headerItens = (yy)=>{
       fill(G_ITEM); doc.rect(L, yy, W, 9, "F");
-      icol.forEach((c,i)=> headCell(c.label, IX[i], c.w, yy));
+      I.forEach((c,i)=> drawHead(c.t, IX[i]+2, yy+6));
       hline(yy+9);
       return yy+12;
     };
 
     const ensure = (h)=>{ if (y + h > 200){ doc.addPage(); y = 16; } };
 
-    // ===== loop dos pedidos
+    /* --------- LOOP DOS PEDIDOS --------- */
     rows.forEach(r=>{
       const itens = Array.isArray(r.itens)? r.itens : [];
       const frete = freteFromRow(r);
@@ -204,21 +229,20 @@ export async function exportarPDF(rows){
       ensure(22);
       y = headerCliente(y);
 
-      // linha com dados do cliente
-      doc.setFont("helvetica","bold"); doc.setFontSize(11);
-      cellText((r.cliente||"").toString().toUpperCase(), X[0], cols[0].w, y-12);
-      doc.setFont("helvetica","normal"); doc.setFontSize(10);
-      cellText(ender, X[1], cols[1].w, y-12);
-      cellText(String(itens.length), X[2], cols[2].w, y-12);
-      cellText(tipo, X[3], cols[3].w, y-12);
-      cellText((r.pagamento||"-").toString().toUpperCase(), X[4], cols[4].w, y-12);
-      cellText((r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-", X[5], cols[5].w, y-12);
-      cellText(user || "-", X[6], cols[6].w, y-12);
+      // linha com dados do cliente (uma linha, truncada por coluna)
+      setBody();
+      drawInCell(String(r.cliente||"").toUpperCase(),           CX[0], C[0].w, y-3);
+      drawInCell(ender,                                         CX[1], C[1].w, y-3);
+      drawInCell(String(itens.length),                          CX[2], C[2].w, y-3);
+      drawInCell(tipo,                                          CX[3], C[3].w, y-3);
+      drawInCell(String(r.pagamento||"-").toUpperCase(),        CX[4], C[4].w, y-3);
+      drawInCell((r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-", CX[5], C[5].w, y-3);
+      drawInCell(user || "-",                                   CX[6], C[6].w, y-3);
 
       ensure(12);
       y = headerItens(y);
 
-      // itens (zebra)
+      // itens
       let zebra = false;
       itens.forEach(it=>{
         ensure(8);
@@ -230,11 +254,11 @@ export async function exportarPDF(rows){
         const pu  = Number(it.precoUnit ?? it.preco ?? 0);
         const tot = Number((qtd*pu).toFixed(2));
 
-        cellText((it.produto||it.descricao||"").toString().toUpperCase(), IX[0], icol[0].w, y-2);
-        cellText(`${qtd} ${un}`, IX[1], icol[1].w, y-2);
-        cellText(money(pu), IX[2], icol[2].w, y-2);
-        cellText("-",       IX[3], icol[3].w, y-2);         // frete é por pedido
-        cellText(money(tot),IX[4], icol[4].w, y-2);
+        drawInCell((it.produto||it.descricao||"").toString().toUpperCase(), IX[0], I[0].w, y+4);
+        drawInCell(`${qtd} ${un}`,                                             IX[1], I[1].w, y+4);
+        moneyCell(pu,                                                          IX[2], I[2].w, y+4, true);
+        drawInCell("-",                                                        IX[3], I[3].w, y+4);
+        moneyCell(tot,                                                         IX[4], I[4].w, y+4, true);
 
         y += 7.5;
       });
@@ -246,7 +270,7 @@ export async function exportarPDF(rows){
       const subtotal = Number(r.totalPedido||0);
       const totalPed = subtotal + frete;
       const resumoTxt = `FRETE: ${money(frete)}   •   SUBTOTAL ITENS: ${money(subtotal)}   •   TOTAL PEDIDO: ${money(totalPed)}`;
-      doc.text(resumoTxt, L+2, y+6);
+      drawInCell(resumoTxt, L+1, W-2, y+6); // garante que não estoure
       y += 12;
 
       hline(y); y += 4;
