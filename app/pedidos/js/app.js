@@ -3,10 +3,21 @@ import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// >>> novos imports p/ salvar idempotente e garantir frete
+// >>> persistência idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
+
+// >>> Drive
+import { getGoogleAccessToken } from '/app/despesas/js/google-auth.js'; // mesma função já usada nas despesas
+import { queueDriveUpload } from './driveQueue.js'; // você disse que já colocou esse módulo
+import {
+  gerarPDFPreview,
+  salvarPDFLocal,
+  compartilharPDFNativo,
+  uploadPDFAtualParaDrive,
+  gerarPDFPreviewDePedidoFirestore
+} from './pdf.js';
 
 console.log('App inicializado');
 
@@ -95,7 +106,7 @@ function montarPayloadPedido(){
     frete: {
       isento: !!(frete.isento || isentoMan),
       valorBase: num(frete.valorBase || 0),
-      valorCobrado: freteCobrado
+      valorCobravel: freteCobrado
     },
     totalPedido: +(subtotal + freteCobrado).toFixed(2),
     pagamento: lerPagamento(),
@@ -124,6 +135,7 @@ async function persistirPedidoSeNecessario(){
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo em Firestore:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
+    localStorage.setItem('unikor:lastPedidoId', id); // usado para reimprimir depois
   }catch(e){
     // não bloqueia PDF; apenas informa
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
@@ -134,7 +146,6 @@ async function persistirPedidoSeNecessario(){
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
-  const { gerarPDFPreview } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -158,7 +169,6 @@ async function gerarPDF() {
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-  const { salvarPDFLocal } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -182,7 +192,6 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-  const { compartilharPDFNativo } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -202,6 +211,64 @@ async function compartilharPDF() {
   } finally {
     hideOverlay();
     botao.disabled = false; botao.textContent = textoOriginal;
+  }
+}
+
+/* ======== NOVO: Enviar PDF para o Drive ======== */
+async function enviarPDFParaDrive() {
+  const btn = document.getElementById('btnEnviarDrive');
+  if (!btn) return;
+
+  if (!validarAntesGerar()) return;
+
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Enviando...';
+  showOverlay();
+  try {
+    await persistirPedidoSeNecessario();
+    // envia o PDF gerado pela TELA (DOM) para o Drive
+    const up = await uploadPDFAtualParaDrive(getGoogleAccessToken);
+    console.log('[Drive] upload ok:', up);
+    toastOk('PDF enviado ao Drive');
+  } catch (e) {
+    console.warn('[Drive] falha, colocando na fila:', e);
+    // se der erro de rede/perm, salva na FILA para retry
+    try{
+      await queueDriveUpload({ source: 'PEDIDO_DOM' }); // sua fila pode ignorar/ler metadados conforme implementada
+      toastOk('Sem rede/perm. Colocado na fila para enviar depois.');
+    }catch(err){
+      console.error('[Drive] fila também falhou:', err);
+      toastErro('Falha ao enviar ao Drive');
+      alert('Falha ao enviar ao Drive: ' + e.message);
+    }
+  } finally {
+    hideOverlay();
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+/* ======== NOVO: Reimprimir do Firestore (último pedido salvo) ======== */
+async function reimprimirUltimoPedidoSalvo() {
+  const btn = document.getElementById('btnReimprimirUltimo');
+  if (!btn) return;
+
+  const id = localStorage.getItem('unikor:lastPedidoId');
+  if (!id) { alert('Ainda não há pedido salvo nesta sessão. Gere e salve um primeiro.'); return; }
+
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
+  showOverlay();
+  try {
+    await waitForLogin();
+    await gerarPDFPreviewDePedidoFirestore(id); // busca do Firestore e gera no MESMO layout
+    toastOk('PDF reimpresso a partir do pedido salvo');
+  } catch (e) {
+    console.error('[Reimpressão] Erro:', e);
+    toastErro('Erro ao reimprimir');
+    alert('Erro ao reimprimir: ' + e.message);
+  } finally {
+    hideOverlay();
+    btn.disabled = false; btn.textContent = original;
   }
 }
 
@@ -235,7 +302,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-    // Sanitize: remove qualquer listener colado por scripts externos no #cliente
+  // NOVOS BOTÕES (opcionais no HTML):
+  // <button id="btnEnviarDrive">Enviar ao Drive</button>
+  // <button id="btnReimprimirUltimo">Reimprimir Último</button>
+  const btnEnviarDrive = document.getElementById('btnEnviarDrive');
+  if (btnEnviarDrive) btnEnviarDrive.addEventListener('click', enviarPDFParaDrive);
+
+  const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
+  if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
+
+  // Sanitize: remove qualquer listener colado por scripts externos no #cliente
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
