@@ -1,5 +1,5 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.2.1';             // 🔺 bump pra forçar cache novo
+const APP_VER   = '1.2.2';             // 🔺 bump pra forçar cache novo
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
@@ -9,9 +9,9 @@ const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  // JS essenciais do app (somente o app.js; ele importa o resto)
+  // JS essenciais (o app importa o resto)
   './js/app.js',
-  // Mantidos apenas se realmente existirem:
+  // Estes caminhos só são usados se existirem; ajudam no 1º offline
   './js/firebase.js',
   './js/utils.js',
   './js/ui.js',
