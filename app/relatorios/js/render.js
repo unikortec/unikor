@@ -44,14 +44,15 @@ export function renderRows(docs){
         <td>${tipoTxt}</td>
         <td>${r.pagamento||""}</td>
         <td>R$ ${moneyBR(frete)}</td>
-        <td>${cupom}</td>
-        <td><button class="btn danger icon btn-cancel" data-id="${r.id}" title="Cancelar / excluir pedido">×</button></td>
+        <td class="center">${cupom}</td>
+        <td><button class="btn icon btn-print"  data-id="${r.id}" title="Reimprimir cupom">🖨</button></td>
+        <td><button class="btn icon btn-cancel" data-id="${r.id}" title="Cancelar / excluir pedido">×</button></td>
       </tr>
     `);
   }
 
   if (!rows.length){
-    tbody.innerHTML = `<tr><td colspan="10">Sem resultados.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11">Sem resultados.</td></tr>`;
     $("ftCount").textContent = "0 pedidos";
     $("ftTotal").textContent = "R$ 0,00";
     const elItems = document.getElementById("ftItens");
@@ -66,7 +67,7 @@ export function renderRows(docs){
   $("ftCount").textContent = `${seen.size} pedido(s)`;
   $("ftTotal").textContent = `R$ ${moneyBR(totalItensValor)}`;
 
-  // novos totais de itens e frete (elementos criados no Index)
+  // totais de itens e frete (rodapé)
   const elItens = document.getElementById("ftItens");
   const elFrete = document.getElementById("ftFrete");
   if (elItens) elItens.textContent = `${totalQtdeItens} item(ns)`;
