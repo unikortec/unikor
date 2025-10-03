@@ -14,7 +14,6 @@
 </head>
 <body>
 
-  <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
@@ -28,7 +27,7 @@
   </header>
 
   <div id="offlineBanner" class="offline-banner" style="display:none">
-    OFFLINE — pedidos serão gerados normalmente, mas não serão salvos no histórico.
+    OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.
   </div>
 
   <main id="appMain">
@@ -60,7 +59,6 @@
       </small>
     </div>
 
-    <!-- Frete manual aparece só quando não houver sugestão do cadastro -->
     <div class="field-group" id="freteManualGroup" style="display:none">
       <label for="freteManual">Frete Manual (R$):</label>
       <input type="number" id="freteManual" step="0.01" placeholder="Ex: 15.50">
@@ -101,7 +99,7 @@
       </div>
     </div>
 
-    <!-- ITENS (renderizados por itens.js via app.js) -->
+    <!-- ITENS -->
     <div id="itens" class="itens"></div>
     <div class="actions-line">
       <button id="adicionarItemBtn" class="btn">Adicionar Item</button>
@@ -135,18 +133,18 @@
   <div id="toastBox" class="toast-box"></div>
   <div id="appOverlay" class="overlay hidden"><div class="spinner"></div></div>
 
-  <!-- jsPDF (para gerar o PDF no cliente) -->
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- Google API (drive – opcional) -->
+  <!-- (opcional) gapi se for usar Drive em outros módulos -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
 
-  <!-- Guard de autenticação do portal -->
+  <!-- Guard de autenticação (usa /app/pedidos/js/firebase.js internamente) -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
 
-  <!-- Somente este módulo. Ele importa itens, frete, db, pdf, etc. -->
+  <!-- App (ele importa todo o resto: firebase, itens, frete, ui, utils, etc.) -->
   <script type="module" src="./js/app.js"></script>
 
-  <!-- Mostra/oculta “OUTRO” no pagamento -->
+  <!-- Pagamento OUTRO: mostra/oculta também no load -->
   <script>
     document.addEventListener('change', (e)=>{
       if (e.target && e.target.id === 'pagamento') {
@@ -154,25 +152,15 @@
         outro.style.display = (e.target.value === 'OUTRO') ? '' : 'none';
       }
     });
+    window.addEventListener('DOMContentLoaded', ()=>{
+      const sel = document.getElementById('pagamento');
+      const outro = document.getElementById('pagamentoOutro');
+      if (sel && outro) outro.style.display = (sel.value === 'OUTRO') ? '' : 'none';
+      console.log('[PWA] standalone:', window.matchMedia('(display-mode: standalone)').matches);
+    });
   </script>
 
-  <!-- Banner OFFLINE + diagnóstico PWA -->
-  <script>
-    (function(){
-      const banner = document.getElementById('offlineBanner');
-      const upd = () => banner.style.display = navigator.onLine ? 'none' : '';
-      window.addEventListener('online', upd);
-      window.addEventListener('offline', upd);
-      upd();
-
-      // log para confirmar PWA instalado
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-                        || window.navigator.standalone === true;
-      console.log('[PWA] standalone?', isStandalone);
-    })();
-  </script>
-
-  <!-- Service Worker com auto-update agressivo (funciona no PWA instalado) -->
+  <!-- SW com auto-update agressivo -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
@@ -193,9 +181,7 @@
           navigator.serviceWorker.addEventListener('controllerchange', () => {
             if (!window.reloadedBySW) { window.reloadedBySW = true; location.reload(); }
           });
-        } catch (e) {
-          console.warn('[SW] falha ao registrar:', e);
-        }
+        } catch {}
       });
     }
   </script>
