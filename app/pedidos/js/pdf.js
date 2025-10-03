@@ -9,12 +9,19 @@ function formatarData(iso) { if (!iso) return ""; const [a,m,d]=iso.split("-"); 
 function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
 function splitToWidth(doc, t, w){ return doc.splitTextToSize(t||"", w); }
 function twoFirstNamesCamel(client){
-  const tokens = String(client||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\s]+/g,' ').trim().split(/\s+/).slice(0,2);
-  return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase()).join('').replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
+  const tokens = String(client||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^A-Za-z0-9\s]+/g,'')
+    .trim().split(/\s+/).slice(0,2);
+  return tokens.map(t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase())
+               .join('')
+               .replace(/[^A-Za-z0-9]/g,'') || 'Cliente';
 }
 function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   const [ano,mes,dia] = String(entregaISO||'').split('-');
-  const aa=(ano||'').slice(-2)||'AA'; const hh=(horaEntrega||'').slice(0,2)||'HH'; const mm=(horaEntrega||'').slice(3,5)||'MM';
+  const aa=(ano||'').slice(-2)||'AA';
+  const hh=(horaEntrega||'').slice(0,2)||'HH';
+  const mm=(horaEntrega||'').slice(3,5)||'MM';
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
@@ -84,7 +91,7 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
 }
 
 /* ================== Construção do PDF ====================== */
-async function construirPDF(){
+export async function construirPDF(){
   // Garante frete atualizado para o resumo
   const freteResp = await ensureFreteBeforePDF();
 
@@ -98,7 +105,7 @@ async function construirPDF(){
   const margemX=2, larguraCaixa=68;
   const SAFE_BOTTOM=280;
 
-  // Larguras da tabela (declaradas UMA vez)
+  // Larguras fixas da tabela
   const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
 
   let y=12;
@@ -114,9 +121,9 @@ async function construirPDF(){
   const cep = digitsOnly(document.getElementById("cep")?.value || "");
   const contato = digitsOnly(document.getElementById("contato")?.value || "");
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
-  const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA";
+  const tipoEnt = (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase();
 
-  // >>> pagamento (lido igual usamos no app.js)
+  // pagamento (igual app.js)
   const selPag = document.getElementById("pagamento");
   const outroPag = document.getElementById("pagamentoOutro");
   let pagamento = (selPag?.value || "").toUpperCase();
@@ -172,7 +179,7 @@ async function construirPDF(){
   doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // >>> FORMA DE PAGAMENTO
+  // FORMA DE PAGAMENTO
   ensureSpace(12);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
@@ -184,7 +191,6 @@ async function construirPDF(){
   // Tabela itens - Cabeçalho
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
-  // (usamos as mesmas constantes W_* declaradas antes)
   doc.rect(margemX, y, W_PROD, 10, "S");
   doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
   doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
@@ -313,7 +319,7 @@ async function construirPDF(){
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
 
-  // Retorna blob p/ salvar/compartilhar/preview
+  // Retorna blob/documento para salvar/compartilhar/Drive
   const blob = doc.output('blob');
   return { blob, nomeArq, doc };
 }
@@ -371,3 +377,6 @@ export async function compartilharPDFNativo(){
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
   return { compartilhado:false, fallback:true };
 }
+
+// ⬅️ importante para o Drive: permite gerar o blob no worker/fila
+export { construirPDF };
