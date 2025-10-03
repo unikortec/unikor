@@ -114,7 +114,8 @@
 
     <hr/>
 
-    <button class="pdf-btn"  id="btnGerarPdf">Gerar PDF</button>
+    <!-- SUBSTITUÍDO: antes era “Gerar PDF” -->
+    <button class="pdf-btn reimprimir" id="btnReimprimirUltimo">Reimprimir Último</button>
     <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
     <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
 
@@ -145,7 +146,7 @@
       const outro = document.getElementById('pagamentoOutro');
       if (sel && outro) outro.style.display = (sel.value === 'OUTRO') ? '' : 'none';
 
-      // 🔺 força logar standalone no console
+      // 🔺 log standalone
       console.log('[PWA] instalado?', window.matchMedia('(display-mode: standalone)').matches);
     });
   </script>
