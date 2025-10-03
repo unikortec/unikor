@@ -3,26 +3,22 @@ import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// >>> persistência idempotente + frete
+// Persistência idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
-// >>> Drive
-import { getGoogleAccessToken } from '/app/despesas/js/google-auth.js'; // mesma função já usada nas despesas
-import { queueDriveUpload } from './driveQueue.js'; // você disse que já colocou esse módulo
+// PDF
 import {
   gerarPDFPreview,
   salvarPDFLocal,
   compartilharPDFNativo,
-  uploadPDFAtualParaDrive,
-  gerarPDFPreviewDePedidoFirestore
+  construirPDFBlob, // novo helper: gera {blob, nomeArq, entregaISO}
 } from './pdf.js';
 
 console.log('App inicializado');
 
 /* ======== Qualidade de digitação ======== */
-// mantém maiúsculas mas NÃO tira espaços
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
@@ -45,14 +41,10 @@ function coletarDadosFormulario() {
 
 function validarAntesGerar() {
   const dados = coletarDadosFormulario();
-  if (!dados.cliente.trim()) {
-    alert('Informe o nome do cliente');
-    return false;
-  }
+  if (!dados.cliente.trim()) { alert('Informe o nome do cliente'); return false; }
   const itens = getItens();
   if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
-    alert('Adicione pelo menos um item');
-    return false;
+    alert('Adicione pelo menos um item'); return false;
   }
   return true;
 }
@@ -122,31 +114,43 @@ function montarPayloadPedido(){
 
 /* ======== Persistência idempotente ======== */
 async function persistirPedidoSeNecessario(){
-  await waitForLogin();              // mesma sessão do portal
-  await ensureFreteBeforePDF();      // evita divergência de frete
+  await waitForLogin();
+  await ensureFreteBeforePDF();
 
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
 
-  // evita re-envio imediato em cliques repetidos
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
 
   try{
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo em Firestore:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
-    localStorage.setItem('unikor:lastPedidoId', id); // usado para reimprimir depois
+    localStorage.setItem('unikor:lastPedidoId', id);
   }catch(e){
-    // não bloqueia PDF; apenas informa
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
-/* ======== Ações com overlay e feedback ======== */
+/* ======== Upload ao Drive ======== */
+// Importamos **dinamicamente** para não quebrar o app quando o módulo não existir
+async function uploadPdfToDrive({ blob, filename, isoDate }) {
+  try{
+    const { initDrivePedidos, uploadPedidoPDF } = await import('./drive-pedidos.js');
+    const { getGoogleAccessToken } = await import('/app/despesas/js/google-auth.js');
+    await initDrivePedidos(getGoogleAccessToken);
+    return await uploadPedidoPDF({ blob, filename, isoDate });
+  }catch(e){
+    // Não quebra o fluxo do usuário
+    console.warn('[Drive] Upload indisponível:', e?.message || e);
+    throw e;
+  }
+}
+
+/* ======== Ações ======== */
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -169,7 +173,6 @@ async function gerarPDF() {
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -177,8 +180,21 @@ async function salvarPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-    const { nome } = await salvarPDFLocal();
-    toastOk(`PDF salvo: ${nome}`);
+
+    // Gera uma vez e reaproveita para Drive
+    const { blob, nomeArq, entregaISO } = await construirPDFBlob();
+
+    // Salvar local
+    await salvarPDFLocal();
+
+    // Copiar para Drive (best-effort)
+    try {
+      await uploadPdfToDrive({ blob, filename: nomeArq, isoDate: entregaISO });
+      toastOk(`PDF salvo e enviado ao Drive`);
+    } catch {
+      toastOk('PDF salvo (Drive indisponível agora)');
+    }
+
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
@@ -192,7 +208,6 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -200,10 +215,24 @@ async function compartilharPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
+
+    // Gera uma vez e reaproveita para Drive
+    const { blob, nomeArq, entregaISO } = await construirPDFBlob();
+
+    // Compartilhar
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
     else                        toastOk('Abrimos o PDF para envio');
+
+    // Copiar para Drive (best-effort)
+    try {
+      await uploadPdfToDrive({ blob, filename: nomeArq, isoDate: entregaISO });
+      console.info('[Drive] PDF copiado após compartilhar.');
+    } catch {
+      console.info('[Drive] indisponível no momento (após compartilhar).');
+    }
+
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
@@ -214,71 +243,12 @@ async function compartilharPDF() {
   }
 }
 
-/* ======== NOVO: Enviar PDF para o Drive ======== */
-async function enviarPDFParaDrive() {
-  const btn = document.getElementById('btnEnviarDrive');
-  if (!btn) return;
-
-  if (!validarAntesGerar()) return;
-
-  const original = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Enviando...';
-  showOverlay();
-  try {
-    await persistirPedidoSeNecessario();
-    // envia o PDF gerado pela TELA (DOM) para o Drive
-    const up = await uploadPDFAtualParaDrive(getGoogleAccessToken);
-    console.log('[Drive] upload ok:', up);
-    toastOk('PDF enviado ao Drive');
-  } catch (e) {
-    console.warn('[Drive] falha, colocando na fila:', e);
-    // se der erro de rede/perm, salva na FILA para retry
-    try{
-      await queueDriveUpload({ source: 'PEDIDO_DOM' }); // sua fila pode ignorar/ler metadados conforme implementada
-      toastOk('Sem rede/perm. Colocado na fila para enviar depois.');
-    }catch(err){
-      console.error('[Drive] fila também falhou:', err);
-      toastErro('Falha ao enviar ao Drive');
-      alert('Falha ao enviar ao Drive: ' + e.message);
-    }
-  } finally {
-    hideOverlay();
-    btn.disabled = false; btn.textContent = original;
-  }
-}
-
-/* ======== NOVO: Reimprimir do Firestore (último pedido salvo) ======== */
-async function reimprimirUltimoPedidoSalvo() {
-  const btn = document.getElementById('btnReimprimirUltimo');
-  if (!btn) return;
-
-  const id = localStorage.getItem('unikor:lastPedidoId');
-  if (!id) { alert('Ainda não há pedido salvo nesta sessão. Gere e salve um primeiro.'); return; }
-
-  const original = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
-  showOverlay();
-  try {
-    await waitForLogin();
-    await gerarPDFPreviewDePedidoFirestore(id); // busca do Firestore e gera no MESMO layout
-    toastOk('PDF reimpresso a partir do pedido salvo');
-  } catch (e) {
-    console.error('[Reimpressão] Erro:', e);
-    toastErro('Erro ao reimprimir');
-    alert('Erro ao reimprimir: ' + e.message);
-  } finally {
-    hideOverlay();
-    btn.disabled = false; btn.textContent = original;
-  }
-}
-
 /* ======== Inicialização ======== */
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
 
-  initItens();
+  initItens(); // <- com o import dinâmico do Drive fora do topo, isso volta a funcionar
 
-  // ligar itens -> recálculo do frete sempre que editar
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
@@ -302,31 +272,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-  // NOVOS BOTÕES (opcionais no HTML):
-  // <button id="btnEnviarDrive">Enviar ao Drive</button>
-  // <button id="btnReimprimirUltimo">Reimprimir Último</button>
-  const btnEnviarDrive = document.getElementById('btnEnviarDrive');
-  if (btnEnviarDrive) btnEnviarDrive.addEventListener('click', enviarPDFParaDrive);
-
-  const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
-  if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
-
-  // Sanitize: remove qualquer listener colado por scripts externos no #cliente
+  // Sanitize: limpa handlers estranhos do #cliente, mantendo espaço liberado
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
-    const clone = inputCliente.cloneNode(true); // clona atributos e datalist, mas sem listeners
+    const clone = inputCliente.cloneNode(true);
     inputCliente.replaceWith(clone);
     inputCliente = clone;
     inputCliente.value = val;
-
-    // nosso listener continua funcionando normalmente
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
-
 });
 
-// exposição (mantive)
+// exposição (se precisar no console)
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
