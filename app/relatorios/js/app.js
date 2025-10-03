@@ -1,9 +1,10 @@
-// js/app.js
+// relatorios/js/app.js
 import { onAuthUser } from './firebase.js';
 import { pedidos_list, pedidos_delete } from './db.js';
-import { $, renderRows } from './render.js';
+import { $, renderRows, userPrefix } from './render.js';
 import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao } from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
+import { printPedido80mm } from './print.js';       // ⬅️ reimpressão térmica
 
 window.__rows = [];
 window.__currentDocId = null;
@@ -42,6 +43,10 @@ function limpar(){
   $("tbody").innerHTML = "";
   $("ftCount").textContent = "0 pedidos";
   $("ftTotal").textContent = "R$ 0,00";
+  const elItems = document.getElementById("ftItens");
+  const elFrete = document.getElementById("ftFrete");
+  if (elItems) elItems.textContent = "0 itens";
+  if (elFrete) elFrete.textContent = "R$ 0,00";
   window.__rows = [];
 }
 
@@ -70,6 +75,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $("tbody").addEventListener("click", (ev)=>{
     const tdEdit = ev.target.closest(".cell-client");
     if (tdEdit){ const id = tdEdit.getAttribute("data-id"); if (id) carregarPedidoEmModal(id); return; }
+
+    const btnPrint = ev.target.closest(".btn-print");  // reimprimir cupom
+    if (btnPrint){ const id = btnPrint.getAttribute("data-id"); if (id) printPedido80mm(id); return; }
+
     const btnCancel = ev.target.closest(".btn-cancel");
     if (btnCancel){ const id = btnCancel.getAttribute("data-id"); excluirPedido(id); }
   });
@@ -79,16 +88,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
 });
 
-// Mostra somente a parte antes do @ e dispara a primeira busca ao logar
+// Mostra apenas a parte antes do @ no header
 onAuthUser((user) => {
-  const el = document.getElementById('headerUser');
-  if (el) {
-    if (!user) el.textContent = '—';
-    else {
-      const email = user.email || '';
-      el.textContent = email.includes('@') ? email.split('@')[0] : (email || user.uid);
-    }
-  }
-  // Se já tiver datas preenchidas na UI, pode chamar buscar() automaticamente:
-  // buscar();
+  const tag = document.getElementById('userTag');
+  tag.textContent = user ? userPrefix(user.email || user.uid) : "—";
 });
