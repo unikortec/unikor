@@ -1,9 +1,10 @@
+// relatorios/js/app.js
 import { onAuthUser } from './firebase.js';
 import { pedidos_list, pedidos_delete } from './db.js';
 import { $, renderRows, userPrefix } from './render.js';
 import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao, gerarPDFDoModal } from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
-import { printPedido80mm } from './print.js'; // opcional
+// import { printPedido80mm } from './print.js'; // opcional: manter se quiser outro fluxo
 
 window.__rows = [];
 window.__currentDocId = null;
@@ -71,23 +72,40 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnXLSX").onclick = ()=> exportarXLSX(window.__rows);
   $("btnPDF").onclick  = ()=> exportarPDF(window.__rows);
 
-  $("tbody").addEventListener("click", (ev)=>{
+  // Tabela: editar / imprimir cópia do pedido / cancelar
+  $("tbody").addEventListener("click", async (ev)=>{
     const tdEdit = ev.target.closest(".cell-client");
-    if (tdEdit){ const id = tdEdit.getAttribute("data-id"); if (id) carregarPedidoEmModal(id); return; }
+    if (tdEdit){
+      const id = tdEdit.getAttribute("data-id");
+      if (id) await carregarPedidoEmModal(id);
+      return;
+    }
 
     const btnPrint = ev.target.closest(".btn-print");
-    if (btnPrint){ const id = btnPrint.getAttribute("data-id"); if (id) printPedido80mm(id); return; }
+    if (btnPrint){
+      const id = btnPrint.getAttribute("data-id");
+      if (!id) return;
+      // 1) carrega o pedido no modal (preenche itens, frete, etc. no DOM)
+      await carregarPedidoEmModal(id);
+      // 2) gera a CÓPIA do pedido (mesmo layout do módulo de pedidos)
+      await gerarPDFDoModal();
+      return;
+    }
 
     const btnCancel = ev.target.closest(".btn-cancel");
-    if (btnCancel){ const id = btnCancel.getAttribute("data-id"); excluirPedido(id); }
+    if (btnCancel){
+      const id = btnCancel.getAttribute("data-id");
+      if (id) await excluirPedido(id);
+    }
   });
 
   $("btnFecharModal").addEventListener("click", closeModal);
   $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
 
-  // PDF do pedido direto do modal (botão novo)
-  document.getElementById("btnPDFPedido")?.addEventListener("click", gerarPDFDoModal);
+  // Botão PDF dentro do modal (gera a cópia a partir dos campos do modal)
+  const btnPDFPedido = document.getElementById("btnPDFPedido");
+  if (btnPDFPedido) btnPDFPedido.addEventListener("click", gerarPDFDoModal);
 });
 
 // Mostra apenas a parte antes do @ no header (CAIXA ALTA)
