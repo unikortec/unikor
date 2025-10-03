@@ -1,8 +1,18 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // Despesas (já existia)
     match /despesas/{uid}/{all=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ⬇️ NOVO: PDFs dos pedidos por tenant
+    match /tenants/{tenantId}/pedidos/{file=**} {
+      allow read, write:
+        if request.auth != null &&
+           (request.auth.token.tenantId == tenantId ||
+            request.auth.token.role in ['admin','master']);
     }
   }
 }
