@@ -1,4 +1,3 @@
-// relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
 
@@ -111,7 +110,7 @@ export async function carregarPedidoEmModal(id){
   $("mId").value = r.id || "";
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
-  $("mHoraEntrega").value = r.horaEntrega || ""
+  $("mHoraEntrega").value = r.horaEntrega || "";
   $("mTipo").value = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
   $("mPagamento").value = r.pagamento || "";
   $("mCupomFiscal").value = r.cupomFiscal || "";
@@ -175,11 +174,12 @@ export async function salvarEdicao(atualizarLista){
 }
 
 /* ===========================================================
-   NOVO: Gera a CÓPIA do pedido no MESMO layout do módulo
-   de pedidos (72mm portrait, cabeçalhos e caixas iguais)
+   Gera a CÓPIA do pedido no MESMO layout do módulo de pedidos.
+   Lê primeiro do MODAL; se não houver itens, busca do Firestore.
    =========================================================== */
 export async function gerarPDFDoModal(){
-  const { jsPDF } = window.jspdf;
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
 
   // === coleta dados do modal
   const cliente = ($("mCliente").value||"").trim().toUpperCase();
@@ -191,21 +191,38 @@ export async function gerarPDFDoModal(){
   const obsG = ($("mObs").value||"").trim().toUpperCase();
   const freteNum = parseBRNumber($("mFrete").value);
 
+  // === itens da TELA
   const itens = [];
-  $("itemsBody").querySelectorAll("tr").forEach(tr=>{
-    const produto = (tr.querySelector(".it-desc").value||"").trim();
-    const q = parseBRNumber(tr.querySelector(".it-qtd").value);
-    const un = (tr.querySelector(".it-un").value||"UN").trim().toUpperCase();
-    const pu = parseBRNumber(tr.querySelector(".it-preco").value);
-    const sub = parseBRNumber(tr.querySelector(".it-sub").value);
-    if (!produto && q<=0) return;
-    itens.push({ produto, quantidade:q, tipo:un, preco:pu, total:sub });
+  document.querySelectorAll("#itemsBody tr").forEach(tr => {
+    const produto = (tr.querySelector(".it-desc")?.value || "").trim();
+    const qtd  = parseBRNumber(tr.querySelector(".it-qtd")?.value || "0");
+    const un   = (tr.querySelector(".it-un")?.value || "UN").toUpperCase();
+    const pu   = parseBRNumber(tr.querySelector(".it-preco")?.value || "0");
+    const sub  = parseBRNumber(tr.querySelector(".it-sub")?.value || "0");
+    if (produto || qtd > 0) {
+      itens.push({ produto, quantidade:qtd, tipo:un, preco:pu, total:sub });
+    }
   });
 
+  // Fallback: se a tela não tiver itens por algum motivo, lê direto do Firestore
+  if (itens.length === 0 && window.__currentDocId){
+    const r = await pedidos_get(window.__currentDocId).catch(()=>null);
+    if (r && Array.isArray(r.itens) && r.itens.length){
+      r.itens.forEach(it=>{
+        const produto = (it.produto || it.descricao || "").toString().trim();
+        const qtd  = Number(it.qtd ?? it.quantidade ?? 0);
+        const un   = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
+        const pu   = Number(it.precoUnit ?? it.preco ?? 0);
+        const sub  = Number(it.subtotal ?? (qtd*pu) || 0);
+        itens.push({ produto, quantidade:qtd, tipo:un, preco:pu, total:sub });
+      });
+    }
+  }
+
   // === helpers visuais iguais ao módulo pedidos/pdf.js
-  const digitsOnly = (v)=> String(v || "").replace(/\D/g, "");
   const formatarData = (iso)=> iso ? iso.split("-").reverse().join("/") : "";
   const splitToWidth = (doc, t, w)=> doc.splitTextToSize(t||"", w);
+  const money = (n)=> "R$ " + Number(n||0).toFixed(2).replace(".", ",");
 
   // layout: 72mm x 297mm (portrait)
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
@@ -215,7 +232,6 @@ export async function gerarPDFDoModal(){
 
   const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
   const line = ()=>{ doc.setLineWidth(0.3); doc.line(2,y,70,y); };
-  const money = (n)=> "R$ " + Number(n||0).toFixed(2).replace(".", ",");
 
   // Cabeçalho
   doc.setFont("helvetica","bold"); doc.setFontSize(11);
@@ -228,10 +244,10 @@ export async function gerarPDFDoModal(){
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
   doc.text("CLIENTE:", margemX+3, y+7);
   doc.setFont("helvetica","normal"); doc.setFontSize(8);
-  doc.text(cliente || "-", margemX+22, y+7);
+  doc.text((cliente || "-"), margemX+22, y+7);
   y+=13;
 
-  // Data/Hora (duas caixas)
+  // Data/Hora
   const halfW = (larguraCaixa-1)/2;
   ensureSpace(12);
   doc.rect(margemX, y, halfW, 10, "S");
@@ -283,7 +299,6 @@ export async function gerarPDFDoModal(){
     const rowHi = Math.max(14, 6 + prodLines.length*5);
     ensureSpace(rowHi);
 
-    // células
     doc.rect(margemX, y, W_PROD, rowHi, "S");
     doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
     doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
@@ -367,9 +382,7 @@ export async function gerarPDFDoModal(){
   }
 
   // Altura final e salvar
-  const finalH = y + 6;
-  doc.internal.pageSize.height = finalH;
-
+  doc.internal.pageSize.height = y + 6;
   const nome = `${(cliente||'CLIENTE').replace(/\s+/g,'_')}_${(entregaISO||'').replace(/-/g,'')}_${(hora||'').replace(/:/g,'')}.pdf`;
   doc.save(nome);
 }
