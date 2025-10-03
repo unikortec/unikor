@@ -1,198 +1,202 @@
 // app/pedidos/js/itens.js
-// Controle de itens do pedido (render, cálculos e eventos)
+// Desenha e gerencia a lista de itens do pedido.
+// Integra com frete: expõe atualizarFreteAoEditarItem(cb) para app.js ligar o recálculo.
 
-import { parsePesoFromProduto } from './utils.js';
+import { up } from './utils.js';
 
-let itens = [
-  { produto: "", tipo: "KG", quantidade: 0, preco: 0, total: 0, obs: "", _pesoTotalKg: 0 }
-];
+// =============== Estado ===============
+const state = {
+  onEditCallbacks: new Set(),   // para recalcular frete quando algo muda
+};
 
-// callback externo para avisar mudanças (ex.: recalcular frete)
-let onEditCb = null;
-export function atualizarFreteAoEditarItem(cb){
-  onEditCb = typeof cb === 'function' ? cb : null;
+// =============== Helpers ===============
+const $ = (sel, root=document) => root.querySelector(sel);
+function num(val){ const n = parseFloat(String(val).replace(',','.')); return isFinite(n) ? n : 0; }
+
+// normaliza texto do produto: remove espaços no começo e colapsa múltiplos
+function normalizeProdutoText(s){
+  return String(s||'').replace(/^\s+/, '').replace(/\s{2,}/g, ' ');
 }
-function dispararOnEdit(){ try{ onEditCb && onEditCb(); }catch(e){} }
 
-function $(sel, root=document){ return root.querySelector(sel); }
-function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+// =============== Template da linha ===============
+function criarLinhaItem(values={}){
+  const { produto='', tipo='KG', quantidade='', preco='', obs='' } = values;
 
-function calcTotalComPesoSeAplicavel({produto, tipo, quantidade, preco}){
-  const q = parseFloat(quantidade)||0;
-  const p = parseFloat(preco)||0;
+  const wrap = document.createElement('div');
+  wrap.className = 'item';
 
-  if (tipo === 'UN'){
-    const kgUn = parsePesoFromProduto(produto);
-    if (kgUn){
-      const pesoTotalKg = q * kgUn;         // q unidades * kg por unidade
-      const total = pesoTotalKg * p;        // p = R$ por KG
-      return { total, pesoTotalKg, kgUn };
+  wrap.innerHTML = `
+    <div class="row">
+      <div class="col col-prod">
+        <label>Produto</label>
+        <input class="produto" type="text" placeholder="Ex.: Picanha 1,2kg" />
+      </div>
+
+      <div class="col col-tipo">
+        <label>Un</label>
+        <select class="tipo-select">
+          <option value="KG">KG</option>
+          <option value="UN">UN</option>
+        </select>
+      </div>
+
+      <div class="col col-qtd">
+        <label>Qtd</label>
+        <input class="quantidade" inputmode="decimal" placeholder="0,000" />
+      </div>
+
+      <div class="col col-preco">
+        <label class="label-preco">Preço (R$/KG)</label>
+        <input class="preco" inputmode="decimal" placeholder="0,00" />
+      </div>
+
+      <div class="col col-rem">
+        <label>&nbsp;</label>
+        <button class="btn danger btn-remover" type="button">Remover</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col col-obs">
+        <label>Observações do item (opcional)</label>
+        <input class="obsItem" type="text" placeholder="Ex.: Cortar em bifes, sem gordura" />
+        <div class="peso-info" id="pesoInfo_tmp"></div>
+      </div>
+    </div>
+  `;
+
+  // refs
+  const inpProd = $('.produto', wrap);
+  const selTipo = $('.tipo-select', wrap);
+  const inpQtd  = $('.quantidade', wrap);
+  const inpPreco= $('.preco', wrap);
+  const inpObs  = $('.obsItem', wrap);
+  const btnRem  = $('.btn-remover', wrap);
+  const pesoInfo= $('.peso-info', wrap);
+  const precoLbl= $('.label-preco', wrap);
+
+  // valores iniciais
+  inpProd.value = normalizeProdutoText(produto);
+  selTipo.value = (tipo||'KG').toUpperCase() === 'UN' ? 'UN' : 'KG';
+  inpQtd.value  = quantidade === '' ? '' : String(quantidade).replace('.', ',');
+  inpPreco.value= preco === '' ? '' : String(preco).replace('.', ',');
+  inpObs.value  = (obs||'').toString();
+
+  // cálculo/atualização do total do item (p/ #totalItem_N)
+  const recalcTotalVis = ()=>{
+    const container = document.getElementById('itens');
+    const idx = Array.from(container.querySelectorAll('.item')).indexOf(wrap);
+    const idSpan = `totalItem_${idx}`;
+    let span = document.getElementById(idSpan);
+    if (!span) {
+      // cria o display de total se ainda não existir
+      const p = document.createElement('p');
+      p.className = 'total';
+      p.innerHTML = `Total do Item: R$ <span id="${idSpan}">0,00</span>`;
+      wrap.appendChild(p);
+      span = document.getElementById(idSpan);
     }
-  }
-  return { total: (q*p), pesoTotalKg: 0, kgUn: 0 };
-}
 
-function salvarCamposAntesRender(){
-  $all(".item").forEach((el, idx) => {
-    if (typeof itens[idx] === "undefined") return;
-    const prod  = el.querySelector(".produto")?.value || "";
-    const tipo  = el.querySelector(".tipo-select")?.value || "KG";
-    const qtd   = el.querySelector(".quantidade")?.value || 0;
-    const preco = el.querySelector(".preco")?.value || 0;
-    const obs   = el.querySelector(".obsItem")?.value || "";
-    const { total, pesoTotalKg } = calcTotalComPesoSeAplicavel({produto:prod, tipo, quantidade:qtd, preco});
-    itens[idx] = {
-      produto: prod, tipo,
-      quantidade: parseFloat(qtd) || 0,
-      preco: parseFloat(preco) || 0,
-      obs,
-      total: Number(total || 0),
-      _pesoTotalKg: pesoTotalKg || 0
-    };
-  });
-  // opcional p/ outros módulos (pdf.js pode ler)
-  window.itens = itens;
-}
+    const tipo = selTipo.value;
+    const q = num(inpQtd.value);
+    const pr = num(inpPreco.value);
+    const prod = inpProd.value.toLowerCase();
 
-function criarSelectProduto(i){
-  return `<input list="listaProdutos" class="produto" data-index="${i}"
-            placeholder="Digite ou selecione"
-            value="${itens[i].produto || ''}"/>`;
-}
-function criarTipoSelect(i){
-  return `<select class="tipo-select" data-index="${i}">
-    <option value="KG" ${itens[i].tipo === 'KG' ? 'selected' : ''}>KG</option>
-    <option value="UN" ${itens[i].tipo === 'UN' ? 'selected' : ''}>UN</option>
-  </select>`;
-}
-
-function updatePrecoLabelAndHints(i, root){
-  const tipoEl  = root.querySelector('.tipo-select');
-  const prodEl  = root.querySelector('.produto');
-  const precoLbl= root.querySelector('.label-preco');
-  const pesoInfo= root.querySelector(`#pesoInfo_${i}`);
-
-  const tipo = tipoEl?.value || 'KG';
-  const prod = prodEl?.value || '';
-
-  if (tipo === 'UN'){
-    const kgUn = parsePesoFromProduto(prod) || 0;
-    if (kgUn > 0){
-      if (precoLbl) precoLbl.textContent = 'Preço (R$/KG):';
-      if (pesoInfo) pesoInfo.textContent = 'Informe o preço por KG; total calcula pela gramagem do produto.';
+    // procura gramagem no nome quando UN (ex.: "1,2kg", "800 g")
+    let pesoTotalKg = 0;
+    if (tipo === 'UN') {
+      const m = /(\d+(?:[.,]\d+)?)[\s]*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b/.exec(prod);
+      if (m){
+        const val = parseFloat((m[1]||"").replace(",", ".")) || 0;
+        const kgUn = (m[2].startsWith("kg") || m[2].startsWith("quilo")) ? val : val/1000;
+        pesoTotalKg = q * kgUn;
+        span.textContent = (pesoTotalKg * pr).toFixed(2).replace('.', ',');
+        precoLbl.textContent = 'Preço (R$/KG)';
+        pesoInfo.textContent = `Peso total estimado: ${pesoTotalKg.toFixed(3)} kg`;
+      } else {
+        span.textContent = (q * pr).toFixed(2).replace('.', ',');
+        precoLbl.textContent = 'Preço Unitário (R$)';
+        pesoInfo.textContent = 'Sem gramagem detectada no nome';
+      }
     } else {
-      if (precoLbl) precoLbl.textContent = 'Preço Unitário (R$):';
-      if (pesoInfo) pesoInfo.textContent = 'Nenhuma gramagem detectada no nome; total = unidades × preço.';
+      span.textContent = (q * pr).toFixed(2).replace('.', ',');
+      precoLbl.textContent = 'Preço (R$/KG)';
+      pesoInfo.textContent = '';
     }
-  } else {
-    if (precoLbl) precoLbl.textContent = 'Preço (R$/KG):';
-    if (pesoInfo) pesoInfo.textContent = '';
-  }
-}
+  };
 
-function bindItemEvents(i, root){
-  const prodEl  = root.querySelector('.produto');
-  const tipoEl  = root.querySelector('.tipo-select');
-  const qtdEl   = root.querySelector('.quantidade');
-  const precoEl = root.querySelector('.preco');
-  const obsEl   = root.querySelector('.obsItem');
-  const btnRem  = root.querySelector('.remove');
+  // notifica assinantes (frete)
+  const fireEdits = ()=> { recalcTotalVis(); state.onEditCallbacks.forEach(fn=>{ try{ fn(); }catch{} }); };
 
-  const recalc = () => { calcularItem(i); dispararOnEdit(); updatePrecoLabelAndHints(i, root); };
-
-  prodEl && prodEl.addEventListener('input', recalc);
-  prodEl && prodEl.addEventListener('blur', recalc);
-  tipoEl && tipoEl.addEventListener('change', recalc);
-  qtdEl  && qtdEl.addEventListener('input', recalc);
-  precoEl&& precoEl.addEventListener('input', recalc);
-  obsEl  && obsEl.addEventListener('input', salvarCamposAntesRender);
-  btnRem && btnRem.addEventListener('click', () => { removerItem(i); dispararOnEdit(); });
-}
-
-function calcularItem(i){
-  const prod = $all(".produto")[i]?.value || "";
-  const tipo = $all(".tipo-select")[i]?.value || "KG";
-  const q = $all(".quantidade")[i]?.value || 0;
-  const p = $all(".preco")[i]?.value || 0;
-
-  const { total, pesoTotalKg } = calcTotalComPesoSeAplicavel({produto:prod, tipo, quantidade:q, preco:p});
-  itens[i].produto = prod;
-  itens[i].quantidade = parseFloat(q)||0;
-  itens[i].preco = parseFloat(p)||0;
-  itens[i].tipo = tipo;
-  itens[i].total = Number(total||0);
-  itens[i]._pesoTotalKg = pesoTotalKg||0;
-
-  const tgt = document.getElementById(`totalItem_${i}`);
-  if(tgt) tgt.innerText = itens[i].total ? itens[i].total.toFixed(2) : "0.00";
-
-  const pi = document.getElementById(`pesoInfo_${i}`);
-  if (pi){
-    if (tipo==='UN' && (pesoTotalKg||0)>0){
-      pi.textContent = `Peso total estimado: ${pesoTotalKg.toFixed(3)} kg (preço por kg)`;
-    } else if (tipo==='UN') {
-      pi.textContent = `Sem gramagem no nome do produto; usando preço unitário`;
-    } else {
-      pi.textContent = "";
-    }
-  }
-}
-
-function renderItens(){
-  salvarCamposAntesRender();
-  const container = $("#itens");
-  if (!container) return;
-  container.innerHTML = "";
-
-  itens.forEach((item, i) => {
-    const html = `
-      <div class="item" data-idx="${i}">
-        <label>Produto:</label>
-        ${criarSelectProduto(i)}
-        <label>Tipo:</label>
-        ${criarTipoSelect(i)}
-        <label>Quantidade:</label>
-        <input type="number" step="0.01" class="quantidade" data-index="${i}" value="${item.quantidade || ''}"/>
-        <label class="label-preco">Preço ${item.tipo==='UN' ? '(R$/KG)' : '(R$/KG)'}:</label>
-        <input type="number" step="0.01" class="preco" data-index="${i}" value="${item.preco || ''}"/>
-        <div class="peso-info" id="pesoInfo_${i}"></div>
-        <label>Observação do item:</label>
-        <textarea class="obsItem" data-index="${i}">${item.obs || ''}</textarea>
-        <p class="total">Total do Item: R$ <span id="totalItem_${i}">${Number(item.total || 0).toFixed(2)}</span></p>
-        <button class="remove">Remover Item</button>
-      </div>`;
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = html;
-    const node = wrapper.firstElementChild;
-    container.appendChild(node);
-    bindItemEvents(i, node);
-    updatePrecoLabelAndHints(i, node);
+  // sanitização de produto (sem espaço inicial e sem repetidos)
+  inpProd.addEventListener('input', ()=>{
+    const cur = inpProd.selectionStart;
+    const before = inpProd.value;
+    inpProd.value = normalizeProdutoText(before);
+    const delta = before.length - inpProd.value.length;
+    try { inpProd.setSelectionRange(Math.max(0, cur - delta), Math.max(0, cur - delta)); } catch {}
+    fireEdits();
   });
 
-  if (!document.getElementById("listaProdutos")) {
-    const dl = document.createElement("datalist"); dl.id = "listaProdutos"; document.body.appendChild(dl);
-  }
+  ;[inpQtd, inpPreco].forEach(el=>{
+    el.addEventListener('input', ()=>{
+      el.value = String(el.value).replace(/[^\d,\.]/g,'').replace('.',',');
+      fireEdits();
+    });
+  });
+  selTipo.addEventListener('change', fireEdits);
+  inpObs.addEventListener('input', fireEdits);
+  btnRem.addEventListener('click', ()=>{
+    wrap.remove();
+    // garante sempre 1 linha
+    const cont = document.getElementById('itens');
+    if (cont && cont.querySelectorAll('.item').length === 0){
+      adicionarItem();
+    }
+    fireEdits();
+  });
+
+  // primeiro cálculo
+  recalcTotalVis();
+
+  return wrap;
 }
 
-// ===== API PÚBLICA =====
+// =============== API pública ===============
 export function initItens(){
-  if (!Array.isArray(itens) || itens.length === 0){
-    itens = [{ produto:"", tipo:"KG", quantidade:0, preco:0, total:0, obs:"", _pesoTotalKg:0 }];
+  const container = document.getElementById('itens');
+  if (!container){
+    console.warn('[itens] container #itens não existe no DOM.');
+    return;
   }
-  renderItens();
+  if (container.children.length === 0){
+    container.appendChild(criarLinhaItem({}));
+  }
 }
 
-export function adicionarItem(){
-  salvarCamposAntesRender();
-  itens.push({ produto:"", tipo:"KG", quantidade:0, preco:0, total:0, obs:"", _pesoTotalKg:0 });
-  renderItens();
+export function adicionarItem(values={}){
+  const container = document.getElementById('itens');
+  if (!container) return;
+  container.appendChild(criarLinhaItem(values));
+  try { container.lastElementChild?.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch {}
 }
 
-export function removerItem(i){
-  salvarCamposAntesRender();
-  itens.splice(i,1);
-  if(!itens.length) itens.push({ produto:"", tipo:"KG", quantidade:0, preco:0, total:0, obs:"", _pesoTotalKg:0 });
-  renderItens();
+export function getItens(){
+  const container = document.getElementById('itens');
+  if (!container) return [];
+  const rows = Array.from(container.querySelectorAll('.item'));
+  return rows.map((row, i)=>{
+    const produto = normalizeProdutoText($('.produto', row)?.value || '');
+    const tipo = ($('.tipo-select', row)?.value || 'KG').toUpperCase();
+    const quantidade = num($('.quantidade', row)?.value);
+    const preco = num($('.preco', row)?.value);
+    const obs = ($('.obsItem', row)?.value || '').trim();
+    const totalSpan = document.getElementById(`totalItem_${i}`);
+    const total = totalSpan ? num(totalSpan.textContent.replace(',', '.')) : (quantidade * preco);
+    return { produto, tipo, quantidade, preco, obs, total };
+  }).filter(i => i.produto || i.quantidade || i.preco);
 }
 
-export function getItens(){ return itens.slice(); } // usado pelo pdf.js
+// permite que outros módulos (frete.js/app.js) “assinem” mudanças
+export function atualizarFreteAoEditarItem(cb){
+  if (typeof cb === 'function') state.onEditCallbacks.add(cb);
+}
