@@ -2,13 +2,21 @@
 import { onAuthUser } from './firebase.js';
 import { pedidos_list, pedidos_delete } from './db.js';
 import { $, renderRows, userPrefix } from './render.js';
-import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao, gerarPDFDoModal } from './modal.js';
+import {
+  carregarPedidoEmModal,
+  closeModal,
+  addItemRow,
+  salvarEdicao,
+  gerarPDFDoModal
+} from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
-// import { printPedido80mm } from './print.js'; // opcional: manter se quiser outro fluxo
+import { printPedido80mm } from './print.js'; // gera a cópia no mesmo layout do app Pedidos
 
+// estado global mínimo
 window.__rows = [];
 window.__currentDocId = null;
 
+/* ================== Ações principais ================== */
 async function buscar(){
   const di = $("fDataIni").value || undefined;
   const df = $("fDataFim").value || undefined;
@@ -43,8 +51,8 @@ function limpar(){
   $("tbody").innerHTML = "";
   $("ftCount").textContent = "0 pedidos";
   $("ftTotal").textContent = "R$ 0,00";
-  const elItems = document.getElementById("ftItens");
-  const elFrete = document.getElementById("ftFrete");
+  const elItems = $("ftItens");
+  const elFrete = $("ftFrete");
   if (elItems) elItems.textContent = "0 itens";
   if (elFrete) elFrete.textContent = "R$ 0,00";
   window.__rows = [];
@@ -66,14 +74,17 @@ function atualizarListaLocal(id, payload){
   renderRows(window.__rows);
 }
 
+/* ================== Bootstrap UI ================== */
 document.addEventListener('DOMContentLoaded', () => {
+  // filtros/exports
   $("btnBuscar").onclick = buscar;
   $("btnLimpar").onclick = limpar;
   $("btnXLSX").onclick = ()=> exportarXLSX(window.__rows);
   $("btnPDF").onclick  = ()=> exportarPDF(window.__rows);
 
-  // Tabela: editar / imprimir cópia do pedido / cancelar
+  // ações na tabela
   $("tbody").addEventListener("click", async (ev)=>{
+    // editar pedido (abre modal)
     const tdEdit = ev.target.closest(".cell-client");
     if (tdEdit){
       const id = tdEdit.getAttribute("data-id");
@@ -81,17 +92,15 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // imprimir cópia (gera PDF no layout do app Pedidos)
     const btnPrint = ev.target.closest(".btn-print");
     if (btnPrint){
       const id = btnPrint.getAttribute("data-id");
-      if (!id) return;
-      // 1) carrega o pedido no modal (preenche itens, frete, etc. no DOM)
-      await carregarPedidoEmModal(id);
-      // 2) gera a CÓPIA do pedido (mesmo layout do módulo de pedidos)
-      await gerarPDFDoModal();
+      if (id) await printPedido80mm(id);
       return;
     }
 
+    // cancelar/excluir
     const btnCancel = ev.target.closest(".btn-cancel");
     if (btnCancel){
       const id = btnCancel.getAttribute("data-id");
@@ -99,17 +108,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // modal
   $("btnFecharModal").addEventListener("click", closeModal);
   $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
 
-  // Botão PDF dentro do modal (gera a cópia a partir dos campos do modal)
-  const btnPDFPedido = document.getElementById("btnPDFPedido");
+  // botão PDF dentro do modal (usa o mesmo layout do app Pedidos)
+  const btnPDFPedido = $("btnPDFPedido");
   if (btnPDFPedido) btnPDFPedido.addEventListener("click", gerarPDFDoModal);
 });
 
 // Mostra apenas a parte antes do @ no header (CAIXA ALTA)
 onAuthUser((user) => {
-  const tag = document.getElementById('userTag');
+  const tag = $("userTag");
   tag.textContent = user ? userPrefix(user.email || user.uid).toUpperCase() : "—";
 });
