@@ -14,30 +14,6 @@
 </head>
 <body>
 
-  <!-- EARLY GUARD: garante espaço no #cliente antes de qualquer outro handler global -->
-  <script>
-  (function earlyAllowSpaceOnCliente(){
-    function killIfCliente(ev){
-      const el = document.activeElement;
-      const isSpaceKey = ev.key === ' ' || ev.code === 'Space';
-      if (!el || el.id !== 'cliente') return;
-      if (isSpaceKey) {
-        // Não bloqueia o default (para o navegador inserir o espaço),
-        // só impede que outros handlers interceptem.
-        ev.stopImmediatePropagation();
-      }
-    }
-    document.addEventListener('keydown',  killIfCliente, true);
-    document.addEventListener('keypress', killIfCliente, true);
-    document.addEventListener('beforeinput', function(ev){
-      const el = document.activeElement;
-      if (el && el.id === 'cliente' && ev.inputType === 'insertText' && ev.data === ' ') {
-        ev.stopImmediatePropagation();
-      }
-    }, true);
-  })();
-  </script>
-
   <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
@@ -46,7 +22,6 @@
       </div>
       <div class="hero-right">
         <a class="btn-add" id="btnAddCliente" title="Novo cliente">+</a>
-        <!-- AJUSTE: rota interna para Relatórios -->
         <a class="btn-report" href="/app/relatorios/">Relatórios</a>
       </div>
     </div>
@@ -125,8 +100,11 @@
       </div>
     </div>
 
-    <div id="itens"></div>
-    <button id="adicionarItemBtn">Adicionar Item</button>
+    <!-- ITENS -->
+    <div id="itens" class="itens"></div>
+    <div class="actions-line">
+      <button id="adicionarItemBtn" class="btn">Adicionar Item</button>
+    </div>
 
     <hr/>
 
@@ -156,20 +134,26 @@
   <div id="toastBox" class="toast-box"></div>
   <div id="appOverlay" class="overlay hidden"><div class="spinner"></div></div>
 
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Google API (se for usar Drive em outros módulos) -->
+  <script src="https://apis.google.com/js/api.js" async defer></script>
 
   <!-- Auth Guard (raiz) -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
 
-  <!-- Módulos do app -->
-  <script type="module" src="./js/firebase.js"></script>
-  <script type="module" src="./js/utils.js"></script>
-  <script type="module" src="./js/ui.js"></script>
-  <script type="module" src="./js/itens.js"></script>
-  <script type="module" src="./js/clientes.js"></script>
-  <script type="module" src="./js/frete.js"></script>
-  <script type="module" src="./js/modal-cliente.js"></script>
+  <!-- Módulos do app (apenas app.js precisa estar aqui; ele importa o resto) -->
   <script type="module" src="./js/app.js"></script>
+
+  <!-- Toggle "OUTRO" pagamento -->
+  <script>
+    document.addEventListener('change', (e)=>{
+      if (e.target && e.target.id === 'pagamento') {
+        const outro = document.getElementById('pagamentoOutro');
+        outro.style.display = (e.target.value === 'OUTRO') ? '' : 'none';
+      }
+    });
+  </script>
 
   <!-- SW com auto-update agressivo -->
   <script>
@@ -196,24 +180,5 @@
       });
     }
   </script>
-
-  <!-- Força limpeza de listeners diretos no campo Cliente -->
-  <script>
-  (function forceCleanCliente(){
-    function resetClienteInput(){
-      const old = document.getElementById('cliente');
-      if (!old) return;
-      const clone = old.cloneNode(true); // remove todos os listeners diretos
-      if (old.list) clone.setAttribute("list", old.list.id); // preserva datalist
-      old.replaceWith(clone);
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', resetClienteInput);
-    } else {
-      resetClienteInput();
-    }
-  })();
-  </script>
-
 </body>
 </html>
