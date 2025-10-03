@@ -1,4 +1,3 @@
-// relatorios/js/print.js
 import { pedidos_get } from "./db.js";
 import { moneyBR } from "./render.js";
 
@@ -63,18 +62,15 @@ export async function printPedido80mm(pedidoId){
     const tot  = Number((qtd*pu).toFixed(2));
     subtotal += tot;
 
-    // Nome
     const lines = doc.splitTextToSize(nome, width - margin*2);
     lines.forEach((ln,i)=>{ doc.text(ln, margin, y); y += 4; });
 
-    // Quantidade e valores
     doc.text(`${qtd} ${un} x ${money(pu)}`, margin, y);
     doc.text(money(tot), width - margin, y, { align: "right" }); y += 6;
   });
 
   line();
 
-  // Totais
   const total = subtotal + frete;
   doc.text(`SUBTOTAL: ${money(subtotal)}`, margin, y); y += 5;
   doc.text(`FRETE: ${money(frete)}`, margin, y); y += 5;
@@ -82,10 +78,8 @@ export async function printPedido80mm(pedidoId){
   doc.text(`TOTAL: ${money(total)}`, margin, y); y += 7;
   doc.setFont("helvetica","normal");
 
-  // Ajusta altura real da página para evitar “cauda” em branco
   doc.internal.pageSize.height = y + margin;
 
-  // Salvar (sem autoPrint para não bloquear)
   const nome = `Pedido_${(cliente||'').replace(/\s+/g,'_')}_${(r.dataEntregaISO||'').replaceAll('-','')}.pdf`;
   doc.save(nome);
 }
