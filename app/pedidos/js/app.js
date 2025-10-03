@@ -3,10 +3,22 @@ import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// Persistência idempotente + frete + auth
+// Persistência idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
+
+// (Opcional) Drive
+import { getGoogleAccessToken } from '/app/despesas/js/google-auth.js';
+import { queueDriveUpload, drainDriveQueueWhenOnline } from './driveQueue.js';
+
+import {
+  gerarPDFPreview,
+  salvarPDFLocal,
+  compartilharPDFNativo,
+  // exposto para a fila (upload a partir do DOM atual)
+  construirPDF
+} from './pdf.js';
 
 console.log('App inicializado');
 
@@ -14,29 +26,16 @@ console.log('App inicializado');
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
-  input.value = up(v); // mantém espaços
+  input.value = up(v);
 }
 
 /* ======== Leitura da tela ======== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
-function coletarDadosFormulario() {
-  return {
-    cliente: document.getElementById('cliente')?.value || '',
-    telefone: document.getElementById('contato')?.value || '',
-    endereco: document.getElementById('endereco')?.value || '',
-    observacoes: document.getElementById('obsGeral')?.value || '',
-    itens: getItens()
-  };
-}
-
 function validarAntesGerar() {
-  const dados = coletarDadosFormulario();
-  if (!dados.cliente.trim()) {
-    alert('Informe o nome do cliente');
-    return false;
-  }
+  const cliente = document.getElementById('cliente')?.value || '';
+  if (!cliente.trim()) { alert('Informe o nome do cliente'); return false; }
   const itens = getItens();
   if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
     alert('Adicione pelo menos um item');
@@ -45,7 +44,7 @@ function validarAntesGerar() {
   return true;
 }
 
-/* ======== Pagamento / Payload ======== */
+/* ======== Montagem do payload p/ salvar ======== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -94,7 +93,7 @@ function montarPayloadPedido(){
     frete: {
       isento: !!(frete.isento || isentoMan),
       valorBase: num(frete.valorBase || 0),
-      valorCobrado: freteCobrado
+      valorCobravel: freteCobrado
     },
     totalPedido: +(subtotal + freteCobrado).toFixed(2),
     pagamento: lerPagamento(),
@@ -110,30 +109,28 @@ function montarPayloadPedido(){
 
 /* ======== Persistência idempotente ======== */
 async function persistirPedidoSeNecessario(){
-  await waitForLogin();              // mesma sessão do portal
-  await ensureFreteBeforePDF();      // evita divergência de frete
+  await waitForLogin();
+  await ensureFreteBeforePDF();
 
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
 
-  // evita re-envio imediato em cliques repetidos
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
 
   try{
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo em Firestore:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
-    localStorage.setItem('unikor:lastPedidoId', id); // para reimpressão depois
+    localStorage.setItem('unikor:lastPedidoId', id);
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
-/* ======== Ações (com import DINÂMICO do PDF) ======== */
+/* ======== Ações ======== */
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -141,7 +138,6 @@ async function gerarPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-    const { gerarPDFPreview } = await import('./pdf.js');
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
   } catch (e) {
@@ -157,7 +153,6 @@ async function gerarPDF() {
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -165,7 +160,6 @@ async function salvarPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-    const { salvarPDFLocal } = await import('./pdf.js');
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
   } catch (e) {
@@ -181,7 +175,6 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-
   if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
@@ -189,7 +182,6 @@ async function compartilharPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
-    const { compartilharPDFNativo } = await import('./pdf.js');
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
@@ -208,12 +200,14 @@ async function compartilharPDF() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM carregado');
 
+  // Itens
   initItens();
 
-  // ligar itens -> recálculo do frete sempre que editar
+  // Frete recalcula ao editar item
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
+  // Garante item inicial
   setTimeout(() => {
     const containerItens = document.getElementById('itens');
     if (containerItens && containerItens.children.length === 0) {
@@ -222,32 +216,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 100);
 
-  const btnAdicionar = document.getElementById('adicionarItemBtn');
-  if (btnAdicionar) btnAdicionar.addEventListener('click', adicionarItem);
+  // Botões
+  document.getElementById('adicionarItemBtn')?.addEventListener('click', adicionarItem);
+  document.getElementById('btnGerarPdf')?.addEventListener('click', gerarPDF);
+  document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
+  document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
 
-  const btnGerarPDF = document.getElementById('btnGerarPdf');
-  if (btnGerarPDF) btnGerarPDF.addEventListener('click', gerarPDF);
-
-  const btnSalvarPDF = document.getElementById('btnSalvarPdf');
-  if (btnSalvarPDF) btnSalvarPDF.addEventListener('click', salvarPDF);
-
-  const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
-  if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
-
-  // Sanitize: remove qualquer listener colado por scripts externos no #cliente
+  // Nome do cliente: mantém espaços e maiúsculas
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
-    const clone = inputCliente.cloneNode(true); // remove listeners de terceiros
+    const clone = inputCliente.cloneNode(true);
     inputCliente.replaceWith(clone);
     inputCliente = clone;
     inputCliente.value = val;
-
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
+
+  // Drive queue (caso use a fila/worker)
+  try { drainDriveQueueWhenOnline(); } catch {}
+
 });
 
-// exposição (debug)
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
