@@ -1,17 +1,17 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.1.9';
+const APP_VER   = '1.2.0';             // 🔺 bump pra forçar cache novo
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
 
-// Shell mínimo para não quebrar APIs do Firebase/Google
+// Shell mínimo
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-
-  // JS essenciais do app (adicione/retire se necessário)
+  // JS essenciais do app (somente o app.js; ele importa o resto)
   './js/app.js',
+  // Mantidos apenas se realmente existirem:
   './js/firebase.js',
   './js/utils.js',
   './js/ui.js',
@@ -22,7 +22,6 @@ const ASSETS = [
   './js/modal-cliente.js',
 ];
 
-// utilidades
 async function put(cacheName, req, res) {
   try { const c = await caches.open(cacheName); await c.put(req, res); } catch {}
 }
@@ -37,7 +36,6 @@ self.addEventListener('install', (evt) => {
 
 self.addEventListener('activate', (evt) => {
   evt.waitUntil((async () => {
-    // limpa versões antigas
     const keys = await caches.keys();
     await Promise.all(keys
       .filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC)
@@ -46,22 +44,19 @@ self.addEventListener('activate', (evt) => {
   })());
 });
 
-// recebe mensagem do page script para ativar imediatamente
 self.addEventListener('message', (evt) => {
   if (evt.data === 'SKIP_WAITING') self.skipWaiting();
 });
 
-// network-first para navegação; fallback p/ offline
+// network-first para navegação; fallback offline
 self.addEventListener('fetch', (evt) => {
   const req = evt.request;
   if (req.method !== 'GET') return;
 
-  // navegação
   if (req.mode === 'navigate') {
     evt.respondWith((async () => {
       try {
         const net = await fetch(req);
-        // guarda última index para offline
         put(STATIC, './index.html', net.clone());
         return net;
       } catch {
@@ -71,7 +66,6 @@ self.addEventListener('fetch', (evt) => {
     return;
   }
 
-  // estáticos do shell
   const url = new URL(req.url);
   const same = url.origin === location.origin;
   if (same) {
