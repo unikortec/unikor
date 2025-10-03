@@ -1,14 +1,11 @@
 // /app/pedidos/js/drive-pedidos.js
-// Estrutura final:  <ROOT>/PEDIDOS/<DD-MM-AA>/arquivos.pdf
-// Reaproveita a MESMA integração do app de despesas (gapi + getGoogleAccessToken).
+// Estrutura final: <ROOT>/PEDIDOS/<DD-MM-AA>/<arquivo.pdf>
 
-// Coloque aqui a MESMA raiz que vocês já usam nas despesas, ou outra pasta raiz específica
-const ROOT_FOLDER_ID = '15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb'; // mesma raiz do "App Despesas", se preferir
+const ROOT_FOLDER_ID = '15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb'; // raiz fornecida
 const DRIVE_SCOPE    = 'https://www.googleapis.com/auth/drive.file';
 
 let gapiReady = false;
 
-/** Inicializa Drive para os PEDIDOS (usa o mesmo getGoogleAccessToken do módulo de DESPESAS) */
 export async function initDrivePedidos(getGoogleAccessToken) {
   if (!gapiReady) {
     await new Promise((res) => gapi.load('client', res));
@@ -21,7 +18,6 @@ export async function initDrivePedidos(getGoogleAccessToken) {
   gapi.client.setToken({ access_token: token });
 }
 
-/* ------------------- helpers de pasta ------------------- */
 async function ensureFolder(name, parentId) {
   const safe = String(name || '').replace(/'/g, "\\'");
   const q = `name='${safe}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
@@ -36,12 +32,10 @@ async function ensureFolder(name, parentId) {
 }
 
 async function ensureRootPedidos() {
-  // Cria/encontra a pasta PEDIDOS na raiz informada
   return ensureFolder('PEDIDOS', ROOT_FOLDER_ID);
 }
 
 function ddmmaaFromISO(iso) {
-  // Entrada: YYYY-MM-DD
   if (!iso) {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2,'0');
@@ -59,7 +53,6 @@ async function ensureDayFolder(isoDate) {
   return ensureFolder(dayName, rootPedidosId);
 }
 
-/* ------------------- upload genérico ------------------- */
 async function uploadBlobToDrive({ blob, filename, folderId }) {
   const metadata = { name: filename, parents: [folderId] };
   const form = new FormData();
@@ -81,14 +74,6 @@ async function uploadBlobToDrive({ blob, filename, folderId }) {
   return res.json(); // { id, name, webViewLink }
 }
 
-/* ------------------- API pública (usada pelo app) ------------------- */
-/**
- * Sobe o PDF do pedido na pasta: PEDIDOS/DD-MM-AA/
- * @param {Object} params
- * @param {Blob}   params.blob     PDF blob
- * @param {string} params.filename Nome do arquivo, ex.: CLIENTE_12-09-25_H09-30.pdf
- * @param {string} params.isoDate  YYYY-MM-DD (usado para nome da pasta do dia)
- */
 export async function uploadPedidoPDF({ blob, filename, isoDate }) {
   const folderId = await ensureDayFolder(isoDate);
   return uploadBlobToDrive({ blob, filename, folderId });
