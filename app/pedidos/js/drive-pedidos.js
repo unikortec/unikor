@@ -1,0 +1,95 @@
+// /app/pedidos/js/drive-pedidos.js
+// Estrutura final:  <ROOT>/PEDIDOS/<DD-MM-AA>/arquivos.pdf
+// Reaproveita a MESMA integração do app de despesas (gapi + getGoogleAccessToken).
+
+// Coloque aqui a MESMA raiz que vocês já usam nas despesas, ou outra pasta raiz específica
+const ROOT_FOLDER_ID = '15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb'; // mesma raiz do "App Despesas", se preferir
+const DRIVE_SCOPE    = 'https://www.googleapis.com/auth/drive.file';
+
+let gapiReady = false;
+
+/** Inicializa Drive para os PEDIDOS (usa o mesmo getGoogleAccessToken do módulo de DESPESAS) */
+export async function initDrivePedidos(getGoogleAccessToken) {
+  if (!gapiReady) {
+    await new Promise((res) => gapi.load('client', res));
+    await gapi.client.init({
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+    });
+    gapiReady = true;
+  }
+  const token = await getGoogleAccessToken(DRIVE_SCOPE);
+  gapi.client.setToken({ access_token: token });
+}
+
+/* ------------------- helpers de pasta ------------------- */
+async function ensureFolder(name, parentId) {
+  const safe = String(name || '').replace(/'/g, "\\'");
+  const q = `name='${safe}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const { result } = await gapi.client.drive.files.list({ q, fields: 'files(id,name)' });
+  if (result.files?.length) return result.files[0].id;
+
+  const { result: created } = await gapi.client.drive.files.create({
+    fields: 'id',
+    resource: { name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] },
+  });
+  return created.id;
+}
+
+async function ensureRootPedidos() {
+  // Cria/encontra a pasta PEDIDOS na raiz informada
+  return ensureFolder('PEDIDOS', ROOT_FOLDER_ID);
+}
+
+function ddmmaaFromISO(iso) {
+  // Entrada: YYYY-MM-DD
+  if (!iso) {
+    const d = new Date();
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const aa = String(d.getFullYear()).slice(-2);
+    return `${dd}-${mm}-${aa}`;
+  }
+  const [y,m,d] = String(iso).split('-');
+  return `${String(d||'').padStart(2,'0')}-${String(m||'').padStart(2,'0')}-${String(y||'').slice(-2)}`;
+}
+
+async function ensureDayFolder(isoDate) {
+  const rootPedidosId = await ensureRootPedidos();
+  const dayName = ddmmaaFromISO(isoDate);
+  return ensureFolder(dayName, rootPedidosId);
+}
+
+/* ------------------- upload genérico ------------------- */
+async function uploadBlobToDrive({ blob, filename, folderId }) {
+  const metadata = { name: filename, parents: [folderId] };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob, filename);
+
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+    {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + gapi.client.getToken().access_token },
+      body: form,
+    }
+  );
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error('Falha ao enviar PDF ao Drive: ' + t);
+  }
+  return res.json(); // { id, name, webViewLink }
+}
+
+/* ------------------- API pública (usada pelo app) ------------------- */
+/**
+ * Sobe o PDF do pedido na pasta: PEDIDOS/DD-MM-AA/
+ * @param {Object} params
+ * @param {Blob}   params.blob     PDF blob
+ * @param {string} params.filename Nome do arquivo, ex.: CLIENTE_12-09-25_H09-30.pdf
+ * @param {string} params.isoDate  YYYY-MM-DD (usado para nome da pasta do dia)
+ */
+export async function uploadPedidoPDF({ blob, filename, isoDate }) {
+  const folderId = await ensureDayFolder(isoDate);
+  return uploadBlobToDrive({ blob, filename, folderId });
+}
