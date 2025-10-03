@@ -1,6 +1,4 @@
 // /app/pedidos/js/driveQueue.js
-import { uploadPedidoPDFToDrive } from './pdf.js';
-
 const KEY = "__drive_upload_queue__";
 
 function loadQ(){
@@ -11,33 +9,26 @@ function saveQ(q){
   try { localStorage.setItem(KEY, JSON.stringify(q)); } catch {}
 }
 
+/**
+ * Enfileira um job de reenvio depois.
+ * Exemplo de `job`: { type:"REBUILD_FROM_DOM", when: Date.now() }
+ */
 export function queueDriveUpload(job){
   const q = loadQ();
   q.push({ t: Date.now(), ...job });
   saveQ(q);
 }
 
+/** Placeholder para futura drenagem baseada em reconstrução do PDF */
 export async function drainDriveQueueWhenOnline(){
   const run = async ()=>{
     if (!navigator.onLine) return;
-    let q = loadQ();
+    const q = loadQ();
     if (!q.length) return;
-    console.log(`[DRIVE] Tentando enviar fila (${q.length})…`);
-    const rest = [];
-    for (const j of q){
-      try {
-        await uploadPedidoPDFToDrive(j.pedido);
-      } catch(e){
-        console.warn("[DRIVE] Upload falhou, mantendo na fila.", e);
-        rest.push(j); // mantém para tentar depois
-      }
-    }
-    saveQ(rest);
+    console.log(`[DRIVE] Existem ${q.length} itens na fila. (reenvio ainda não implementado)`);
+    // Mantém por enquanto
   };
-
-  // roda ao voltar a conexão e também a cada 60s
   window.addEventListener("online", run);
   setInterval(run, 60000);
-  // tenta já
   run();
 }
