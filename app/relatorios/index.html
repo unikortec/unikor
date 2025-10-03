@@ -7,12 +7,11 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
 
-  <!-- jsPDF sempre local -->
+  <!-- jsPDF (PDF & impressão térmica) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
-  <!-- NÃO carregamos SheetJS aqui: o js/export.js faz um loader resiliente com spinner -->
 </head>
 <body>
-  <!-- HEADER (igual Pedidos) -->
+  <!-- HEADER -->
   <header class="brandbar">
     <div class="brandbar__left">
       <a href="/" class="brandbar__btn" title="Voltar para o portal">Voltar</a>
@@ -67,8 +66,9 @@
               <th>Total (R$)</th>
               <th>Tipo</th>
               <th>Pagamento</th>
-              <th>Frete</th>          <!-- NOVA COLUNA -->
+              <th>Frete</th>
               <th>Nº do Cupom</th>
+              <th>Imprimir</th>  <!-- NOVA -->
               <th>Cancelar</th>
             </tr>
           </thead>
@@ -78,12 +78,12 @@
           <tfoot>
             <tr>
               <td id="ftCount">0 pedidos</td>
-              <td id="ftItens" colspan="2">0 itens</td>  <!-- total de itens -->
+              <td id="ftItens" colspan="2">0 itens</td>
               <td></td>
-              <td id="ftTotal">R$ 0,00</td>              <!-- total dos ITENS (sem frete) -->
+              <td id="ftTotal">R$ 0,00</td>    <!-- total dos itens (sem frete) -->
               <td colspan="2"></td>
-              <td id="ftFrete">R$ 0,00</td>              <!-- total de frete -->
-              <td colspan="2"></td>
+              <td id="ftFrete">R$ 0,00</td>    <!-- total de frete -->
+              <td colspan="3"></td>
             </tr>
           </tfoot>
         </table>
@@ -91,7 +91,7 @@
     </section>
   </main>
 
-  <!-- Modal -->
+  <!-- Modal (edição de pedido) -->
   <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <header><h2 id="modalTitle">Editar Pedido</h2></header>
@@ -139,98 +139,8 @@
     </div>
   </div>
 
-  <!-- App (módulo) -->
-  <script type="module">
-    import { onAuthUser } from "./js/firebase.js";
-    import { pedidos_list, pedidos_get, pedidos_update, pedidos_delete } from "./js/db.js";
-    import { renderRows, $, toBR, userPrefix } from "./js/render.js";
-    import { addItemRow, closeModal, carregarPedidoEmModal, salvarEdicao } from "./js/modal.js";
-    import { exportarXLSX, exportarPDF } from "./js/export.js";
-
-    const nextFrame = () => new Promise(r => setTimeout(r, 0));
-
-    window.__rows = [];
-    let __currentDocId = null;
-
-    async function buscar(){
-      const di = $("fDataIni").value || null;
-      const df = $("fDataFim").value || null;
-      const cliente = $("fCliente").value.trim();
-      const tipoSel = $("fTipo").value.trim() || null;
-
-      const list = await pedidos_list({
-        dataIniISO: di || undefined,
-        dataFimISO: df || undefined,
-        clienteLike: cliente || undefined,
-        tipo: tipoSel || undefined,
-        max: 1000
-      });
-
-      const hIni = $("fHoraIni").value || null;
-      const hFim = $("fHoraFim").value || null;
-
-      const out = list.filter(x => {
-        if (hIni && (x.horaEntrega||"") < hIni) return false;
-        if (hFim && (x.horaEntrega||"") > hFim) return false;
-        return true;
-      });
-
-      window.__rows = out;
-      renderRows(out);
-    }
-
-    function limpar(){
-      ["fDataIni","fDataFim","fHoraIni","fHoraFim","fCliente"].forEach(id=>$(id).value="");
-      $("fTipo").value = "";
-      $("tbody").innerHTML = "";
-      $("ftCount").textContent = "0 pedidos";
-      $("ftTotal").textContent = "R$ 0,00";
-      window.__rows = [];
-    }
-
-    async function excluirPedido(id){
-      if (!id) return;
-      const ok = confirm("Gostaria de excluir o pedido?");
-      if (!ok) return;
-      try{
-        await pedidos_delete(id);
-        window.__rows = window.__rows.filter(x => x.id !== id);
-        renderRows(window.__rows);
-        alert("Pedido excluído.");
-      }catch(e){
-        console.error(e); alert("Não foi possível excluir. Verifique conexão/permissões.");
-      }
-    }
-
-    function atualizarListaLocal(id, payload){
-      const idx = window.__rows.findIndex(x=>x.id===id);
-      if (idx>=0){ window.__rows[idx] = { ...window.__rows[idx], ...payload }; }
-      renderRows(window.__rows);
-    }
-
-    // Eventos
-    $("btnBuscar").onclick = buscar;
-    $("btnLimpar").onclick = limpar;
-    $("btnXLSX").onclick = ()=> exportarXLSX(window.__rows);
-    $("btnPDF").onclick  = ()=> exportarPDF(window.__rows);
-
-    $("tbody").addEventListener("click", (ev)=>{
-      const tdEdit = ev.target.closest(".cell-client");
-      if (tdEdit){ const id = tdEdit.getAttribute("data-id"); if (id) carregarPedidoEmModal(id); return; }
-      const btnCancel = ev.target.closest(".btn-cancel");
-      if (btnCancel){ const id = btnCancel.getAttribute("data-id"); excluirPedido(id); }
-    });
-
-    $("btnFecharModal").addEventListener("click", closeModal);
-    $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
-    $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
-
-    // Mostra apenas o prefixo do email no header
-    onAuthUser((user) => {
-      const tag = document.getElementById('userTag');
-      tag.textContent = user ? userPrefix(user.email || user.uid) : "—";
-    });
-  </script>
+  <!-- App (módulos) -->
+  <script type="module" src="./js/app.js"></script>
 
   <!-- SW (auto-update) -->
   <script>
