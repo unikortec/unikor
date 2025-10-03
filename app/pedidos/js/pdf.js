@@ -43,7 +43,6 @@ function lerItensDaTela(){
     const preco = parseFloat(precoInput?.value || '0') || 0;
     const obs = obsInput?.value?.trim() || '';
 
-    // Peso em UN por kg (procura "1.2kg", "800 g", "1,2 KG", etc.)
     let pesoTotalKg = 0;
     let kgPorUnidade = 0;
     if (tipo === 'UN') {
@@ -67,7 +66,7 @@ function lerItensDaTela(){
   });
 }
 
-/* ================== Desenho de componentes ================= */
+/* ================== Desenho ================= */
 function drawCenteredKeyValueBox(doc, x,y,w, label, value, opts={}){
   const { rowH=12, titleSize=7, valueSize=7 } = opts;
   doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x,y,w,rowH,"S");
@@ -91,27 +90,22 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
 }
 
 /* ================== Construção do PDF ====================== */
-export async function construirPDF(){
-  // Garante frete atualizado para o resumo
-  const freteResp = await ensureFreteBeforePDF();
+async function construirPDF(){
+  await ensureFreteBeforePDF();
 
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
-  // Cabeçalho
   doc.setFont("helvetica","bold"); doc.setFontSize(11);
   doc.text("PEDIDO SERRA NOBRE", 36, 7, { align:"center" });
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
   const margemX=2, larguraCaixa=68;
   const SAFE_BOTTOM=280;
-
-  // Larguras fixas da tabela
   const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
 
   let y=12;
   const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
 
-  // Campos UI
   const cliente = document.getElementById("cliente")?.value?.trim()?.toUpperCase() || "";
   const endereco = document.getElementById("endereco")?.value?.trim()?.toUpperCase() || "";
   const entregaISO = document.getElementById("entrega")?.value || "";
@@ -123,7 +117,6 @@ export async function construirPDF(){
   const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   const tipoEnt = (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase();
 
-  // pagamento (igual app.js)
   const selPag = document.getElementById("pagamento");
   const outroPag = document.getElementById("pagamentoOutro");
   let pagamento = (selPag?.value || "").toUpperCase();
@@ -188,7 +181,7 @@ export async function construirPDF(){
   doc.text((pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
   y += 12;
 
-  // Tabela itens - Cabeçalho
+  // Tabela itens
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
   doc.rect(margemX, y, W_PROD, 10, "S");
@@ -304,8 +297,9 @@ export async function construirPDF(){
   doc.text("R$ " + totalGeral.toFixed(2), margemX+larguraCaixa-3, y+5.5, {align:"right"});
   y += 12;
 
+  const obsG = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase();
   if (obsG){
-    const corpoLines = splitToWidth(doc, obsG.toUpperCase(), larguraCaixa-6);
+    const corpoLines = splitToWidth(doc, obsG, larguraCaixa-6);
     const obsH = 9 + corpoLines.length*5;
     ensureSpace(obsH);
     doc.rect(margemX, y, larguraCaixa, obsH, "S");
@@ -318,10 +312,8 @@ export async function construirPDF(){
   }
 
   const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
-
-  // Retorna blob/documento para salvar/compartilhar/Drive
   const blob = doc.output('blob');
-  return { blob, nomeArq, doc };
+  return { blob, nomeArq, doc, entregaISO };
 }
 
 /* =================== APIs públicas =================== */
@@ -335,9 +327,7 @@ export async function gerarPDFPreview(){
 export async function salvarPDFLocal(){
   const { blob, nomeArq } = await construirPDF();
   try{
-    // @ts-ignore
     if (window.showSaveFilePicker){
-      // @ts-ignore
       const handle = await window.showSaveFilePicker({
         suggestedName: nomeArq,
         types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
@@ -378,5 +368,8 @@ export async function compartilharPDFNativo(){
   return { compartilhado:false, fallback:true };
 }
 
-// ⬅️ importante para o Drive: permite gerar o blob no worker/fila
-export { construirPDF };
+// Export para uso no app (uma única construção e reaproveito do blob)
+export async function construirPDFBlob(){
+  const { blob, nomeArq, entregaISO } = await construirPDF();
+  return { blob, nomeArq, entregaISO };
+}
