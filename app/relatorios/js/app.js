@@ -1,10 +1,9 @@
-// relatorios/js/app.js
 import { onAuthUser } from './firebase.js';
 import { pedidos_list, pedidos_delete } from './db.js';
 import { $, renderRows, userPrefix } from './render.js';
 import { carregarPedidoEmModal, closeModal, addItemRow, salvarEdicao, gerarPDFDoModal } from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
-import { printPedido80mm } from './print.js';       // opcional
+import { printPedido80mm } from './print.js'; // opcional
 
 window.__rows = [];
 window.__currentDocId = null;
@@ -87,12 +86,12 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
 
-  // NOVO: PDF do pedido direto do modal
-  $("btnPDFPedido").addEventListener("click", gerarPDFDoModal);
+  // PDF do pedido direto do modal (botão novo)
+  document.getElementById("btnPDFPedido")?.addEventListener("click", gerarPDFDoModal);
 });
 
-// Mostra apenas a parte antes do @ no header
+// Mostra apenas a parte antes do @ no header (CAIXA ALTA)
 onAuthUser((user) => {
   const tag = document.getElementById('userTag');
-  tag.textContent = user ? userPrefix(user.email || user.uid) : "—";
+  tag.textContent = user ? userPrefix(user.email || user.uid).toUpperCase() : "—";
 });
