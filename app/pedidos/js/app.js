@@ -6,16 +6,22 @@ import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
-// funções de PDF que já existiam
+// PDF
 import {
   salvarPDFLocal,
   compartilharPDFNativo,
   gerarPDFPreviewDePedidoFirestore
 } from './pdf.js';
 
-// ===== NOVO: para cache local e fila de upload p/ Storage =====
+// Storage (cache/fila p/ reimpressão turbo)
 import { getTenantId, db, app } from './firebase.js';
 import { queueStorageUpload, drainStorageQueueWhenOnline } from './storageQueue.js';
+
+// SUGESTÕES (últimos itens e preços do cliente)
+import {
+  carregarSugestoesParaCliente,
+  bindAutoCompleteNoInputProduto
+} from './sugestoes.js';
 
 console.log('[APP] Pedidos inicializado');
 
@@ -144,10 +150,9 @@ async function salvarPDF() {
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
 
-    // 3) *** cache local + fila p/ Storage ***
+    // 3) cache local + fila p/ Storage
     try {
-      // 🔸 ESTE TRECHO "VEM DO PDF": usamos construirPDF() para obter o Blob/Nome
-      const { construirPDF } = await import('./pdf.js');
+      const { construirPDF } = await import('./pdf.js'); // <- geramos o blob de novo para cache/queue
       const { blob, nomeArq } = await construirPDF();
 
       // cache p/ reimpressão instantânea
@@ -185,8 +190,6 @@ async function compartilharPDF() {
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
     else                        toastOk('Abrimos o PDF para envio');
-
-    // (opcional) também pode cachear igual ao salvarPDF()
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
@@ -293,6 +296,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Hidrata datalist mesmo sem abrir o modal
   hydrateListaClientesFallback();
+
+  // Sugestões por cliente (itens + último preço)
+  const clienteInput = document.getElementById('cliente');
+  async function carregarSugestoesDoClienteAtual(){
+    const nomeUpper = String(clienteInput?.value || '').trim().toUpperCase();
+    if (!nomeUpper) return;
+    await carregarSugestoesParaCliente(nomeUpper);
+    // liga o datalist nos inputs de produto já existentes
+    document.querySelectorAll('#itens .item .produto').forEach(bindAutoCompleteNoInputProduto);
+  }
+  if (clienteInput){
+    clienteInput.addEventListener('change', carregarSugestoesDoClienteAtual);
+    clienteInput.addEventListener('blur', carregarSugestoesDoClienteAtual);
+    carregarSugestoesDoClienteAtual(); // tentativa inicial
+  }
+
+  // Auto-bind para inputs de produto criados dinamicamente
+  const itensContainer = document.getElementById('itens');
+  if (itensContainer){
+    itensContainer.addEventListener('focusin', (ev) => {
+      if (ev.target && ev.target.classList && ev.target.classList.contains('produto')){
+        bindAutoCompleteNoInputProduto(ev.target);
+      }
+    });
+  }
 
   // inicia o drenador da fila (idempotente)
   drainStorageQueueWhenOnline();
