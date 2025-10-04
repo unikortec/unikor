@@ -1,4 +1,3 @@
-// app/pedidos/js/app.js
 import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
@@ -8,43 +7,30 @@ import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
-// (Opcional) Drive
+// Drive
 import { getGoogleAccessToken } from '/app/despesas/js/google-auth.js';
-import { queueDriveUpload, drainDriveQueueWhenOnline } from './driveQueue.js';
-
+import { queueDriveUpload } from './driveQueue.js';
 import {
   gerarPDFPreview,
   salvarPDFLocal,
   compartilharPDFNativo,
-  // exposto para a fila (upload a partir do DOM atual)
-  construirPDF
+  uploadPDFAtualParaDrive,
+  gerarPDFPreviewDePedidoFirestore
 } from './pdf.js';
 
-console.log('App inicializado');
+console.log('[APP] Pedidos inicializado');
 
-/* ======== Qualidade de digitação ======== */
+/* ===================== Helpers ===================== */
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
 }
 
-/* ======== Leitura da tela ======== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
-function validarAntesGerar() {
-  const cliente = document.getElementById('cliente')?.value || '';
-  if (!cliente.trim()) { alert('Informe o nome do cliente'); return false; }
-  const itens = getItens();
-  if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
-    alert('Adicione pelo menos um item');
-    return false;
-  }
-  return true;
-}
-
-/* ======== Montagem do payload p/ salvar ======== */
+/* ===================== Payload ===================== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -72,11 +58,9 @@ function montarPayloadPedido(){
   }).filter(i=> i.produto || i.quantidade>0 || i.total>0);
 
   const subtotal = +(itens.reduce((s,i)=>s + num(i.total), 0).toFixed(2));
-
   const frete = getFreteAtual() || { valorBase:0, valorCobravel:0, isento:false };
   const isentoMan = !!document.getElementById('isentarFrete')?.checked;
   const freteCobrado = isentoMan ? 0 : num(frete.valorCobravel || frete.valorBase || 0);
-
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || 'ENTREGA';
 
   return {
@@ -107,7 +91,7 @@ function montarPayloadPedido(){
   };
 }
 
-/* ======== Persistência idempotente ======== */
+/* ===================== Persistência ===================== */
 async function persistirPedidoSeNecessario(){
   await waitForLogin();
   await ensureFreteBeforePDF();
@@ -127,33 +111,10 @@ async function persistirPedidoSeNecessario(){
   }
 }
 
-/* ======== Ações ======== */
-async function gerarPDF() {
-  const botao = document.getElementById('btnGerarPdf');
-  if (!botao) return;
-  if (!validarAntesGerar()) return;
-
-  const textoOriginal = botao.textContent;
-  botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
-  showOverlay();
-  try {
-    await persistirPedidoSeNecessario();
-    await gerarPDFPreview();
-    toastOk('PDF gerado (preview)');
-  } catch (e) {
-    console.error('[PDF] Erro ao gerar:', e);
-    toastErro('Erro ao gerar PDF');
-    alert('Erro ao gerar PDF: ' + e.message);
-  } finally {
-    hideOverlay();
-    botao.disabled = false; botao.textContent = textoOriginal;
-  }
-}
-
+/* ===================== Ações PDF ===================== */
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-  if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
@@ -175,7 +136,6 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-  if (!validarAntesGerar()) return;
 
   const textoOriginal = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
@@ -196,33 +156,51 @@ async function compartilharPDF() {
   }
 }
 
-/* ======== Inicialização ======== */
+async function reimprimirUltimoPedidoSalvo() {
+  const btn = document.getElementById('btnReimprimirUltimo');
+  if (!btn) return;
+
+  const id = localStorage.getItem('unikor:lastPedidoId');
+  if (!id) { alert('Ainda não há pedido salvo nesta sessão.'); return; }
+
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
+  showOverlay();
+  try {
+    await waitForLogin();
+    await gerarPDFPreviewDePedidoFirestore(id);
+    toastOk('PDF reimpresso do Firestore');
+  } catch (e) {
+    console.error('[Reimpressão] Erro:', e);
+    toastErro('Erro ao reimprimir');
+    alert('Erro ao reimprimir: ' + e.message);
+  } finally {
+    hideOverlay();
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+/* ===================== Init ===================== */
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM carregado');
+  console.log('[APP] DOM carregado');
 
-  // Itens
   initItens();
-
-  // Frete recalcula ao editar item
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
-  // Garante item inicial
-  setTimeout(() => {
-    const containerItens = document.getElementById('itens');
-    if (containerItens && containerItens.children.length === 0) {
-      adicionarItem();
-      console.log('Item inicial adicionado');
-    }
-  }, 100);
+  const btnAdicionar = document.getElementById('adicionarItemBtn');
+  if (btnAdicionar) btnAdicionar.addEventListener('click', adicionarItem);
 
-  // Botões
-  document.getElementById('adicionarItemBtn')?.addEventListener('click', adicionarItem);
-  document.getElementById('btnGerarPdf')?.addEventListener('click', gerarPDF);
-  document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
-  document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
+  const btnSalvarPDF = document.getElementById('btnSalvarPdf');
+  if (btnSalvarPDF) btnSalvarPDF.addEventListener('click', salvarPDF);
 
-  // Nome do cliente: mantém espaços e maiúsculas
+  const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
+  if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
+
+  const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
+  if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
+
+  // Sanitize campo cliente
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
@@ -232,14 +210,9 @@ document.addEventListener('DOMContentLoaded', () => {
     inputCliente.value = val;
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
-
-  // Drive queue (caso use a fila/worker)
-  try { drainDriveQueueWhenOnline(); } catch {}
-
 });
 
-window.gerarPDF = gerarPDF;
+// Mantém expostas as funções úteis globalmente (caso precise em debug)
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
-
-console.log('App configurado completamente');
+window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
