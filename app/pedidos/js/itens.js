@@ -1,11 +1,9 @@
 // app/pedidos/js/itens.js
 // Lista de itens do pedido (render, cálculos e eventos) – robusto a ordem de import.
 
-const state = {
-  onEditCallbacks: new Set()
-};
+const state = { onEditCallbacks: new Set() };
 
-const $ = (sel, root = document) => root.querySelector(sel);
+const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const num = (v) => {
   if (v == null) return 0;
@@ -14,7 +12,7 @@ const num = (v) => {
   return isFinite(n) ? n : 0;
 };
 const normProduto = (s) => String(s || '')
-  .replace(/^\s+/, '')         // sem espaço inicial
+  .replace(/^\s+/, '')         // remove espaço inicial
   .replace(/\s{2,}/g, ' ');    // colapsa múltiplos espaços
 
 function criarLinhaItem(values = {}) {
@@ -43,10 +41,6 @@ function criarLinhaItem(values = {}) {
         <label class="label-preco">Preço (R$/KG)</label>
         <input class="preco" inputmode="decimal" placeholder="0,00" />
       </div>
-      <div class="col col-rem">
-        <label>&nbsp;</label>
-        <button class="remove" type="button">Remover Item</button>
-      </div>
     </div>
 
     <div class="row">
@@ -58,6 +52,13 @@ function criarLinhaItem(values = {}) {
     </div>
 
     <p class="total">Total do Item: R$ <span class="total-item">0,00</span></p>
+
+    <!-- 🔻 botão de remover AGORA fica logo abaixo do total -->
+    <div class="row row-rem" style="margin-top:6px;">
+      <div class="col">
+        <button class="remove" type="button">Remover Item</button>
+      </div>
+    </div>
   `;
 
   const inpProd = $('.produto', wrap);
@@ -106,13 +107,12 @@ function criarLinhaItem(values = {}) {
 
     totalEl.textContent = total.toFixed(2).replace('.', ',');
 
-    // avisa quem escuta (frete)
+    // avisa interessados (frete)
     state.onEditCallbacks.forEach(fn => { try { fn(); } catch {} });
   };
 
   // listeners
   inpProd.addEventListener('input', () => { 
-    // mantém espaço permitido, só evita no início e duplicados
     const cur = inpProd.selectionStart;
     const before = inpProd.value;
     inpProd.value = normProduto(before);
@@ -123,12 +123,12 @@ function criarLinhaItem(values = {}) {
   selTipo.addEventListener('change', recalc);
   inpQtd.addEventListener('input', recalc);
   inpPreco.addEventListener('input', recalc);
-  inpObs.addEventListener('input', ()=>{}); // só mantém valor
+  inpObs.addEventListener('input', ()=>{}); // apenas guarda
 
   btnRem.addEventListener('click', () => {
     const cont = document.getElementById('itens');
     wrap.remove();
-    // garante que haja pelo menos 1
+    // garante que sempre exista pelo menos 1 item
     if (cont && cont.querySelectorAll('.item').length === 0) {
       adicionarItem();
     }
