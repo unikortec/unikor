@@ -376,5 +376,5 @@ export async function compartilharPDFNativo(){
   return { compartilhado:false, fallback:true };
 }
 
-// também exportamos o builder (usado pela fila/drive)
-export { construirPDF };
+/* ❌ NÃO deixe um segundo “export { construirPDF }” aqui. 
+   A função já foi exportada na declaração acima. */
