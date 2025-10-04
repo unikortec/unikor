@@ -11,6 +11,29 @@ function freteFromRow(r){
   return isento ? 0 : v;
 }
 
+/* mesmas regras de subtotal usadas no db/export */
+function kgPorUnFromDesc(desc=""){
+  const s = String(desc).toLowerCase().replace(',', '.').replace(/\s+/g,' ');
+  const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
+  let m,last=null; while((m=re.exec(s))!==null) last=m;
+  if (!last) return 0;
+  const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
+  const val = parseFloat(raw); if (!isFinite(val)||val<=0) return 0;
+  const unit = last[2].toLowerCase();
+  return (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
+}
+function subtotalItem(it){
+  const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+  const un  = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
+  const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+  if (typeof it.subtotal === "number") return Number(it.subtotal||0);
+  if (un === "UN"){
+    const kgUn = kgPorUnFromDesc(it.descricao || it.produto || "");
+    return kgUn > 0 ? (qtd * kgUn) * pu : (qtd * pu);
+  }
+  return qtd * pu;
+}
+
 export function renderRows(docs){
   const tbody = $("tbody");
   const seen  = new Set();
@@ -24,7 +47,7 @@ export function renderRows(docs){
     seen.add(r.id);
 
     const itens = Array.isArray(r.itens) ? r.itens : [];
-    const totItens = Number(r.totalPedido ?? 0);
+    const totItens = itens.reduce((s,it)=> s + subtotalItem(it), 0);
     const frete = freteFromRow(r);
 
     totalItensValor += totItens;
@@ -55,21 +78,14 @@ export function renderRows(docs){
     tbody.innerHTML = `<tr><td colspan="11">Sem resultados.</td></tr>`;
     $("ftCount").textContent = "0 pedidos";
     $("ftTotal").textContent = "R$ 0,00";
-    const elItems = document.getElementById("ftItens");
-    const elFrete = document.getElementById("ftFrete");
-    if (elItems) elItems.textContent = "0 itens";
-    if (elFrete) elFrete.textContent = "R$ 0,00";
+    $("ftItens").textContent = "0 itens";
+    $("ftFrete").textContent = "R$ 0,00";
     return;
   }
 
   tbody.innerHTML = rows.join("");
-
   $("ftCount").textContent = `${seen.size} pedido(s)`;
   $("ftTotal").textContent = `R$ ${moneyBR(totalItensValor)}`;
-
-  // totais de itens e frete (rodapé)
-  const elItens = document.getElementById("ftItens");
-  const elFrete = document.getElementById("ftFrete");
-  if (elItens) elItens.textContent = `${totalQtdeItens} item(ns)`;
-  if (elFrete) elFrete.textContent = `R$ ${moneyBR(totalFreteValor)}`;
+  $("ftItens").textContent = `${totalQtdeItens} item(ns)`;
+  $("ftFrete").textContent = `R$ ${moneyBR(totalFreteValor)}`;
 }
