@@ -1,5 +1,6 @@
 // app/pedidos/js/pdf.js
 import { ensureFreteBeforePDF, getFreteAtual } from './frete.js';
+import { db, getTenantId, doc, getDoc } from './firebase.js';
 
 const { jsPDF } = window.jspdf;
 
@@ -25,48 +26,6 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
-// Lê itens do DOM (compatível com o itens.js atual)
-function lerItensDaTela(){
-  const itensContainer = document.getElementById('itens');
-  if (!itensContainer) return [];
-  const itemElements = Array.from(itensContainer.querySelectorAll('.item'));
-  return itemElements.map(itemEl => {
-    const produtoInput = itemEl.querySelector('.produto');
-    const tipoSelect = itemEl.querySelector('.tipo-select');
-    const quantidadeInput = itemEl.querySelector('.quantidade');
-    const precoInput = itemEl.querySelector('.preco');
-    const obsInput = itemEl.querySelector('.obsItem');
-
-    const produto = produtoInput?.value?.trim() || '';
-    const tipo = (tipoSelect?.value || 'KG').toUpperCase();
-    const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
-    const preco = parseFloat(precoInput?.value || '0') || 0;
-    const obs = obsInput?.value?.trim() || '';
-
-    // Peso estimado a partir do nome quando tipo UN
-    let pesoTotalKg = 0;
-    let kgPorUnidade = 0;
-    if (tipo === 'UN') {
-      const s = produto.toLowerCase().replace(',', '.').replace(/\s+/g,' ');
-      const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
-      let m, last=null; while((m=re.exec(s))!==null) last=m;
-      if (last){
-        const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
-        const val = parseFloat(raw);
-        if (isFinite(val) && val>0){
-          const unit = last[2].toLowerCase();
-          kgPorUnidade = (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
-          pesoTotalKg = quantidade * kgPorUnidade;
-        }
-      }
-    }
-
-    const total = (tipo==='UN' && pesoTotalKg>0) ? (pesoTotalKg*preco) : (quantidade*preco);
-
-    return { produto, tipo, quantidade, preco, obs, total, _pesoTotalKg:pesoTotalKg, _kgPorUnidade:kgPorUnidade };
-  });
-}
-
 /* ================== Desenho de componentes ================= */
 function drawCenteredKeyValueBox(doc, x,y,w, label, value, opts={}){
   const { rowH=12, titleSize=7, valueSize=7 } = opts;
@@ -90,11 +49,124 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
   return rowH;
 }
 
-/* ================== Construção do PDF ====================== */
+/* ===========================================================
+   ==============   CONSTRUTORES DE PDF   ====================
+   =========================================================== */
+
+// 1) Constrói lendo a TELA (DOM)
 export async function construirPDF(){
-  // Garante frete atualizado (para total e label)
   await ensureFreteBeforePDF();
 
+  // Coleta do DOM
+  const form = {
+    cliente     : (document.getElementById("cliente")?.value || "").trim().toUpperCase(),
+    endereco    : (document.getElementById("endereco")?.value || "").trim().toUpperCase(),
+    entregaISO  : document.getElementById("entrega")?.value || "",
+    hora        : document.getElementById("horaEntrega")?.value || "",
+    cnpj        : digitsOnly(document.getElementById("cnpj")?.value || ""),
+    ie          : (document.getElementById("ie")?.value || "").toUpperCase(),
+    cep         : digitsOnly(document.getElementById("cep")?.value || ""),
+    contato     : digitsOnly(document.getElementById("contato")?.value || ""),
+    obsGeralTxt : (document.getElementById("obsGeral")?.value || "").trim().toUpperCase(),
+    tipoEnt     : (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase(),
+    pagamento   : (()=>{ 
+      const sel = document.getElementById("pagamento");
+      const outro = document.getElementById("pagamentoOutro");
+      let p = (sel?.value || "").toUpperCase();
+      if (p === "OUTRO") {
+        const o = (outro?.value || "").trim();
+        if (o) p = o.toUpperCase();
+      }
+      return p;
+    })(),
+    itens: (() => {
+      const itensContainer = document.getElementById('itens');
+      if (!itensContainer) return [];
+      const itemElements = Array.from(itensContainer.querySelectorAll('.item'));
+      return itemElements.map(itemEl => {
+        const produtoInput = itemEl.querySelector('.produto');
+        const tipoSelect = itemEl.querySelector('.tipo-select');
+        const quantidadeInput = itemEl.querySelector('.quantidade');
+        const precoInput = itemEl.querySelector('.preco');
+        const obsInput = itemEl.querySelector('.obsItem');
+
+        const produto = produtoInput?.value?.trim() || '';
+        const tipo = (tipoSelect?.value || 'KG').toUpperCase();
+        const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
+        const preco = parseFloat(precoInput?.value || '0') || 0;
+        const obs = obsInput?.value?.trim() || '';
+
+        // Peso estimado a partir do nome quando tipo UN
+        let pesoTotalKg = 0;
+        if (tipo === 'UN') {
+          const s = produto.toLowerCase().replace(',', '.').replace(/\s+/g,' ');
+          const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
+          let m, last=null; while((m=re.exec(s))!==null) last=m;
+          if (last){
+            const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
+            const val = parseFloat(raw);
+            if (isFinite(val) && val>0){
+              const unit = last[2].toLowerCase();
+              const kgUn = (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
+              pesoTotalKg = quantidade * kgUn;
+            }
+          }
+        }
+
+        const total = (tipo==='UN' && pesoTotalKg>0) ? (pesoTotalKg*preco) : (quantidade*preco);
+        return { produto, tipo, quantidade, preco, obs, total, _pesoTotalKg:pesoTotalKg };
+      });
+    })()
+  };
+
+  // Frete atual (UI)
+  const frete = getFreteAtual() || { valorBase:0, valorCobravel:0, isento:false };
+  const isentoMan = !!document.getElementById('isentarFrete')?.checked;
+
+  return construirPDFBase({
+    ...form,
+    freteLabel: (isentoMan || frete.isento) ? "ISENTO" : ("R$ " + Number(frete.valorBase||0).toFixed(2)),
+    freteCobravel: (isentoMan ? 0 : Number(frete.valorCobravel||frete.valorBase||0)),
+  });
+}
+
+// 2) Constrói a partir de um DOCUMENTO do Firestore (payload salvo)
+function normalizarPedidoSalvo(docData){
+  const p = docData || {};
+  const itens = Array.isArray(p.itens) ? p.itens.map(it=>({
+    produto: String(it.produto||'').trim(),
+    tipo: (it.tipo||'KG').toUpperCase(),
+    quantidade: Number(it.quantidade||0),
+    preco: Number(it.precoUnit||it.preco||0),
+    obs: String(it.obs||'').trim(),
+    total: Number(it.total|| (Number(it.quantidade||0)*Number(it.precoUnit||it.preco||0)) )
+  })) : [];
+
+  return {
+    cliente: String(p.cliente||p.clienteUpper||'').toUpperCase(),
+    endereco: String(p.entrega?.endereco || p.endereco || '').toUpperCase(),
+    entregaISO: p.dataEntregaISO || '',
+    hora: p.horaEntrega || '',
+    cnpj: digitsOnly(p.clienteFiscal?.cnpj || ''),
+    ie: String(p.clienteFiscal?.ie || '').toUpperCase(),
+    cep: digitsOnly(p.clienteFiscal?.cep || ''),
+    contato: digitsOnly(p.clienteFiscal?.contato || ''),
+    obsGeralTxt: String(p.obs || p.obsGeral || '').toUpperCase(),
+    tipoEnt: String(p.entrega?.tipo || 'ENTREGA').toUpperCase(),
+    pagamento: String(p.pagamento || '').toUpperCase(),
+    itens,
+    freteLabel: (p.frete?.isento ? "ISENTO" : ("R$ " + Number(p.frete?.valorBase||0).toFixed(2))),
+    freteCobravel: Number(p.frete?.valorCobravel ?? p.frete?.valorBase ?? 0)
+  };
+}
+
+async function construirPDFDePedidoSalvo(pedidoDocData){
+  const norm = normalizarPedidoSalvo(pedidoDocData);
+  return construirPDFBase(norm);
+}
+
+/* ===== Miolo de desenho compartilhado (DOM ou Firestore) ===== */
+function construirPDFBase(data){
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
   // Cabeçalho
@@ -102,49 +174,25 @@ export async function construirPDF(){
   doc.text("PEDIDO SERRA NOBRE", 36, 7, { align:"center" });
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
-  const margemX=2, larguraCaixa=68;
-  const SAFE_BOTTOM=280;
-
+  const margemX=2, larguraCaixa=68, SAFE_BOTTOM=280;
   const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
-
   let y=12;
   const ensureSpace=(h)=>{ if (y+h>SAFE_BOTTOM){ doc.addPage([72,297],"portrait"); y=10; } };
 
-  // Campos UI
-  const cliente = document.getElementById("cliente")?.value?.trim()?.toUpperCase() || "";
-  const endereco = document.getElementById("endereco")?.value?.trim()?.toUpperCase() || "";
-  const entregaISO = document.getElementById("entrega")?.value || "";
-  const hora = document.getElementById("horaEntrega")?.value || "";
-  const cnpj = digitsOnly(document.getElementById("cnpj")?.value || "");
-  const ie = (document.getElementById("ie")?.value || "").toUpperCase();
-  const cep = digitsOnly(document.getElementById("cep")?.value || "");
-  const contato = digitsOnly(document.getElementById("contato")?.value || "");
-  const obsGeralTxt = (document.getElementById("obsGeral")?.value || "").trim().toUpperCase(); // <- nome único
-  const tipoEnt = (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase();
-
-  // pagamento
-  const selPag = document.getElementById("pagamento");
-  const outroPag = document.getElementById("pagamentoOutro");
-  let pagamento = (selPag?.value || "").toUpperCase();
-  if (pagamento === "OUTRO") {
-    const txt = (outroPag?.value || "").trim();
-    if (txt) pagamento = txt.toUpperCase();
-  }
-
   // Cliente
   ensureSpace(14);
-  y += drawKeyValueBox(doc, margemX, y, larguraCaixa, "CLIENTE", cliente, { rowH:12, titleSize:8, valueSize:8 }) + 1;
+  y += drawKeyValueBox(doc, margemX, y, larguraCaixa, "CLIENTE", data.cliente, { rowH:12, titleSize:8, valueSize:8 }) + 1;
 
   // CNPJ / IE
   const gap1=1; const halfW=(larguraCaixa-gap1)/2;
   ensureSpace(12);
-  drawCenteredKeyValueBox(doc, margemX, y, halfW, "CNPJ", cnpj, { rowH:10, titleSize:7, valueSize:8 });
-  drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "I.E.", ie, { rowH:10, titleSize:7, valueSize:8 });
+  drawCenteredKeyValueBox(doc, margemX, y, halfW, "CNPJ", data.cnpj, { rowH:10, titleSize:7, valueSize:8 });
+  drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "I.E.", data.ie, { rowH:10, titleSize:7, valueSize:8 });
   y += 11;
 
   // Endereço
   const pad=3, innerW=larguraCaixa-pad*2;
-  const linhasEnd = splitToWidth(doc, endereco, innerW);
+  const linhasEnd = splitToWidth(doc, data.endereco, innerW);
   const rowH = Math.max(12, 6 + linhasEnd.length*5 + 4);
   ensureSpace(rowH);
   doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(margemX,y,larguraCaixa,rowH,"S");
@@ -155,8 +203,8 @@ export async function construirPDF(){
 
   // Contato/CEP
   ensureSpace(12);
-  drawCenteredKeyValueBox(doc, margemX, y, halfW, "CONTATO", contato, { rowH:10, titleSize:7, valueSize:8 });
-  drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "CEP", cep, { rowH:10, titleSize:7, valueSize:8 });
+  drawCenteredKeyValueBox(doc, margemX, y, halfW, "CONTATO", data.contato, { rowH:10, titleSize:7, valueSize:8 });
+  drawCenteredKeyValueBox(doc, margemX+halfW+gap1, y, halfW, "CEP", data.cep, { rowH:10, titleSize:7, valueSize:8 });
   y += 11;
 
   // Dia/Data/Hora
@@ -164,7 +212,7 @@ export async function construirPDF(){
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(9);
   doc.text("DIA DA SEMANA:", margemX+3, y+6);
-  doc.text(diaDaSemanaExtenso(entregaISO), margemX+larguraCaixa/2+12, y+6, {align:"center"});
+  doc.text(diaDaSemanaExtenso(data.entregaISO), margemX+larguraCaixa/2+12, y+6, {align:"center"});
   y += 11;
 
   const halfW2 = (larguraCaixa-1)/2;
@@ -174,8 +222,8 @@ export async function construirPDF(){
   doc.text("DATA ENTREGA", margemX+halfW2/2, y+4, {align:"center"});
   doc.text("HORÁRIO ENTREGA", margemX+halfW2+1+halfW2/2, y+4, {align:"center"});
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text(formatarData(entregaISO), margemX+halfW2/2, y+8, {align:"center"});
-  doc.text(hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
+  doc.text(formatarData(data.entregaISO), margemX+halfW2/2, y+8, {align:"center"});
+  doc.text(data.hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
   // FORMA DE PAGAMENTO
@@ -184,7 +232,7 @@ export async function construirPDF(){
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
   doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 6);
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text((pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
+  doc.text((data.pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
   y += 12;
 
   // Tabela itens - Cabeçalho
@@ -202,17 +250,17 @@ export async function construirPDF(){
   doc.text("PRODUTO", valorX, y+8.5, {align:"center"});
   y += 12;
 
-  const itens = lerItensDaTela();
+  // Itens
   let subtotal = 0;
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
-  itens.forEach((it, idx) => {
+  (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
     const qtdStr = String(it.quantidade || 0);
     const tipo = it.tipo || "KG";
-    const precoNum = parseFloat(it.preco) || 0;
-    const totalNum = it.total || 0;
-    const pesoTotalKg = it._pesoTotalKg || 0;
+    const precoNum = Number(it.preco) || 0;
+    const totalNum = Number(it.total) || 0;
+    const pesoTotalKg = Number(it._pesoTotalKg || 0);
 
     const prodLines = splitToWidth(doc, prod, W_PROD-2).slice(0,3);
     const rowHi = Math.max(14, 6 + prodLines.length*5);
@@ -261,7 +309,7 @@ export async function construirPDF(){
     }
 
     subtotal += totalNum;
-    if (idx < itens.length-1) y += 2;
+    if (idx < (data.itens?.length||0)-1) y += 2;
   });
 
   // Soma produtos
@@ -278,23 +326,19 @@ export async function construirPDF(){
   // ENTREGA/RETIRADA
   doc.rect(margemX, y, entregaW, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(10);
-  doc.text(tipoEnt, margemX+entregaW/2, y+6.5, {align:"center"});
+  doc.text(data.tipoEnt, margemX+entregaW/2, y+6.5, {align:"center"});
 
   // FRETE
   const freteX = margemX + entregaW + gap2;
-  const frete = getFreteAtual() || { valorBase:0, isento:false };
-  const isentoMan = !!document.getElementById('isentarFrete')?.checked;
   doc.rect(freteX, y, freteW, 10, "S");
   doc.text("FRETE", freteX+freteW/2, y+4, {align:"center"});
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  const fretePreview = (isentoMan || frete.isento) ? "ISENTO" : ("R$ " + Number(frete.valorBase||0).toFixed(2));
-  doc.text(fretePreview, freteX+freteW/2, y+8.2, {align:"center"});
+  doc.text((data.freteLabel || "—"), freteX+freteW/2, y+8.2, {align:"center"});
   doc.setLineWidth(0.2);
   y += 12;
 
   // TOTAL
-  const freteCobravelParaTotal = (isentoMan ? 0 : Number(frete.valorCobravel||frete.valorBase||0));
-  const totalGeral = subtotal + freteCobravelParaTotal;
+  const totalGeral = subtotal + Number(data.freteCobravel||0);
   ensureSpace(11);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(9);
@@ -302,8 +346,8 @@ export async function construirPDF(){
   doc.text("R$ " + totalGeral.toFixed(2), margemX+larguraCaixa-3, y+5.5, {align:"right"});
   y += 12;
 
-  if (obsGeralTxt){
-    const corpoLines = splitToWidth(doc, obsGeralTxt.toUpperCase(), larguraCaixa-6);
+  if (data.obsGeralTxt){
+    const corpoLines = splitToWidth(doc, data.obsGeralTxt.toUpperCase(), larguraCaixa-6);
     const obsH = 9 + corpoLines.length*5;
     ensureSpace(obsH);
     doc.rect(margemX, y, larguraCaixa, obsH, "S");
@@ -315,9 +359,7 @@ export async function construirPDF(){
     y += obsH;
   }
 
-  const nomeArq = nomeArquivoPedido(cliente, entregaISO, hora);
-
-  // Retorna blob/documento para salvar/compartilhar/Drive
+  const nomeArq = nomeArquivoPedido(data.cliente, data.entregaISO, data.hora);
   const blob = doc.output('blob');
   return { blob, nomeArq, doc };
 }
@@ -333,9 +375,7 @@ export async function gerarPDFPreview(){
 export async function salvarPDFLocal(){
   const { blob, nomeArq } = await construirPDF();
   try{
-    // @ts-ignore
     if (window.showSaveFilePicker){
-      // @ts-ignore
       const handle = await window.showSaveFilePicker({
         suggestedName: nomeArq,
         types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
@@ -376,5 +416,15 @@ export async function compartilharPDFNativo(){
   return { compartilhado:false, fallback:true };
 }
 
-/* ❌ NÃO deixe um segundo “export { construirPDF }” aqui. 
-   A função já foi exportada na declaração acima. */
+/* ========= REIMPRESSÃO DO FIRESTORE ========= */
+export async function gerarPDFPreviewDePedidoFirestore(pedidoId){
+  const tenantId = await getTenantId();
+  const ref = doc(db, "tenants", tenantId, "pedidos", pedidoId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Pedido não encontrado no Firestore.");
+
+  const { blob } = await construirPDFDePedidoSalvo(snap.data() || {});
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+}
