@@ -18,7 +18,8 @@
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
-        <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+        <!-- LOGO vira botão para limpar cache/atualizar -->
+        <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" id="unikorLogo" />
       </div>
       <div class="hero-right">
         <a class="btn-add" id="btnAddCliente" title="Novo cliente">+</a>
@@ -44,16 +45,28 @@
       <div>
         <label for="cnpj">CNPJ:</label>
         <input type="text" id="cnpj" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" />
+        <small class="inline-help">Serão salvos apenas dígitos. Validação leve.</small>
       </div>
       <div>
         <label for="ie">Inscrição Estadual:</label>
         <input type="text" id="ie" placeholder="Ex.: ISENTO ou número" />
+        <small class="inline-help">Aceita "ISENTO".</small>
       </div>
     </div>
 
     <div class="field-group">
       <label for="endereco">Endereço:</label>
       <input type="text" id="endereco" autocomplete="off" required />
+      <small class="muted" id="hint-endereco">
+        Se for outra cidade, inclua <b>o nome da cidade</b> no fim do endereço.
+        Sem cidade, será considerado <b>Porto Alegre - RS</b>.
+      </small>
+    </div>
+
+    <div class="field-group" id="freteManualGroup" style="display:none">
+      <label for="freteManual">Frete Manual (R$):</label>
+      <input type="number" id="freteManual" step="0.01" placeholder="Ex: 15.50">
+      <small>Deixe vazio para calcular automaticamente</small>
     </div>
 
     <div class="field-group grid-2">
@@ -114,7 +127,7 @@
 
     <hr/>
 
-    <!-- SUBSTITUÍDO: antes era “Gerar PDF” -->
+    <!-- “Gerar PDF” substituído por “Reimprimir Último” -->
     <button class="pdf-btn reimprimir" id="btnReimprimirUltimo">Reimprimir Último</button>
     <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
     <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
@@ -127,13 +140,16 @@
 
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- (opcional) gapi se for usar Drive em outros módulos -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
 
-  <!-- Auth -->
+  <!-- Guard de autenticação -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
+
+  <!-- App (ele importa: itens, frete, clientes, pdf, etc.) -->
   <script type="module" src="./js/app.js"></script>
 
-  <!-- Script UI extra -->
+  <!-- Pagamento OUTRO: mostra/oculta também no load -->
   <script>
     document.addEventListener('change', (e)=>{
       if (e.target && e.target.id === 'pagamento') {
@@ -145,13 +161,42 @@
       const sel = document.getElementById('pagamento');
       const outro = document.getElementById('pagamentoOutro');
       if (sel && outro) outro.style.display = (sel.value === 'OUTRO') ? '' : 'none';
-
-      // 🔺 log standalone
       console.log('[PWA] instalado?', window.matchMedia('(display-mode: standalone)').matches);
     });
   </script>
 
-  <!-- SW update agressivo -->
+  <!-- Botão no logo: limpar cache + forçar atualização -->
+  <script>
+    async function forceUpdateAndClearCache() {
+      try {
+        if ('caches' in window) {
+          const names = await caches.keys();
+          for (const name of names) { await caches.delete(name); }
+          console.log('[PWA] caches limpos');
+        }
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) { try { await reg.update(); } catch {} }
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage('SKIP_WAITING');
+          }
+        }
+      } finally {
+        alert('Cache limpo e app atualizado. Recarregando…');
+        location.reload();
+      }
+    }
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const logo = document.getElementById('unikorLogo');
+      if (logo) {
+        logo.style.cursor = 'pointer';
+        logo.title = 'Clique para atualizar o app';
+        logo.addEventListener('click', forceUpdateAndClearCache);
+      }
+    });
+  </script>
+
+  <!-- SW com auto-update agressivo -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
