@@ -14,11 +14,9 @@
 </head>
 <body>
 
-  <!-- HEADER -->
   <header class="hero">
     <div class="hero-inner">
       <div class="hero-left">
-        <!-- LOGO vira botão para limpar cache/atualizar -->
         <img class="hero-logo big" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" id="unikorLogo" />
       </div>
       <div class="hero-right">
@@ -28,12 +26,10 @@
     </div>
   </header>
 
-  <!-- OFFLINE BANNER -->
   <div id="offlineBanner" class="offline-banner" style="display:none">
     OFFLINE — pedidos serão gerados normalmente, mas não serão salvos.
   </div>
 
-  <!-- MAIN -->
   <main id="appMain">
     <div class="field-group">
       <label for="cliente">Cliente:</label>
@@ -127,7 +123,6 @@
 
     <hr/>
 
-    <!-- “Gerar PDF” substituído por “Reimprimir Último” -->
     <button class="pdf-btn reimprimir" id="btnReimprimirUltimo">Reimprimir Último</button>
     <button class="pdf-btn salvar" id="btnSalvarPdf">Salvar PDF</button>
     <button class="pdf-btn compartilhar" id="btnCompartilharPdf">Compartilhar PDF</button>
@@ -140,16 +135,18 @@
 
   <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <!-- (opcional) gapi se for usar Drive em outros módulos -->
   <script src="https://apis.google.com/js/api.js" async defer></script>
 
-  <!-- Guard de autenticação -->
+  <!-- Auth guard (mantém login) -->
   <script type="module" src="/shared/js/auth-guard.js"></script>
 
-  <!-- App (ele importa: itens, frete, clientes, pdf, etc.) -->
+  <!-- App -->
   <script type="module" src="./js/app.js"></script>
 
-  <!-- Pagamento OUTRO: mostra/oculta também no load -->
+  <!-- ⚠️ IMPORTA O MODAL (necessário para injetar HTML e buscar clientes) -->
+  <script type="module" src="./js/modal-cliente.js"></script>
+
+  <!-- Mostrar/ocultar “pagamentoOutro” -->
   <script>
     document.addEventListener('change', (e)=>{
       if (e.target && e.target.id === 'pagamento') {
@@ -165,7 +162,7 @@
     });
   </script>
 
-  <!-- Botão no logo: limpar cache + forçar atualização -->
+  <!-- Logo = limpar cache e atualizar -->
   <script>
     async function forceUpdateAndClearCache() {
       try {
@@ -188,15 +185,11 @@
     }
     document.addEventListener('DOMContentLoaded', ()=>{
       const logo = document.getElementById('unikorLogo');
-      if (logo) {
-        logo.style.cursor = 'pointer';
-        logo.title = 'Clique para atualizar o app';
-        logo.addEventListener('click', forceUpdateAndClearCache);
-      }
+      if (logo) { logo.style.cursor='pointer'; logo.title='Clique para atualizar o app'; logo.addEventListener('click', forceUpdateAndClearCache); }
     });
   </script>
 
-  <!-- SW com auto-update agressivo -->
+  <!-- SW update agressivo -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', async () => {
