@@ -2,31 +2,26 @@
 import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
-
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
 import {
-  gerarPDFPreview,          // gera da tela atual
   salvarPDFLocal,
   compartilharPDFNativo,
-  gerarPDFPreviewDePedidoFirestore // <- reimpressão do Firestore
+  gerarPDFPreviewDePedidoFirestore
 } from './pdf.js';
 
 console.log('[APP] Pedidos inicializado');
 
-/* ===================== Helpers ===================== */
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
 }
-
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
-/* ===================== Payload ===================== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -87,7 +82,6 @@ function montarPayloadPedido(){
   };
 }
 
-/* ===================== Persistência ===================== */
 async function persistirPedidoSeNecessario(){
   await waitForLogin();
   await ensureFreteBeforePDF();
@@ -107,12 +101,10 @@ async function persistirPedidoSeNecessario(){
   }
 }
 
-/* ===================== Ações PDF ===================== */
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-
-  const textoOriginal = botao.textContent;
+  const t = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
@@ -122,18 +114,16 @@ async function salvarPDF() {
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
-    alert('Erro ao salvar PDF: ' + e.message);
   } finally {
     hideOverlay();
-    botao.disabled = false; botao.textContent = textoOriginal;
+    botao.disabled = false; botao.textContent = t;
   }
 }
 
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-
-  const textoOriginal = botao.textContent;
+  const t = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
   showOverlay();
   try {
@@ -145,17 +135,15 @@ async function compartilharPDF() {
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
-    alert('Erro ao compartilhar PDF: ' + e.message);
   } finally {
     hideOverlay();
-    botao.disabled = false; botao.textContent = textoOriginal;
+    botao.disabled = false; botao.textContent = t;
   }
 }
 
 async function reimprimirUltimoPedidoSalvo() {
   const btn = document.getElementById('btnReimprimirUltimo');
   if (!btn) return;
-
   const id = localStorage.getItem('unikor:lastPedidoId');
   if (!id) { alert('Ainda não há pedido salvo nesta sessão.'); return; }
 
@@ -169,10 +157,26 @@ async function reimprimirUltimoPedidoSalvo() {
   } catch (e) {
     console.error('[Reimpressão] Erro:', e);
     toastErro('Erro ao reimprimir');
-    alert('Erro ao reimprimir: ' + e.message);
   } finally {
     hideOverlay();
     btn.disabled = false; btn.textContent = original;
+  }
+}
+
+/* ====== Plano B: hidratar datalist de clientes mesmo sem abrir o modal ====== */
+async function hydrateListaClientesFallback(){
+  try{
+    const { clientesMaisUsados } = await import('./clientes.js');
+    const list = document.getElementById('listaClientes');
+    if (!list) return;
+    const nomes = await clientesMaisUsados(80);
+    list.innerHTML = '';
+    nomes.forEach(n=>{
+      const o = document.createElement('option');
+      o.value = n; list.appendChild(o);
+    });
+  }catch(e){
+    console.warn('[APP] Falha ao hidratar datalist (fallback):', e?.message||e);
   }
 }
 
@@ -196,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
   if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
-  // Sanitize campo cliente (mantendo espaços internos)
+  // Sanitiza cliente (mantém espaços)
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
@@ -206,9 +210,9 @@ document.addEventListener('DOMContentLoaded', () => {
     inputCliente.value = val;
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
+
+  // Tenta hidratar o datalist mesmo sem abrir o modal
+  hydrateListaClientesFallback();
 });
 
-// Exposição opcional para debug
-window.salvarPDF = salvarPDF;
-window.compartilharPDF = compartilharPDF;
 window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
