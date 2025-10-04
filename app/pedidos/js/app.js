@@ -3,23 +3,15 @@ import { up } from './utils.js';
 import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// Persistência idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
-// ⚠️ REMOVIDO o import estático do google-auth para não quebrar o app
-// import { getGoogleAccessToken } from '/app/despesas/js/google-auth.js';
-
-// Fila opcional (não depende do google-auth)
-import { queueDriveUpload } from './driveQueue.js';
-
 import {
-  gerarPDFPreview,
+  gerarPDFPreview,          // gera da tela atual
   salvarPDFLocal,
   compartilharPDFNativo,
-  uploadPDFAtualParaDrive,
-  gerarPDFPreviewDePedidoFirestore
+  gerarPDFPreviewDePedidoFirestore // <- reimpressão do Firestore
 } from './pdf.js';
 
 console.log('[APP] Pedidos inicializado');
@@ -160,44 +152,6 @@ async function compartilharPDF() {
   }
 }
 
-/* ===== Drive: lazy-import para não quebrar o app ===== */
-async function enviarPDFParaDrive() {
-  const btn = document.getElementById('btnEnviarDrive');
-  if (!btn) return;
-
-  const original = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Enviando...';
-  showOverlay();
-  try {
-    await persistirPedidoSeNecessario();
-
-    // importa só aqui; se der 404/HTML, não quebra o resto
-    let getGoogleAccessToken = null;
-    try {
-      ({ getGoogleAccessToken } = await import('/app/despesas/js/google-auth.js'));
-    } catch {
-      throw new Error('Integração com o Drive indisponível neste ambiente.');
-    }
-
-    const up = await uploadPDFAtualParaDrive(getGoogleAccessToken);
-    console.log('[Drive] upload ok:', up);
-    toastOk('PDF enviado ao Drive');
-  } catch (e) {
-    console.warn('[Drive] falha, colocando na fila:', e);
-    try{
-      await queueDriveUpload({ source: 'PEDIDO_DOM' });
-      toastOk('Sem rede/perm. Colocado na fila para enviar depois.');
-    }catch(err){
-      console.error('[Drive] fila também falhou:', err);
-      toastErro('Falha ao enviar ao Drive');
-      alert('Falha ao enviar ao Drive: ' + e.message);
-    }
-  } finally {
-    hideOverlay();
-    btn.disabled = false; btn.textContent = original;
-  }
-}
-
 async function reimprimirUltimoPedidoSalvo() {
   const btn = document.getElementById('btnReimprimirUltimo');
   if (!btn) return;
@@ -239,13 +193,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
   if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
 
-  const btnEnviarDrive = document.getElementById('btnEnviarDrive');
-  if (btnEnviarDrive) btnEnviarDrive.addEventListener('click', enviarPDFParaDrive);
-
   const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
   if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
-  // Sanitize campo cliente
+  // Sanitize campo cliente (mantendo espaços internos)
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
