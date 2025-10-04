@@ -2,7 +2,7 @@
 import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import {
-  getFirestore, enableIndexedDbPersistence,      // ⬅️ persistência offline
+  getFirestore, enableIndexedDbPersistence,      // persistência offline
   collection, doc, addDoc, setDoc, getDoc, getDocs,
   query, where, orderBy, limit, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
@@ -19,20 +19,20 @@ export const firebaseConfig = {
 
 // =================== INIT ===================
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export { app };              // 🔥 exporta o app corretamente
+export { app };              // exporta o app corretamente
 export const auth = getAuth(app);
 export const db   = getFirestore(app);
 
 // >>> Firestore OFFLINE (PWA) <<<
-// Mantém writes off-line e sincroniza quando a rede volta.
-// synchronizeTabs: true evita conflito quando há várias abas.
-try {
-  await enableIndexedDbPersistence(db, { synchronizeTabs: true });
-  console.log("[Firestore] Persistência offline habilitada (IndexedDB).");
-} catch (e) {
-  // Pode falhar em browsers sem suporte, navegação privada, ou se outra aba já ativou.
-  console.warn("[Firestore] Persistência offline indisponível:", e?.message || e);
-}
+// NÃO usar top-level await (quebra em iOS). Use Promise:
+enableIndexedDbPersistence(db, { synchronizeTabs: true })
+  .then(() => {
+    console.log("[Firestore] Persistência offline habilitada (IndexedDB).");
+  })
+  .catch((e) => {
+    // Pode falhar em navegação privada, sem suporte, ou se outra aba já ativou.
+    console.warn("[Firestore] Persistência offline indisponível:", e?.message || e);
+  });
 
 // =================== AUTH STATE BUS ===================
 let currentUser = null;
@@ -41,7 +41,10 @@ const pendingLoginWaiters = new Set();
 
 onAuthStateChanged(auth, (user) => {
   currentUser = user || null;
-  console.log("[Firebase Auth]", currentUser ? `Logado: ${currentUser.email || currentUser.uid}` : "Não logado");
+  console.log(
+    "[Firebase Auth]",
+    currentUser ? `Logado: ${currentUser.email || currentUser.uid}` : "Não logado"
+  );
 
   subs.forEach(fn => { try { fn(currentUser); } catch {} });
 
@@ -64,11 +67,9 @@ export function onAuthUser(cb) {
 export function getCurrentUser() {
   return currentUser;
 }
-
 export function isLoggedIn() {
   return !!currentUser;
 }
-
 export function waitForLogin() {
   if (currentUser) return Promise.resolve(currentUser);
   return new Promise((resolve) => pendingLoginWaiters.add(resolve));
