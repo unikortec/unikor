@@ -3,7 +3,7 @@ import { salvarCliente, buscarClienteInfo, clientesMaisUsados } from './clientes
 import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
 import { waitForLogin, getCurrentUser } from './firebase.js';
 
-console.log('Modal cliente carregado');
+console.log('[ModalCliente] módulo carregado');
 
 let modalInjected = false;
 
@@ -77,7 +77,7 @@ function injectModal() {
     </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHTML);
   modalInjected = true;
-  console.log('Modal injetado no DOM');
+  console.log('[ModalCliente] HTML injetado');
 }
 
 function clearForm() {
@@ -100,7 +100,7 @@ function openModal() {
   const modal = document.getElementById('modalCliente');
   if (modal) {
     modal.classList.remove('hidden');
-    setTimeout(()=> document.getElementById('mc_nome')?.focus(), 100);
+    setTimeout(()=> document.getElementById('mc_nome')?.focus(), 80);
   }
 }
 function closeModal() { document.getElementById('modalCliente')?.classList.add('hidden'); }
@@ -132,7 +132,7 @@ async function populateDatalist() {
       datalist.appendChild(option);
     });
   } catch (e) {
-    console.error('Erro ao carregar clientes:', e);
+    console.error('[ModalCliente] Erro ao carregar clientes:', e);
   }
 }
 
@@ -157,7 +157,7 @@ async function handleNomeChange() {
       if (titulo) titulo.textContent = 'Novo Cliente';
     }
   } catch (e) {
-    console.error('Erro ao buscar cliente:', e);
+    console.error('[ModalCliente] Erro ao buscar cliente:', e);
   }
 }
 
@@ -187,33 +187,40 @@ async function saveFromModal() {
   try {
     await salvarCliente(nome, endereco, isentoFrete, { cnpj: cnpjMask, ie, cep, contato, frete: freteStr });
 
+    // atualiza datalist da tela principal
     const mainDatalist = document.getElementById('listaClientes');
     if (mainDatalist && !Array.from(mainDatalist.options).some(o => o.value === up(nome))) {
       const option = document.createElement('option'); option.value = up(nome); mainDatalist.appendChild(option);
     }
 
+    // joga nome no input principal se estiver vazio
     const inputCliente = document.getElementById('cliente');
     if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
 
     try { const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo com sucesso!'); }
-    catch { console.log('Cliente salvo com sucesso!'); }
+    catch { console.log('[ModalCliente] Cliente salvo com sucesso!'); }
 
     closeModal();
   } catch (e) {
-    console.error('Erro ao salvar cliente:', e);
+    console.error('[ModalCliente] Erro ao salvar cliente:', e);
     alert('Erro ao salvar cliente: ' + e.message);
   }
 }
 
-// Inicialização
+/* ===================== Inicialização robusta ===================== */
 document.addEventListener('DOMContentLoaded', async () => {
-  await waitForLogin(); // não inicializa sem login
-  injectModal();
+  await waitForLogin();          // garante sessão
+  injectModal();                 // injeta HTML do modal
 
-  const btnAddCliente = document.getElementById('btnAddCliente');
-  if (btnAddCliente) {
-    btnAddCliente.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
-  }
+  const bindBtn = () => {
+    const btnAddCliente = document.getElementById('btnAddCliente');
+    if (btnAddCliente && !btnAddCliente._mcBound) {
+      btnAddCliente._mcBound = true;
+      btnAddCliente.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
+    }
+  };
+  bindBtn();
+  setTimeout(bindBtn, 500);      // fallback caso o botão chegue depois
 
   document.body.addEventListener('click', (ev) => {
     const t = ev.target;
@@ -236,5 +243,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   populateDatalist();
-  console.log('Modal cliente totalmente configurado');
+  console.log('[ModalCliente] pronto');
 });
