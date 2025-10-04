@@ -6,14 +6,20 @@ import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
 import { waitForLogin } from './firebase.js';
 
+// funções de PDF que já existiam
 import {
   salvarPDFLocal,
   compartilharPDFNativo,
   gerarPDFPreviewDePedidoFirestore
 } from './pdf.js';
 
+// ===== NOVO: para cache local e fila de upload p/ Storage =====
+import { getTenantId, db, app } from './firebase.js';
+import { queueStorageUpload, drainStorageQueueWhenOnline } from './storageQueue.js';
+
 console.log('[APP] Pedidos inicializado');
 
+/* ===================== Helpers ===================== */
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
@@ -22,6 +28,23 @@ function formatarNome(input) {
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
+// blob -> dataURL (para cache de reimpressão)
+async function blobToDataURL(blob){
+  return await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = rej;
+    r.readAsDataURL(blob);
+  });
+}
+function cacheLastPdfDataUrl(docId, dataUrl, nomeArq){
+  try {
+    localStorage.setItem(`unikor:lastPdfDataUrl_${docId}`, dataUrl);
+    localStorage.setItem(`unikor:lastPdfName_${docId}`, nomeArq || 'pedido.pdf');
+  } catch {}
+}
+
+/* ===================== Pagamento ===================== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -33,6 +56,7 @@ function lerPagamento(){
   return p;
 }
 
+/* ===================== Payload ===================== */
 function montarPayloadPedido(){
   const itens = getItens().map(i=>{
     const q = num(i.quantidade);
@@ -82,6 +106,7 @@ function montarPayloadPedido(){
   };
 }
 
+/* ===================== Persistência ===================== */
 async function persistirPedidoSeNecessario(){
   await waitForLogin();
   await ensureFreteBeforePDF();
@@ -96,11 +121,15 @@ async function persistirPedidoSeNecessario(){
     console.info('[PEDIDOS] salvo em Firestore:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
     localStorage.setItem('unikor:lastPedidoId', id);
+
+    // garante que a fila (Storage) rode quando houver rede
+    drainStorageQueueWhenOnline();
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
+/* ===================== Ações PDF ===================== */
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
@@ -108,9 +137,33 @@ async function salvarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
+    // 1) salva pedido (gera/atualiza id)
     await persistirPedidoSeNecessario();
+
+    // 2) salva local (download)
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
+
+    // 3) *** cache local + fila p/ Storage ***
+    try {
+      // 🔸 ESTE TRECHO "VEM DO PDF": usamos construirPDF() para obter o Blob/Nome
+      const { construirPDF } = await import('./pdf.js');
+      const { blob, nomeArq } = await construirPDF();
+
+      // cache p/ reimpressão instantânea
+      const docId = localStorage.getItem('unikor:lastPedidoId');
+      const dataUrl = await blobToDataURL(blob);
+      if (docId) cacheLastPdfDataUrl(docId, dataUrl, nomeArq);
+
+      // fila: envia ao Firebase Storage e anota pdfPath no Firestore
+      const tenantId = await getTenantId();
+      if (tenantId && docId) {
+        await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
+        drainStorageQueueWhenOnline();
+      }
+    } catch (err) {
+      console.warn('[PDF] cache/queue falhou (segue ok):', err);
+    }
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
@@ -132,6 +185,8 @@ async function compartilharPDF() {
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
     else                        toastOk('Abrimos o PDF para envio');
+
+    // (opcional) também pode cachear igual ao salvarPDF()
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
@@ -141,9 +196,11 @@ async function compartilharPDF() {
   }
 }
 
+// ===== Reimpressão turbo: cache -> Storage -> fallback reconstrução =====
 async function reimprimirUltimoPedidoSalvo() {
   const btn = document.getElementById('btnReimprimirUltimo');
   if (!btn) return;
+
   const id = localStorage.getItem('unikor:lastPedidoId');
   if (!id) { alert('Ainda não há pedido salvo nesta sessão.'); return; }
 
@@ -151,9 +208,37 @@ async function reimprimirUltimoPedidoSalvo() {
   btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
   showOverlay();
   try {
+    // 1) cache local instantâneo
+    const cached = localStorage.getItem(`unikor:lastPdfDataUrl_${id}`);
+    if (cached) {
+      window.open(cached, '_blank', 'noopener,noreferrer');
+      toastOk('Reimpressão (cache local)');
+      return;
+    }
+
+    // 2) baixar do Storage se já existe pdfPath
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js');
+    const { getStorage, ref, getDownloadURL } =
+      await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js');
+
+    const tenantId = await getTenantId();
+    const docRef = doc(db, "tenants", tenantId, "pedidos", id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const d = snap.data() || {};
+      if (d.pdfPath) {
+        const storage = getStorage(app);
+        const url = await getDownloadURL(ref(storage, d.pdfPath));
+        window.open(url, '_blank', 'noopener,noreferrer');
+        toastOk('Reimpressão (arquivo do Storage)');
+        return;
+      }
+    }
+
+    // 3) fallback: reconstruir do Firestore
     await waitForLogin();
     await gerarPDFPreviewDePedidoFirestore(id);
-    toastOk('PDF reimprimido do Firestore');
+    toastOk('Reimpressão (reconstruída)');
   } catch (e) {
     console.error('[Reimpressão] Erro:', e);
     toastErro('Erro ao reimprimir');
@@ -191,14 +276,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAdicionar = document.getElementById('adicionarItemBtn');
   if (btnAdicionar) btnAdicionar.addEventListener('click', adicionarItem);
 
-  const btnSalvarPDF = document.getElementById('btnSalvarPdf');
-  if (btnSalvarPDF) btnSalvarPDF.addEventListener('click', salvarPDF);
-
-  const btnCompartilharPDF = document.getElementById('btnCompartilharPdf');
-  if (btnCompartilharPDF) btnCompartilharPDF.addEventListener('click', compartilharPDF);
-
-  const btnReimprimirUltimo = document.getElementById('btnReimprimirUltimo');
-  if (btnReimprimirUltimo) btnReimprimirUltimo.addEventListener('click', reimprimirUltimoPedidoSalvo);
+  document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
+  document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
+  document.getElementById('btnReimprimirUltimo')?.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
   // Sanitiza cliente (mantém espaços)
   let inputCliente = document.getElementById('cliente');
@@ -211,8 +291,12 @@ document.addEventListener('DOMContentLoaded', () => {
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
 
-  // Tenta hidratar o datalist mesmo sem abrir o modal
+  // Hidrata datalist mesmo sem abrir o modal
   hydrateListaClientesFallback();
+
+  // inicia o drenador da fila (idempotente)
+  drainStorageQueueWhenOnline();
 });
 
+// Exposição opcional
 window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
