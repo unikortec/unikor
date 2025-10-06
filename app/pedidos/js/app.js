@@ -4,7 +4,7 @@ import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from '
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
-import { waitForLogin } from './firebase.js';
+import { waitForLogin, db, app, getTenantId } from './firebase.js';
 
 // PDF
 import {
@@ -14,7 +14,6 @@ import {
 } from './pdf.js';
 
 // Storage (cache/fila p/ reimpressão turbo)
-import { getTenantId, db, app } from './firebase.js';
 import { queueStorageUpload, drainStorageQueueWhenOnline } from './storageQueue.js';
 
 // SUGESTÕES (últimos itens e preços do cliente)
@@ -268,6 +267,32 @@ async function hydrateListaClientesFallback(){
   }
 }
 
+/* ===================== Autosave/Restore dos ITENS (iOS-safe) ===================== */
+const DRAFT_KEY = 'unikor:pedido:draftItens';
+
+function salvarRascunhoItens(){
+  try{
+    const itens = getItens();
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(itens || []));
+  }catch{}
+}
+function restaurarRascunhoItensSeVazio(){
+  try{
+    const atual = getItens();
+    if (Array.isArray(atual) && atual.length) return; // já tem itens
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const lista = JSON.parse(raw);
+    if (Array.isArray(lista) && lista.length){
+      // adiciona respeitando a API existente
+      lista.forEach(obj => {
+        try { adicionarItem(obj); } catch { adicionarItem(); }
+      });
+      setTimeout(() => atualizarFreteUI(), 30);
+    }
+  }catch{}
+}
+
 /* ===================== Init ===================== */
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[APP] DOM carregado');
@@ -276,8 +301,17 @@ document.addEventListener('DOMContentLoaded', () => {
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
+  // Observa mudanças nos itens para autosave
+  const itensContainer = document.getElementById('itens');
+  if (itensContainer){
+    itensContainer.addEventListener('input', salvarRascunhoItens, { passive:true });
+    itensContainer.addEventListener('change', salvarRascunhoItens, { passive:true });
+  }
+  // Tenta restaurar caso a lista esteja vazia (iOS retomando aba)
+  restaurarRascunhoItensSeVazio();
+
   const btnAdicionar = document.getElementById('adicionarItemBtn');
-  if (btnAdicionar) btnAdicionar.addEventListener('click', adicionarItem);
+  if (btnAdicionar) btnAdicionar.addEventListener('click', e => { adicionarItem(); salvarRascunhoItens(); });
 
   document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
   document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
@@ -313,7 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Auto-bind para inputs de produto criados dinamicamente
-  const itensContainer = document.getElementById('itens');
   if (itensContainer){
     itensContainer.addEventListener('focusin', (ev) => {
       if (ev.target && ev.target.classList && ev.target.classList.contains('produto')){
