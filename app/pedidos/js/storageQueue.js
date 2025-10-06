@@ -1,11 +1,9 @@
 // app/pedidos/js/storageQueue.js
 // Fila para enviar PDFs de pedidos ao Firebase Storage (com retry offline).
 
-import { app, db } from './firebase.js';
-import { getStorage, ref, uploadString } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+import { app, db, storage } from './firebase.js';
+import { ref, uploadString } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 import { collection, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
-
-const storage = getStorage(app);
 
 const KEY = "__unikor_storage_upload_queue__";
 
@@ -28,17 +26,17 @@ async function blobToDataURL(blob){
   });
 }
 
-// ========== API ==========
 /**
  * Enfileira um upload de PDF para o Storage.
  * @param {Object} p
- * @param {string} p.tenantId        tenant (pasta raiz)
- * @param {string} p.docId           id do documento do pedido em Firestore
- * @param {Blob}   p.blob            PDF a enviar
- * @param {string} p.filename        ex.: CLIENTE_12_09_25_H09-30.pdf (só para metadados)
+ * @param {string} p.tenantId
+ * @param {string} p.docId
+ * @param {Blob}   p.blob
+ * @param {string} p.filename
  */
 export async function queueStorageUpload({ tenantId, docId, blob, filename }){
-  const dataUrl = await blobToDataURL(blob); // pequeno (~100–500KB)
+  if (!tenantId || !docId || !blob) return;
+  const dataUrl = await blobToDataURL(blob);
   const q = loadQ();
   q.push({ t: Date.now(), tenantId, docId, dataUrl, filename });
   saveQ(q);
@@ -53,13 +51,14 @@ export function drainStorageQueueWhenOnline(){
     const rest = [];
     for (const job of q){
       try{
-        // 1) sobe para Storage
-        const path = `tenants/${job.tenantId}/pedidos/${job.docId}.pdf`;
+        // 🔹 Caminho padronizado
+        const path = `tenants/${job.tenantId}/pedidos/${job.docId}/pedido.pdf`;
         const r = ref(storage, path);
+
         // data_url → uploadString
         await uploadString(r, job.dataUrl, 'data_url', { contentType: 'application/pdf' });
 
-        // 2) anota no Firestore (para Relatórios)
+        // 🔹 Atualiza metadados no Firestore
         const pedidosCol = collection(db, "tenants", job.tenantId, "pedidos");
         await setDoc(
           doc(pedidosCol, job.docId),
@@ -74,14 +73,13 @@ export function drainStorageQueueWhenOnline(){
         console.log("[StorageQueue] enviado:", path);
       }catch(e){
         console.warn("[StorageQueue] falhou, mantém na fila:", e?.message || e);
-        rest.push(job); // mantém para tentar depois
+        rest.push(job);
       }
     }
     saveQ(rest);
   };
 
   window.addEventListener("online", run);
-  // tenta a cada 45s e também já na carga
   setInterval(run, 45000);
   run();
 }
