@@ -8,6 +8,9 @@ import {
   query, where, orderBy, limit, serverTimestamp, updateDoc
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
+// 🔹 NOVO: Storage (para upload de PDFs)
+import { getStorage } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+
 /* ========= Reexports úteis ========= */
 export {
   collection, addDoc, getDocs, doc, setDoc, getDoc,
@@ -18,6 +21,7 @@ export {
 export const app  = rootApp;   // <- export explícito (evita o erro “app”)
 export const auth = rootAuth;
 export const db   = getFirestore(app);
+export const storage = getStorage(app); // 🔹 NOVO
 
 /* ========= Tenant ========= */
 export const TENANT_FIXED = "serranobrecarnes.com.br";
