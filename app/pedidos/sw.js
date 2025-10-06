@@ -1,5 +1,5 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.2.8';   // 🔺 incrementado
+const APP_VER   = '1.2.9';   // 🔺 incrementado
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
