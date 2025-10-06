@@ -26,6 +26,30 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
+/* ===== Precisão decimal (sem arredondar indevido) ===== */
+// Converte "12,34" ou "12.34" -> 1234 (centavos)
+function strToCents(str){
+  const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
+  if (!s) return 0;
+  // usa duas casas – arredondamento de centavos apenas aqui
+  return Math.round(Number(s) * 100);
+}
+// Quantidade com até 3 casas (ex.: kg) em milésimos
+function strToThousandths(str){
+  const s = String(str ?? "").trim().replace(",",".");
+  if (!s) return 0;
+  return Math.round(Number(s) * 1000);
+}
+// Formata centavos -> "x,yy"
+function moneyBRfromCents(cents){
+  const v = Math.round(cents);
+  const sign = v < 0 ? "-" : "";
+  const abs = Math.abs(v);
+  const reais = Math.floor(abs / 100);
+  const cent = String(abs % 100).padStart(2, "0");
+  return `${sign}${reais.toLocaleString("pt-BR")},${cent}`;
+}
+
 /* ================== Desenho de componentes ================= */
 function drawCenteredKeyValueBox(doc, x,y,w, label, value, opts={}){
   const { rowH=12, titleSize=7, valueSize=7 } = opts;
@@ -92,14 +116,19 @@ export async function construirPDF(){
 
         const produto = produtoInput?.value?.trim() || '';
         const tipo = (tipoSelect?.value || 'KG').toUpperCase();
-        const quantidade = parseFloat(quantidadeInput?.value || '0') || 0;
-        const preco = parseFloat(precoInput?.value || '0') || 0;
-        const obs = obsInput?.value?.trim() || '';
+
+        // >>> preserva o que foi DIGITADO (texto cru) <<<
+        const qtdTxt = (quantidadeInput?.value ?? '').trim(); // pode ter 3 casas (kg)
+        const precoTxt = (precoInput?.value ?? '').trim();    // "xx,yy" ou "xx.yy"
+
+        // números para cálculo com precisão
+        const qtdMil = strToThousandths(qtdTxt);
+        const precoCents = strToCents(precoTxt);
 
         // Peso estimado a partir do nome quando tipo UN
-        let pesoTotalKg = 0;
+        let pesoTotalKgMil = 0; // em milésimos de kg
         if (tipo === 'UN') {
-          const s = produto.toLowerCase().replace(',', '.').replace(/\s+/g,' ');
+          const s = (produto||'').toLowerCase().replace(',', '.').replace(/\s+/g,' ');
           const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
           let m, last=null; while((m=re.exec(s))!==null) last=m;
           if (last){
@@ -108,13 +137,36 @@ export async function construirPDF(){
             if (isFinite(val) && val>0){
               const unit = last[2].toLowerCase();
               const kgUn = (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
-              pesoTotalKg = quantidade * kgUn;
+              pesoTotalKgMil = Math.round((kgUn * 1000) * (Number(qtdTxt.replace(',','.')) || 0));
             }
           }
         }
 
-        const total = (tipo==='UN' && pesoTotalKg>0) ? (pesoTotalKg*preco) : (quantidade*preco);
-        return { produto, tipo, quantidade, preco, obs, total, _pesoTotalKg:pesoTotalKg };
+        // ===== total em CENTAVOS, sem erro de float =====
+        let totalCents = 0;
+        if (tipo === 'UN' && pesoTotalKgMil > 0) {
+          // (kg em milésimos) * (preço em centavos) / 1000
+          totalCents = Math.round((pesoTotalKgMil * precoCents) / 1000);
+        } else {
+          // quantidade (milésimos para KG, inteiros para UN) * preço
+          if (tipo === 'KG') {
+            totalCents = Math.round((qtdMil * precoCents) / 1000);
+          } else {
+            const qtdInt = Math.round(Number(qtdTxt.replace(',','.') || 0));
+            totalCents = qtdInt * precoCents;
+          }
+        }
+
+        const obs = obsInput?.value?.trim() || '';
+        return {
+          produto, tipo,
+          // preserva textos:
+          qtdTxt, precoTxt,
+          // números auxiliares:
+          qtdMil, precoCents, totalCents,
+          obs,
+          _pesoTotalKgMil: pesoTotalKgMil
+        };
       });
     })()
   };
@@ -133,14 +185,26 @@ export async function construirPDF(){
 // 2) Constrói a partir de um DOCUMENTO do Firestore (payload salvo)
 function normalizarPedidoSalvo(docData){
   const p = docData || {};
-  const itens = Array.isArray(p.itens) ? p.itens.map(it=>({
-    produto: String(it.produto||'').trim(),
-    tipo: (it.tipo||'KG').toUpperCase(),
-    quantidade: Number(it.quantidade||0),
-    preco: Number(it.precoUnit||it.preco||0),
-    obs: String(it.obs||'').trim(),
-    total: Number(it.total|| (Number(it.quantidade||0)*Number(it.precoUnit||it.preco||0)) )
-  })) : [];
+  const itens = Array.isArray(p.itens) ? p.itens.map(it=>{
+    const produto = String(it.produto||'').trim();
+    const tipo = String(it.tipo||'KG').toUpperCase();
+    // Preferimos o total salvo; se não houver, calculamos com centavos
+    const precoCents = Math.round(Number(it.precoUnit ?? it.preco ?? 0) * 100);
+    const qtdTxt = String(it.quantidade ?? 0);
+    const qtdMil = Math.round(Number(it.quantidade ?? 0) * 1000);
+    let totalCents = Math.round(Number(it.total ?? 0) * 100);
+    if (!totalCents){
+      if (tipo === 'KG') totalCents = Math.round((qtdMil * precoCents) / 1000);
+      else               totalCents = Math.round((Number(qtdTxt) || 0) * precoCents);
+    }
+    return {
+      produto, tipo,
+      qtdTxt, precoTxt: (Number(precoCents)/100).toFixed(2).replace('.', ','),
+      qtdMil, precoCents, totalCents,
+      obs: String(it.obs||'').trim(),
+      _pesoTotalKgMil: 0
+    };
+  }) : [];
 
   return {
     cliente: String(p.cliente||p.clienteUpper||'').toUpperCase(),
@@ -251,20 +315,21 @@ function construirPDFBase(data){
   y += 12;
 
   // Itens
-  let subtotal = 0;
+  let subtotalCents = 0;
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
   (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
-    const qtdStr = String(it.quantidade || 0);
+    const qtdStr = String(it.qtdTxt || "");
     const tipo = it.tipo || "KG";
-    const precoNum = Number(it.preco) || 0;
-    const totalNum = Number(it.total) || 0;
-    const pesoTotalKg = Number(it._pesoTotalKg || 0);
+
+    const precoTxt = it.precoTxt || ""; // texto como digitado
+    const totalCents = Math.round(it.totalCents || 0);
+    const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
 
     const prodLines = splitToWidth(doc, prod, W_PROD-2).slice(0,3);
     const rowHi = Math.max(14, 6 + prodLines.length*5);
-    ensureSpace(rowHi + (pesoTotalKg ? 6 : 0));
+    ensureSpace(rowHi + (pesoTotalKgMil ? 6 : 0));
 
     doc.rect(margemX, y, W_PROD, rowHi, "S");
     doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
@@ -274,22 +339,23 @@ function construirPDFBase(data){
     const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
 
     center(margemX+W_PROD/2, prodLines);
-    center(margemX+W_PROD+W_QDE/2, qtdStr ? [qtdStr, tipo] : [""]);
+    center(margemX+W_PROD+W_QDE/2, (qtdStr ? [qtdStr, tipo] : [""]));
 
-    if (tipo==='UN' && pesoTotalKg) {
-      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoNum ? ["R$/KG", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+    if (tipo==='UN' && pesoTotalKgMil) {
+      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$/KG", precoTxt] : ["—"]);
     } else {
-      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoNum ? ["R$", precoNum.toFixed(2).replace(".", ",")] : ["—"]);
+      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$", precoTxt] : ["—"]);
     }
 
     center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2,
-      (totalNum > 0) ? ["R$", totalNum.toFixed(2).replace(".", ",")] : ["—"]);
+      (totalCents > 0) ? ["R$", moneyBRfromCents(totalCents)] : ["—"]);
 
     y += rowHi;
 
-    if (tipo==='UN' && pesoTotalKg) {
+    if (tipo==='UN' && pesoTotalKgMil) {
+      const kgTxt = (pesoTotalKgMil/1000).toFixed(3).replace('.', ',');
       doc.setFontSize(7); doc.setFont("helvetica","italic");
-      doc.text(`(*) Peso total: ${pesoTotalKg.toFixed(3)} kg`, margemX+3, y+4);
+      doc.text(`(*) Peso total: ${kgTxt} kg`, margemX+3, y+4);
       doc.setFont("helvetica","normal"); doc.setFontSize(9);
       y += 5;
     }
@@ -308,7 +374,7 @@ function construirPDFBase(data){
       y += obsH;
     }
 
-    subtotal += totalNum;
+    subtotalCents += totalCents;
     if (idx < (data.itens?.length||0)-1) y += 2;
   });
 
@@ -316,7 +382,11 @@ function construirPDFBase(data){
   const w2tercos = Math.round(larguraCaixa*(2/3));
   const somaX = margemX + larguraCaixa - w2tercos;
   ensureSpace(11);
-  drawKeyValueBox(doc, somaX, y, w2tercos, "SOMA PRODUTOS", "R$ " + subtotal.toFixed(2), { rowH:10, titleSize:7, valueSize:7 });
+  drawKeyValueBox(
+    doc, somaX, y, w2tercos, "SOMA PRODUTOS",
+    "R$ " + moneyBRfromCents(subtotalCents),
+    { rowH:10, titleSize:7, valueSize:7 }
+  );
   y += 12;
 
   // Entrega / Frete
@@ -338,12 +408,12 @@ function construirPDFBase(data){
   y += 12;
 
   // TOTAL
-  const totalGeral = subtotal + Number(data.freteCobravel||0);
+  const totalGeralCents = subtotalCents + Math.round(Number(data.freteCobravel||0) * 100);
   ensureSpace(11);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(9);
   doc.text("TOTAL DO PEDIDO:", margemX+3, y+5.5);
-  doc.text("R$ " + totalGeral.toFixed(2), margemX+larguraCaixa-3, y+5.5, {align:"right"});
+  doc.text("R$ " + moneyBRfromCents(totalGeralCents), margemX+larguraCaixa-3, y+5.5, {align:"right"});
   y += 12;
 
   if (data.obsGeralTxt){
