@@ -3,7 +3,7 @@
 // Se a API não responder, tenta fallback direto no Firestore (id fixo por hash da idemKey).
 
 import {
-  db, getTenantId,
+  db, TENANT_ID,
   collection, doc, setDoc, serverTimestamp
 } from './firebase.js';
 import { up } from './utils.js';
@@ -47,35 +47,49 @@ function hash32(s){
   return (h>>>0).toString(16);
 }
 
+// fetch com timeout (evita spinner infinito)
+async function fetchWithTimeout(url, opts={}, ms=4000){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, { ...opts, signal: ctrl.signal });
+    clearTimeout(t);
+    return r;
+  }catch(e){
+    clearTimeout(t);
+    throw e;
+  }
+}
+
 /* ============== Salvamento ============== */
 export async function savePedidoIdempotente(payload){
   const idempotencyKey = buildIdempotencyKey(payload);
-  const tenantId = await getTenantId(); // usa claim do usuário (ou o fixed)
 
-  // 1) API do tenant (idempotente no backend)
+  // 1) Tenta pela API (rota: /api/tenant-pedidos/salvar)
   try{
-    const r = await fetch("/api/tenant-pedidos/salvar", {
+    const r = await fetchWithTimeout("/api/tenant-pedidos/salvar", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ tenantId, payload, idempotencyKey })
-    });
+      body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
+    }, 4000);
+
     if (!r.ok) throw new Error(`API ${r.status}`);
     const j = await r.json();
     if (!j?.ok) throw new Error("API retornou erro lógico");
     return j; // { ok:true, reused?:bool, id }
   }catch(e){
-    console.warn("[DB] API indisponível, tentando fallback direto no Firestore:", e?.message || e);
+    console.warn("[DB] API indisponível/lerda, usando fallback Firestore:", e?.message || e);
   }
 
-  // 2) Fallback direto no Firestore (precisa tenantId nas rules)
+  // 2) Fallback direto no Firestore
   try{
     const docId = "idem_" + hash32(idempotencyKey);
-    const col = collection(db, "tenants", tenantId, "pedidos");
+    const col = collection(db, "tenants", TENANT_ID, "pedidos");
 
     const toSave = {
       ...payload,
       idempotencyKey,
-      tenantId,
+      tenantId: TENANT_ID,
       createdAt: serverTimestamp(),
       dataEntregaDia: payload?.dataEntregaISO
         ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
@@ -85,8 +99,7 @@ export async function savePedidoIdempotente(payload){
     await setDoc(doc(col, docId), toSave, { merge: true });
     return { ok:true, reused:false, id: docId, local:true };
   }catch(e2){
-    console.warn("[DB] Fallback Firestore falhou (sem bloquear PDF):", e2?.message || e2);
-    // devolve um id simbólico para não interromper o fluxo do app
+    console.warn("[DB] Fallback Firestore falhou (não bloqueia PDF):", e2?.message || e2);
     return { ok:false, localOnly:true, id:"local-"+Date.now() };
   }
 }
