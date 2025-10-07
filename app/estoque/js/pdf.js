@@ -88,6 +88,7 @@ export async function pdfEstoqueBlob(){
 
     const pal=PALETAS[i%PALETAS.length];
     const soft=hex2rgb(pal.soft); const strong=hex2rgb(pal.strong);
+    // Cabeçalho da família
     doc.setFillColor(soft.r,soft.g,soft.b); doc.rect(margin,y,W-margin*2,22,'F');
     doc.setTextColor(strong.r,strong.g,strong.b);
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
@@ -97,6 +98,8 @@ export async function pdfEstoqueBlob(){
     y+=28;
 
     let sumR=0,sumC=0,sumM=0, sumSug=0;
+    let rowIndex = 0;
+
     for(const p of itens){
       const v = sessao[fam]?.[p] || {RESFRIADO_KG:0,CONGELADO_KG:0};
       const rk=round3(v.RESFRIADO_KG||0), ck=round3(v.CONGELADO_KG||0), sk=round3(rk+ck);
@@ -104,6 +107,13 @@ export async function pdfEstoqueBlob(){
       const sug = Math.max(0, round3(min - sk));
 
       if(y>560){ doc.addPage(); y=margin; }
+
+      // ZEBRA de linhas (mesma paleta, mais clarinha)
+      if ((rowIndex % 2) === 1){
+        doc.setFillColor(soft.r, soft.g, soft.b);
+        doc.rect(margin, y-10, W - margin*2, 24, 'F');
+      }
+      rowIndex++;
 
       doc.setFont('helvetica','bold'); doc.text(p, X(0), y, {align:'center'});
       doc.setFont('helvetica','normal');
@@ -191,6 +201,7 @@ export async function pdfPosicaoBlob(){
     y+=28;
 
     let sumLastKG=0, sumLastR$=0, sumNowKG=0, sumNowR$=0;
+    let rowIndex = 0;
 
     for(const p of itens){
       const vNow = sessao[fam]?.[p] || {RESFRIADO_KG:0,CONGELADO_KG:0};
@@ -204,6 +215,12 @@ export async function pdfPosicaoBlob(){
       const nowVal  = round3(nowKg*price);
 
       if(y>560){ doc.addPage(); y=margin; }
+
+      if ((rowIndex % 2) === 1){
+        doc.setFillColor(soft.r, soft.g, soft.b);
+        doc.rect(margin, y-10, W - margin*2, 22, 'F');
+      }
+      rowIndex++;
 
       doc.text(p, X(0), y, {align:'center'});
       doc.text(`${fmt3(lastKg)} KG`, X(1), y, {align:'center'});
