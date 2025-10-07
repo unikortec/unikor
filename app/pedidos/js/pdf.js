@@ -27,20 +27,16 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
 }
 
 /* ===== Precisão decimal (sem arredondar indevido) ===== */
-// Converte "12,34" ou "12.34" -> 1234 (centavos)
 function strToCents(str){
   const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
   if (!s) return 0;
-  // usa duas casas – arredondamento de centavos apenas aqui
   return Math.round(Number(s) * 100);
 }
-// Quantidade com até 3 casas (ex.: kg) em milésimos
 function strToThousandths(str){
   const s = String(str ?? "").trim().replace(",",".");
   if (!s) return 0;
   return Math.round(Number(s) * 1000);
 }
-// Formata centavos -> "x,yy"
 function moneyBRfromCents(cents){
   const v = Math.round(cents);
   const sign = v < 0 ? "-" : "";
@@ -77,7 +73,6 @@ function drawKeyValueBox(doc, x,y,w, label, value, opts={}){
    ==============   CONSTRUTORES DE PDF   ====================
    =========================================================== */
 
-// 1) Constrói lendo a TELA (DOM)
 export async function construirPDF(){
   await ensureFreteBeforePDF();
 
@@ -117,16 +112,15 @@ export async function construirPDF(){
         const produto = produtoInput?.value?.trim() || '';
         const tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
-        // >>> preserva o que foi DIGITADO (texto cru) <<<
-        const qtdTxt = (quantidadeInput?.value ?? '').trim(); // pode ter 3 casas (kg)
-        const precoTxt = (precoInput?.value ?? '').trim();    // "xx,yy" ou "xx.yy"
+        // preserva texto cru digitado
+        const qtdTxt = (quantidadeInput?.value ?? '').trim();
+        const precoTxt = (precoInput?.value ?? '').trim();
 
-        // números para cálculo com precisão
         const qtdMil = strToThousandths(qtdTxt);
         const precoCents = strToCents(precoTxt);
 
-        // Peso estimado a partir do nome quando tipo UN
-        let pesoTotalKgMil = 0; // em milésimos de kg
+        // Peso total para UN quando nome contém peso
+        let pesoTotalKgMil = 0;
         if (tipo === 'UN') {
           const s = (produto||'').toLowerCase().replace(',', '.').replace(/\s+/g,' ');
           const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
@@ -142,36 +136,23 @@ export async function construirPDF(){
           }
         }
 
-        // ===== total em CENTAVOS, sem erro de float =====
         let totalCents = 0;
         if (tipo === 'UN' && pesoTotalKgMil > 0) {
-          // (kg em milésimos) * (preço em centavos) / 1000
           totalCents = Math.round((pesoTotalKgMil * precoCents) / 1000);
         } else {
-          // quantidade (milésimos para KG, inteiros para UN) * preço
-          if (tipo === 'KG') {
-            totalCents = Math.round((qtdMil * precoCents) / 1000);
-          } else {
+          if (tipo === 'KG') totalCents = Math.round((qtdMil * precoCents) / 1000);
+          else {
             const qtdInt = Math.round(Number(qtdTxt.replace(',','.') || 0));
             totalCents = qtdInt * precoCents;
           }
         }
 
         const obs = obsInput?.value?.trim() || '';
-        return {
-          produto, tipo,
-          // preserva textos:
-          qtdTxt, precoTxt,
-          // números auxiliares:
-          qtdMil, precoCents, totalCents,
-          obs,
-          _pesoTotalKgMil: pesoTotalKgMil
-        };
+        return { produto, tipo, qtdTxt, precoTxt, qtdMil, precoCents, totalCents, obs, _pesoTotalKgMil: pesoTotalKgMil };
       });
     })()
   };
 
-  // Frete atual (UI)
   const frete = getFreteAtual() || { valorBase:0, valorCobravel:0, isento:false };
   const isentoMan = !!document.getElementById('isentarFrete')?.checked;
 
@@ -182,13 +163,12 @@ export async function construirPDF(){
   });
 }
 
-// 2) Constrói a partir de um DOCUMENTO do Firestore (payload salvo)
+// 2) Constrói a partir de documento salvo
 function normalizarPedidoSalvo(docData){
   const p = docData || {};
   const itens = Array.isArray(p.itens) ? p.itens.map(it=>{
     const produto = String(it.produto||'').trim();
     const tipo = String(it.tipo||'KG').toUpperCase();
-    // Preferimos o total salvo; se não houver, calculamos com centavos
     const precoCents = Math.round(Number(it.precoUnit ?? it.preco ?? 0) * 100);
     const qtdTxt = String(it.quantidade ?? 0);
     const qtdMil = Math.round(Number(it.quantidade ?? 0) * 1000);
@@ -229,7 +209,7 @@ async function construirPDFDePedidoSalvo(pedidoDocData){
   return construirPDFBase(norm);
 }
 
-/* ===== Miolo de desenho compartilhado (DOM ou Firestore) ===== */
+/* ===== Miolo de desenho compartilhado ===== */
 function construirPDFBase(data){
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
@@ -299,7 +279,7 @@ function construirPDFBase(data){
   doc.text((data.pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
   y += 12;
 
-  // Tabela itens - Cabeçalho
+  // Cabeçalho itens
   ensureSpace(14);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
   doc.rect(margemX, y, W_PROD, 10, "S");
@@ -322,8 +302,7 @@ function construirPDFBase(data){
     const prod = it.produto || "";
     const qtdStr = String(it.qtdTxt || "");
     const tipo = it.tipo || "KG";
-
-    const precoTxt = it.precoTxt || ""; // texto como digitado
+    const precoTxt = it.precoTxt || "";
     const totalCents = Math.round(it.totalCents || 0);
     const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
 
@@ -340,15 +319,9 @@ function construirPDFBase(data){
 
     center(margemX+W_PROD/2, prodLines);
     center(margemX+W_PROD+W_QDE/2, (qtdStr ? [qtdStr, tipo] : [""]));
-
-    if (tipo==='UN' && pesoTotalKgMil) {
-      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$/KG", precoTxt] : ["—"]);
-    } else {
-      center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$", precoTxt] : ["—"]);
-    }
-
-    center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2,
-      (totalCents > 0) ? ["R$", moneyBRfromCents(totalCents)] : ["—"]);
+    if (tipo==='UN' && pesoTotalKgMil) center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$/KG", precoTxt] : ["—"]);
+    else                               center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$",    precoTxt] : ["—"]);
+    center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2, (totalCents > 0) ? ["R$", moneyBRfromCents(totalCents)] : ["—"]);
 
     y += rowHi;
 
@@ -393,12 +366,10 @@ function construirPDFBase(data){
   const gap2=2; const entregaW=Math.round(larguraCaixa*(2/3)); const freteW=larguraCaixa-entregaW-gap2;
   ensureSpace(12); doc.setLineWidth(1.1);
 
-  // ENTREGA/RETIRADA
   doc.rect(margemX, y, entregaW, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(10);
   doc.text(data.tipoEnt, margemX+entregaW/2, y+6.5, {align:"center"});
 
-  // FRETE
   const freteX = margemX + entregaW + gap2;
   doc.rect(freteX, y, freteW, 10, "S");
   doc.text("FRETE", freteX+freteW/2, y+4, {align:"center"});
@@ -466,24 +437,41 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
-export async function compartilharPDFNativo(){
-  const { blob, nomeArq } = await construirPDF();
+// >>> NOVO: compartilhar com Blob mantendo user-activation (Android/WhatsApp)
+export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
   const file = new File([blob], nomeArq, { type: 'application/pdf' });
 
-  try{
-    if (navigator.canShare && navigator.canShare({ files:[file] })) {
-      await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
-      return { compartilhado:true };
+  // 1) somente files
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return { compartilhado: true };
     }
-  }catch(e){
-    if (String(e).includes('AbortError')) return { compartilhado:false, cancelado:true };
-    throw e;
+  } catch (e) {
+    if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
   }
 
+  // 2) files + texto/título
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
+      return { compartilhado: true };
+    }
+  } catch (e) {
+    if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
+  }
+
+  // 3) fallback preview
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
-  return { compartilhado:false, fallback:true };
+  return { compartilhado: false, fallback: true };
+}
+
+// (mantido para compatibilidade)
+export async function compartilharPDFNativo(){
+  const { blob, nomeArq } = await construirPDF();
+  return compartilharComBlob(blob, nomeArq);
 }
 
 /* ========= REIMPRESSÃO DO FIRESTORE ========= */
