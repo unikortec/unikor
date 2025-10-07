@@ -41,12 +41,13 @@ function kgPorUnFromDesc(desc=""){
 }
 
 function calcSubtotal({ desc, qtd, un, preco }){
-  if (String(un||'').toUpperCase() === 'UN'){
+  const U = String(un||'').toUpperCase();
+  if (U === 'UN'){
     const kgUn = kgPorUnFromDesc(desc);
-    if (kgUn > 0){ return (qtd * kgUn) * preco; }
-    return qtd * preco;
+    const tot = kgUn > 0 ? (qtd * kgUn) * preco : (qtd * preco);
+    return Number(tot.toFixed(2));
   }
-  return qtd * preco;
+  return Number((qtd * preco).toFixed(2));
 }
 
 function recalcRow(tr){
@@ -56,14 +57,29 @@ function recalcRow(tr){
   const pu   = parseBRNumber(tr.querySelector(".it-preco").value);
   const subInput = tr.querySelector(".it-sub");
   const calc = calcSubtotal({ desc, qtd, un, preco: pu });
+
+  // só sobrepõe se o usuário NÃO marcou como editado manualmente
   if (!subInput.dataset.dirty){ subInput.value = toMoney(calc); }
 }
 
+// Soma respeitando edição manual (dataset.dirty === "1")
 function recalcTotal(){
   let total = 0;
   $("itemsBody").querySelectorAll("tr").forEach(tr=>{
-    const sub = parseBRNumber(tr.querySelector(".it-sub").value);
-    total += sub;
+    const subEl = tr.querySelector(".it-sub");
+    const desc = (tr.querySelector(".it-desc").value||"").trim();
+    const qtd  = parseBRNumber(tr.querySelector(".it-qtd").value);
+    const un   = (tr.querySelector(".it-un").value||"UN").toUpperCase();
+    const pu   = parseBRNumber(tr.querySelector(".it-preco").value);
+
+    let val;
+    if (subEl.dataset.dirty === "1") {
+      val = parseBRNumber(subEl.value);
+    } else {
+      val = calcSubtotal({ desc, qtd, un, preco: pu });
+      subEl.value = toMoney(val);
+    }
+    total += Number(val||0);
   });
   $("mTotal").value = toMoney(total);
 }
@@ -94,7 +110,7 @@ export function addItemRow(item={}){
 
   tr.querySelectorAll(".it-desc,.it-qtd,.it-un,.it-preco").forEach(i=>{
     i.addEventListener("input", ()=>{
-      tr.querySelector(".it-sub").dataset.dirty = "";
+      tr.querySelector(".it-sub").dataset.dirty = ""; // limpa marca manual
       recalcRow(tr); recalcTotal();
     });
   });
@@ -142,9 +158,13 @@ export async function salvarEdicao(atualizarLista){
     const qtd  = parseBRNumber(tr.querySelector(".it-qtd").value);
     const un   = (tr.querySelector(".it-un").value||"UN").trim().toUpperCase();
     const pu   = parseBRNumber(tr.querySelector(".it-preco").value);
-    const sub  = parseBRNumber(tr.querySelector(".it-sub").value);
+    const subEl= tr.querySelector(".it-sub");
+    // guarda subtotal: se usuário editou manualmente, ficamos com esse valor
+    const subCalc = calcSubtotal({ desc, qtd, un, preco: pu });
+    const sub = (subEl.dataset.dirty === "1") ? parseBRNumber(subEl.value) : subCalc;
+
     if (!desc && qtd<=0) return;
-    itens.push({ descricao: desc, qtd, un, precoUnit: pu, subtotal: Number(sub.toFixed(2)) });
+    itens.push({ descricao: desc, qtd, un, precoUnit: pu, subtotal: Number(Number(sub||0).toFixed(2)) });
   });
 
   const totalItens = itens.reduce((acc, it)=> acc + (it.subtotal||0), 0);
@@ -175,14 +195,10 @@ export async function salvarEdicao(atualizarLista){
   }
 }
 
-/* ===========================================================
-   Gera a CÓPIA do pedido no MESMO layout do módulo de pedidos.
-   =========================================================== */
+/* ===== PDF do pedido (usa o PDF salvo no Storage quando existir) ===== */
 export async function gerarPDFDoModal(){
   const { jsPDF } = window.jspdf || {};
   if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
-
-  // usa printPedido80mm já existente para manter layout igual
   const { printPedido80mm } = await import("./print.js");
   if (window.__currentDocId){
     await printPedido80mm(window.__currentDocId);
