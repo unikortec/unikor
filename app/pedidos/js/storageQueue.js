@@ -8,11 +8,10 @@ import {
   getStorage, ref, uploadBytes
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 import {
-  collection, doc, setDoc, serverTimestamp, getDoc
+  collection, doc, setDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 const storage = getStorage(app);
-
 const KEY = "__unikor_storage_upload_queue_v2__";
 
 // ---------- helpers de persistência ----------
@@ -84,9 +83,14 @@ export async function queueStorageUpload({ tenantId, docId, blob, filename }){
   console.log("[StorageQueue] job enfileirado (rebuild):", docId);
 }
 
-/** Drena a fila periodicamente e quando voltar a conexão. */
-export function drainStorageQueueWhenOnline(){
-  const run = async ()=>{
+// ---------- dreno (singleton) ----------
+let _started = false;
+let _draining = false;
+
+async function _run(){
+  if (_draining) return;
+  _draining = true;
+  try{
     let q = loadQ();
     if (!q.length || !navigator.onLine) return;
 
@@ -97,12 +101,11 @@ export function drainStorageQueueWhenOnline(){
         let filename = job.filename || "pedido.pdf";
 
         if (job.source === "rebuild"){
-          // Reconstroi o PDF lendo o pedido salvo no Firestore
+          // Reconstrói o PDF lendo o pedido salvo no Firestore
           const { getTenantId } = await import("./firebase.js");
           const { doc, getDoc } =
             await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
           const { construirPDFDePedidoFirestore } = await import("./storageQueueHelpers.js");
-          // construirPDFDePedidoFirestore: helper isolado p/ evitar import circular do pdf.js aqui.
 
           const tenantId = job.tenantId || (await getTenantId());
           const ref = doc(db, "tenants", tenantId, "pedidos", job.docId);
@@ -113,8 +116,9 @@ export function drainStorageQueueWhenOnline(){
           const { blob: rebuiltBlob, nomeArq } = await construirPDFDePedidoFirestore(pedido);
           blob = rebuiltBlob; if (nomeArq) filename = nomeArq;
         } else if (job.dataUrl){
-          // (modo antigo – compat) se algum job antigo ainda existe com dataUrl:
-          const res = await fetch(job.dataUrl); blob = await res.blob();
+          // compat com jobs antigos que tinham dataUrl
+          const res = await fetch(job.dataUrl);
+          blob = await res.blob();
         }
 
         if (!blob) throw new Error("Blob ausente no job para upload.");
@@ -125,9 +129,21 @@ export function drainStorageQueueWhenOnline(){
       }
     }
     saveQ(rest);
-  };
+  } finally {
+    _draining = false;
+  }
+}
 
-  window.addEventListener("online", run);
-  setInterval(run, 45000);
-  run();
+/** Drena a fila periodicamente e quando voltar a conexão (garantindo 1 só timer/listener). */
+export function drainStorageQueueWhenOnline(){
+  if (_started) return;
+  _started = true;
+  window.addEventListener("online", _run, { passive:true });
+  setInterval(_run, 45000);
+  _run(); // primeira tentativa agora
+}
+
+/** Gatilho imediato (ex.: logo após enfileirar). */
+export async function drainOnce(){
+  await _run();
 }
