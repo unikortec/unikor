@@ -1,5 +1,5 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.3.1';   // 🔺 incrementado
+const APP_VER   = '1.3.2';   // 🔺 bump para forçar atualização
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
@@ -32,7 +32,9 @@ self.addEventListener('install', (evt) => {
 self.addEventListener('activate', (evt) => {
   evt.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC).map(k => caches.delete(k)));
+    await Promise.all(keys
+      .filter(k => k.startsWith(`${TAG}-static-`) && k !== STATIC)
+      .map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
