@@ -27,7 +27,6 @@ const norm = (s="") => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"")
 /* ======== inferência de KG para itens em UN (a partir da descrição) ======== */
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.').replace(/\s+/g,' ');
-  // pega o ÚLTIMO número + unidade (ex.: “120 g”, “1.2kg”, “500 gramas”)
   const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
   let m, last=null; while((m=re.exec(s))!==null) last=m;
   if (!last) return 0;
@@ -91,6 +90,7 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
     list.push({ id: d.id, ...data, totalPedido });
   });
 
+  // filtros client-side
   if (clienteLike && String(clienteLike).trim()){
     const needle = norm(clienteLike.trim());
     list = list.filter(x => norm(x.clientUpper || x.cliente || "").includes(needle));
@@ -99,6 +99,22 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
     const t = String(tipo).toUpperCase();
     list = list.filter(x => (x?.entrega?.tipo || "").toUpperCase() === t);
   }
+
+  // ===== ORDEM: mais novo -> mais antigo (sem índices extras)
+  list.sort((a,b)=>{
+    // tenta createdAt/updatedAt se existirem (timestamp), senão dataEntregaISO+horaEntrega
+    const ta = (a.updatedAt?.toMillis?.() ? a.updatedAt.toMillis()
+             : a.createdAt?.toMillis?.() ? a.createdAt.toMillis()
+             : 0);
+    const tb = (b.updatedAt?.toMillis?.() ? b.updatedAt.toMillis()
+             : b.createdAt?.toMillis?.() ? b.createdAt.toMillis()
+             : 0);
+    if (tb !== ta) return tb - ta;
+
+    const da = (a.dataEntregaISO||"") + " " + (a.horaEntrega||"");
+    const db = (b.dataEntregaISO||"") + " " + (b.horaEntrega||"");
+    return db.localeCompare(da); // desc
+  });
 
   return list;
 }
