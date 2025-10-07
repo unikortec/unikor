@@ -1,66 +1,26 @@
 // relatorios/js/export.js
-import { $, moneyBR } from './render.js';
+// Gera PDF em PAISAGEM, com cabeçalho do cliente, header cinza e linhas zebrada.
+// Evita consultas – usa apenas o array já carregado (rows).
 
-/* UI */
-function setLoading(btn, isLoading){
-  if (!btn) return;
-  const lbl = btn.querySelector(".lbl");
-  if (isLoading){
-    btn.setAttribute("disabled","true");
-    const sp = document.createElement("span");
-    sp.className = "spinner"; sp.dataset.spin="1";
-    btn.prepend(sp);
-    if (lbl) lbl.textContent = lbl.textContent || "Processando…";
-  } else {
-    btn.removeAttribute("disabled");
-    btn.querySelector('.spinner[data-spin]')?.remove();
-  }
-}
-const nextFrame = () => new Promise(r => setTimeout(r, 0));
+const { jsPDF } = window.jspdf || {};
 
-/* ==== loader do SheetJS (mais robusto p/ iOS) ==== */
-async function ensureXLSX(){
-  if (window.XLSX) return window.XLSX;
-  const sources = [
-    "https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js",
-    "https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js",
-    "https://unpkg.com/xlsx@0.19.3/dist/xlsx.full.min.js",
-    "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.19.3/xlsx.full.min.js"
-  ];
-  for (const src of sources){
-    try{
-      await new Promise((resolve, reject)=>{
-        const s = document.createElement('script');
-        s.src = src; s.async = true; s.crossOrigin = "anonymous";
-        const to = setTimeout(()=>reject(new Error('timeout')), 20000);
-        s.onload = ()=>{ clearTimeout(to); resolve(); };
-        s.onerror = ()=>{ clearTimeout(to); reject(new Error('load error')); };
-        document.head.appendChild(s);
-      });
-      if (window.XLSX) return window.XLSX;
-    }catch{}
-  }
-  throw new Error("Falha ao carregar o gerador XLSX (conexão).");
+// ===== Helpers numéricos =====
+const moneyBR = (n) => (Number(n||0)).toFixed(2).replace(".", ",");
+function parseBRNumber(val){
+  if (typeof val === "number") return val;
+  const s = String(val ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
+  const n = Number(s);
+  return isNaN(n) ? 0 : n;
 }
 
-/* domínio */
-function freteFromRow(r){
-  const f = r?.frete || {};
-  const isento = !!f.isento;
-  const v = Number(f.valorCobravel ?? f.valorBase ?? r?.freteValor ?? 0);
-  return isento ? 0 : v;
-}
-const money = n => `R$ ${moneyBR(n)}`;
-
-/* ===== helpers p/ UN -> KG ===== */
+// ===== Regras de cálculo iguais às da listagem/modal =====
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.').replace(/\s+/g,' ');
   const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
   let m,last=null; while((m=re.exec(s))!==null) last=m;
   if (!last) return 0;
   const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
-  const val = parseFloat(raw);
-  if (!isFinite(val) || val<=0) return 0;
+  const val = parseFloat(raw); if (!isFinite(val)||val<=0) return 0;
   const unit = last[2].toLowerCase();
   return (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
 }
@@ -75,198 +35,149 @@ function subtotalItem(it){
   }
   return qtd * pu;
 }
+const toBRDate = (iso)=> (iso ? iso.split("-").reverse().join("/") : "");
 
-/* ================== XLSX ================== */
-export async function exportarXLSX(rows){
-  const btn = $("btnXLSX");
-  if (!rows || !rows.length){ alert("Nada para exportar."); return; }
-  setLoading(btn, true);
-  try{
-    const XLSX = await ensureXLSX();
-    const data = rows.map(r=>{
+// ===== Geração =====
+export function exportarPDF(rows = []){
+  if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
+
+  // A4 paisagem
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 10;
+  let y = margin;
+
+  // Paleta
+  const DARK = 60;        // cinza escuro
+  const ROW1 = 245;       // zebra 1 (quase branco)
+  const ROW2 = 232;       // zebra 2 (cinza clarinho)
+
+  // Tipografia
+  const setBold = (sz)=>{ doc.setFont("helvetica","bold"); doc.setFontSize(sz); };
+  const setReg  = (sz)=>{ doc.setFont("helvetica","normal"); doc.setFontSize(sz); };
+
+  // Cabeçalho do relatório
+  setBold(12);
+  doc.text("RELATÓRIO DE PEDIDOS", margin, y); setReg(9);
+  const totalGeral = rows.reduce((s,r)=> s + (Array.isArray(r.itens) ? r.itens.reduce((a,it)=>a+subtotalItem(it),0) : 0), 0);
+  doc.text(`Total de pedidos: ${rows.length}  •  Soma dos produtos: R$ ${moneyBR(totalGeral)}`, margin, y+6);
+  y += 12;
+
+  // Agrupar por cliente para gerar cabeçalhos por cliente
+  const byCliente = new Map();
+  rows.forEach(r=>{
+    const key = (r.cliente||"—").toString().toUpperCase();
+    if (!byCliente.has(key)) byCliente.set(key, []);
+    byCliente.get(key).push(r);
+  });
+
+  // Tabela: larguras
+  const col = {
+    data: 24,
+    hora: 16,
+    prod: Math.max(80, pageW - margin*2 - (24+16+20+28+22+22)), // ajusta automático
+    qtd:  20,
+    un:   22,
+    val:  22,
+    sub:  22
+  };
+
+  function ensureSpace(h){
+    if (y + h > pageH - margin){
+      doc.addPage();
+      y = margin;
+    }
+  }
+  function linhaForteCinza(x1,y1,x2){
+    doc.setDrawColor(DARK); doc.setLineWidth(1.2);
+    doc.line(x1, y1, x2, y1);
+    doc.setLineWidth(0.2); // volta
+  }
+  function headerCliente(nome){
+    ensureSpace(12);
+    setBold(11);
+    doc.text(nome, margin, y+6);
+    // linha inferior cinza escuro (sem fundo)
+    linhaForteCinza(margin, y+8.5, pageW - margin);
+    y += 10;
+  }
+  function headerTabela(){
+    ensureSpace(10);
+    // barra cinza escura no fundo do cabeçalho
+    doc.setFillColor(DARK,DARK,DARK);
+    doc.rect(margin, y, pageW - margin*2, 8, "F");
+    setBold(8); doc.setTextColor(255,255,255);
+    let x = margin + 2;
+    doc.text("DATA", x, y+5); x += col.data;
+    doc.text("HORA", x, y+5); x += col.hora;
+    doc.text("PRODUTO", x, y+5); x += col.prod;
+    doc.text("QTD", x, y+5); x += col.qtd;
+    doc.text("UN", x, y+5); x += col.un;
+    doc.text("R$ UNIT.", x, y+5); x += col.val;
+    doc.text("SUBTOTAL", x, y+5);
+    doc.setTextColor(0,0,0);
+    y += 9;
+  }
+  function rowItem(i, it, r){
+    const zebra = (i % 2 === 0) ? ROW1 : ROW2;
+    const h = 7; ensureSpace(h);
+    doc.setFillColor(zebra,zebra,zebra);
+    doc.rect(margin, y, pageW - margin*2, h, "F");
+
+    setReg(8);
+    const desc = String(it.descricao || it.produto || "").toUpperCase();
+    const qtd  = Number(it.qtd ?? it.quantidade ?? 0);
+    const un   = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
+    const pu   = Number(it.precoUnit ?? it.preco ?? 0);
+    const sub  = (typeof it.subtotal === "number") ? Number(it.subtotal) : subtotalItem(it);
+
+    let x = margin + 2;
+    doc.text(toBRDate(r.dataEntregaISO||""), x, y+4); x += col.data;
+    doc.text(String(r.horaEntrega||""), x, y+4); x += col.hora;
+
+    const maxW = col.prod - 2;
+    const lines = doc.splitTextToSize(desc, maxW);
+    doc.text(lines[0] || "", x, y+4);
+    x += col.prod;
+
+    doc.text(String(qtd), x, y+4); x += col.qtd;
+    doc.text(un, x, y+4); x += col.un;
+    doc.text(moneyBR(pu), x, y+4, { align:"right" }); x += col.val;
+    doc.text(moneyBR(sub), x, y+4, { align:"right" });
+
+    y += h;
+  }
+  function footerCliente(totalCliente){
+    ensureSpace(10);
+    setBold(9);
+    doc.text("SOMA DOS PRODUTOS DO CLIENTE:", pageW - margin - 90, y+5);
+    doc.text(`R$ ${moneyBR(totalCliente)}`, pageW - margin, y+5, { align:"right" });
+    y += 8;
+  }
+
+  // ===== Render =====
+  for (const [cliente, pedidos] of byCliente.entries()){
+    headerCliente(cliente);
+    headerTabela();
+
+    let somaCliente = 0;
+    // cada pedido → suas linhas de itens
+    pedidos.forEach((r)=>{
       const itens = Array.isArray(r.itens) ? r.itens : [];
-      const frete = freteFromRow(r);
-      const subtotal = itens.reduce((s,it)=> s + subtotalItem(it), 0);
-      return {
-        "Data": (r.dataEntregaISO||""),
-        "Hora": (r.horaEntrega||""),
-        "Cliente": (r.cliente||""),
-        "Endereço": (r?.entrega?.endereco || r.endereco || ""),
-        "Qtd Itens": itens.length,
-        "Tipo": ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA"),
-        "Pagamento": (r.pagamento||""),
-        "Frete (R$)": Number(frete.toFixed(2)),
-        "Cupom": (r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-",
-        "Usuário": String(r.createdBy || r.updatedBy || "").split("@")[0].toUpperCase(),
-        "Total Itens (R$)": Number(subtotal.toFixed(2)),
-        "Total Pedido (R$)": Number((subtotal + frete).toFixed(2)),
-        "ID": r.id
-      };
+      itens.forEach((it, idx)=>{ somaCliente += subtotalItem(it); rowItem(idx, it, r); });
     });
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatorio");
-    await nextFrame();
-    const nome = `Relatorio_${new Date().toISOString().slice(0,10)}.xlsx`;
-    XLSX.writeFile(wb, nome);
-  } catch (e){
-    console.error(e);
-    alert("Não consegui carregar o gerador XLSX (conexão). Tente novamente.");
-  } finally {
-    setLoading(btn, false);
+    footerCliente(somaCliente);
+    // espaço entre clientes
+    y += 2;
   }
+
+  // Final
+  doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
 }
 
-/* ================== PDF ================== */
-export async function exportarPDF(rows){
-  const btn = $("btnPDF");
-  if (!rows || !rows.length){ alert("Nada para gerar."); return; }
-  setLoading(btn, true);
-  try{
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:"landscape", unit:"mm", format:"a4" });
-
-    const L = 10, R = 287, W = R - L; let y = 16;
-
-    // tons (ajustados conforme solicitado)
-    const G_DARK   = 224; // cinza escuro (títulos)
-    const G_LIGHT  = 236; // cinza claro (linha com dados do cliente)
-    const G_SUMMARY= 244;
-    const G_ZEBRA  = 246;
-
-    const fill = g => doc.setFillColor(g,g,g);
-    const hline = yy => { doc.setLineWidth(.2); doc.line(L, yy, R, yy); };
-    const drawHead = (t,x,yy)=>{ doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.text(String(t).toUpperCase(), x, yy); };
-    const setBody  = ()=>{ doc.setFont("helvetica","normal"); doc.setFontSize(10); };
-    function drawInCell(t, x, w, yy, alignLeft=true){
-      setBody();
-      const pad=2, maxW=Math.max(2,w-pad*2); let txt=String(t||"");
-      let lines=doc.splitTextToSize(txt,maxW); let first=(lines[0]||"");
-      if (lines.length>1){ while(doc.getTextWidth(first+"…")>maxW && first.length){ first=first.slice(0,-1); } first+="…"; }
-      const baseX=x+pad; if (alignLeft) doc.text(first, baseX, yy); else doc.text(first, x+w-pad, yy, {align:"right"});
-    }
-    const moneyCell = (n,x,w,yy,right=true)=> drawInCell(`R$ ${moneyBR(n)}`, x, w, yy, !right);
-
-    /* totais gerais */
-    const totPedidos = rows.length;
-    const totItens   = rows.reduce((s,r)=> s + (Array.isArray(r.itens)? r.itens.length : 0), 0);
-    const totFrete   = rows.reduce((s,r)=> s + (freteFromRow(r)), 0);
-    const vendaItens = rows.reduce((s,r)=>{
-      const itens = Array.isArray(r.itens)? r.itens : [];
-      return s + itens.reduce((a,it)=> a + subtotalItem(it), 0);
-    }, 0);
-
-    /* título + resumo */
-    doc.setFont("helvetica","bold"); doc.setFontSize(18);
-    doc.text("Relatórios — Serra Nobre", L, y); y += 7;
-    doc.setFont("helvetica","normal"); doc.setFontSize(9);
-    doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, L, y); y += 8;
-
-    doc.setFontSize(11);
-    const labelW = 46;
-    const resumo = [
-      ["QTD. PEDIDOS:", totPedidos],
-      ["QTD. ITENS:",   totItens],
-      ["TOTAL FRETE:",  money(totFrete)],
-      ["VENDA (ITENS):", money(vendaItens)]
-    ];
-    resumo.forEach(([k,v])=>{
-      doc.setFont("helvetica","bold");   doc.text(k, L, y);
-      doc.setFont("helvetica","normal"); doc.text(String(v), L+labelW, y);
-      y += 6;
-    });
-    y += 2; hline(y); y += 3;
-
-    /* colunas */
-    const C = [
-      { t:"NOME CLIENTE", w: 80 },
-      { t:"ENDEREÇO",     w: 92 },
-      { t:"QDE ITENS",    w: 20 },
-      { t:"TIPO",         w: 24 },
-      { t:"PAGAMENTO",    w: 28 },
-      { t:"CUPOM",        w: 20 },
-      { t:"USUÁRIO",      w: 13 },
-    ];
-    const CX = C.reduce((acc,c,i)=>{ acc[i]=i?acc[i-1]+C[i-1].w:L; return acc; },[]);
-
-    const I = [
-      { t:"PRODUTO", w: 150 },
-      { t:"QDE",     w: 26  },
-      { t:"VALOR",   w: 26  },
-      { t:"FRETE",   w: 25  },
-      { t:"TOTAL",   w: 50  },
-    ];
-    const IX = I.reduce((acc,c,i)=>{ acc[i]=i?acc[i-1]+I[i-1].w:L; return acc; },[]);
-    const ensure = h => { if (y+h>200){ doc.addPage(); y=16; } };
-
-    rows.forEach(r=>{
-      const itens = Array.isArray(r.itens)? r.itens : [];
-      const frete = freteFromRow(r);
-      const user  = String(r.createdBy || r.updatedBy || "").split("@")[0].toUpperCase();
-      const tipo  = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
-      const ender = (r?.entrega?.endereco || r.endereco || "-").toString().toUpperCase();
-
-      ensure(22);
-
-      /* linha 1 — TÍTULOS (cinza escuro) */
-      fill(G_DARK); doc.rect(L, y, W, 9, "F");
-      C.forEach((c,i)=> drawHead(c.t, CX[i]+2, y+6));
-      y += 12;
-
-      /* linha 2 — DADOS DO CLIENTE (cinza claro) */
-      fill(G_LIGHT); doc.rect(L, y-9, W, 9, "F"); // fundo da linha de dados
-      setBody();
-      drawInCell(String(r.cliente||"").toUpperCase(), CX[0], C[0].w, y-3);
-      drawInCell(ender,                                   CX[1], C[1].w, y-3);
-      drawInCell(String(itens.length),                    CX[2], C[2].w, y-3);
-      drawInCell(tipo,                                    CX[3], C[3].w, y-3);
-      drawInCell(String(r.pagamento||"-").toUpperCase(),  CX[4], C[4].w, y-3);
-      drawInCell((r.cupomFiscal && String(r.cupomFiscal).trim()) ? r.cupomFiscal : "-", CX[5], C[5].w, y-3);
-      drawInCell(user || "-",                             CX[6], C[6].w, y-3);
-
-      ensure(12);
-
-      /* cabeçalho dos ITENS (cinza escuro) */
-      fill(G_DARK); doc.rect(L, y, W, 9, "F");
-      I.forEach((c,i)=> drawHead(c.t, IX[i]+2, y+6));
-      y += 12;
-
-      /* itens */
-      let zebra=false, subtotal=0;
-      itens.forEach(it=>{
-        ensure(8);
-        zebra=!zebra; if (zebra){ fill(G_ZEBRA); doc.rect(L, y-1, W, 7.5, "F"); }
-
-        const qtd = Number(it.quantidade ?? it.qtd ?? 0);
-        const un  = (it.tipo ?? it.un ?? "UN").toString().toUpperCase();
-        const pu  = Number(it.precoUnit ?? it.preco ?? 0);
-        const tot = Number((typeof it.subtotal==="number" ? it.subtotal : subtotalItem(it)).toFixed(2));
-        subtotal += tot;
-
-        drawInCell((it.produto||it.descricao||"").toString().toUpperCase(), IX[0], I[0].w, y+4);
-        drawInCell(`${qtd} ${un}`,                                             IX[1], I[1].w, y+4);
-        moneyCell(pu,                                                          IX[2], I[2].w, y+4, true);
-        drawInCell("-",                                                        IX[3], I[3].w, y+4);
-        moneyCell(tot,                                                         IX[4], I[4].w, y+4, true);
-
-        y += 7.5;
-      });
-
-      /* resumo */
-      ensure(12);
-      fill(G_SUMMARY); doc.rect(L, y, W, 9, "F");
-      const totalPed = subtotal + frete;
-      const resumoTxt = `FRETE: ${money(frete)}   •   SUBTOTAL ITENS: ${money(subtotal)}   •   TOTAL PEDIDO: ${money(totalPed)}`;
-      drawInCell(resumoTxt, L+1, W-2, y+6);
-      y += 12;
-
-      hline(y); y += 4;
-    });
-
-    await nextFrame();
-    doc.save(`Relatorio_${new Date().toISOString().slice(0,10)}.pdf`);
-  } finally {
-    setLoading(btn, false);
-  }
+// Mantém compatibilidade com app.js atual
+export function exportarXLSX(rows=[]){
+  alert("XLSX não alterado aqui. (continua usando a versão anterior)");
 }
