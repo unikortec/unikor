@@ -1,11 +1,19 @@
 // app/pedidos/js/storageQueue.js
-// Fila para enviar PDFs de pedidos ao Firebase Storage (com retry offline).
+// Fila confiável para enviar PDFs de pedidos ao Firebase Storage.
+// - Se online: tenta enviar na hora.
+// - Se falhar/offline: enfileira um job leve (sem Base64) e mais tarde reconstrói o PDF a partir do Firestore.
 
-import { app, db, storage } from './firebase.js';
-import { ref, uploadString } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
-import { collection, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { app, db } from './firebase.js';
+import {
+  getStorage, ref, uploadBytes
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+import {
+  collection, doc, setDoc, serverTimestamp, getDoc
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-const KEY = "__unikor_storage_upload_queue__";
+const storage = getStorage(app);
+
+const KEY = "__unikor_storage_upload_queue_v2__";
 
 // ---------- helpers de persistência ----------
 function loadQ(){
@@ -16,18 +24,42 @@ function saveQ(q){
   try { localStorage.setItem(KEY, JSON.stringify(q)); } catch {}
 }
 
-// Converte Blob → dataURL (para enfileirar com segurança no localStorage)
-async function blobToDataURL(blob){
-  return await new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.onerror = rej;
-    r.readAsDataURL(blob);
+// Blob -> ArrayBuffer (para uploadBytes)
+function blobToArrayBuffer(blob){
+  return new Promise((resolve, reject)=>{
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsArrayBuffer(blob);
   });
 }
 
+// Envia ao Storage + anota no Firestore
+async function uploadAndTag({ tenantId, docId, blob, filename }){
+  const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
+  const r = ref(storage, path);
+
+  const bytes = await blobToArrayBuffer(blob);
+  await uploadBytes(r, new Uint8Array(bytes), { contentType: "application/pdf" });
+
+  const pedidosCol = collection(db, "tenants", tenantId, "pedidos");
+  await setDoc(
+    doc(pedidosCol, docId),
+    {
+      pdfPath: path,
+      pdfName: filename || "pedido.pdf",
+      pdfCreatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+
+  console.log("[StorageQueue] enviado:", path);
+}
+
+// ========== API ==========
+
 /**
- * Enfileira um upload de PDF para o Storage.
+ * Sobe o PDF imediatamente se possível; se não, coloca na fila (job leve).
  * @param {Object} p
  * @param {string} p.tenantId
  * @param {string} p.docId
@@ -35,14 +67,24 @@ async function blobToDataURL(blob){
  * @param {string} p.filename
  */
 export async function queueStorageUpload({ tenantId, docId, blob, filename }){
-  if (!tenantId || !docId || !blob) return;
-  const dataUrl = await blobToDataURL(blob);
+  // tenta envio direto quando online
+  if (navigator.onLine){
+    try{
+      await uploadAndTag({ tenantId, docId, blob, filename });
+      return;
+    }catch(e){
+      console.warn("[StorageQueue] upload imediato falhou, vai para fila:", e?.message||e);
+    }
+  }
+
+  // fallback: salva job leve (reconstrói depois a partir do Firestore)
   const q = loadQ();
-  q.push({ t: Date.now(), tenantId, docId, dataUrl, filename });
+  q.push({ t: Date.now(), tenantId, docId, filename, source: "rebuild" });
   saveQ(q);
+  console.log("[StorageQueue] job enfileirado (rebuild):", docId);
 }
 
-/** Roda periodicamente e quando volta a conexão. */
+/** Drena a fila periodicamente e quando voltar a conexão. */
 export function drainStorageQueueWhenOnline(){
   const run = async ()=>{
     let q = loadQ();
@@ -51,29 +93,35 @@ export function drainStorageQueueWhenOnline(){
     const rest = [];
     for (const job of q){
       try{
-        // 🔹 Caminho padronizado
-        const path = `tenants/${job.tenantId}/pedidos/${job.docId}/pedido.pdf`;
-        const r = ref(storage, path);
+        let blob = null;
+        let filename = job.filename || "pedido.pdf";
 
-        // data_url → uploadString
-        await uploadString(r, job.dataUrl, 'data_url', { contentType: 'application/pdf' });
+        if (job.source === "rebuild"){
+          // Reconstroi o PDF lendo o pedido salvo no Firestore
+          const { getTenantId } = await import("./firebase.js");
+          const { doc, getDoc } =
+            await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
+          const { construirPDFDePedidoFirestore } = await import("./storageQueueHelpers.js");
+          // construirPDFDePedidoFirestore: helper isolado p/ evitar import circular do pdf.js aqui.
 
-        // 🔹 Atualiza metadados no Firestore
-        const pedidosCol = collection(db, "tenants", job.tenantId, "pedidos");
-        await setDoc(
-          doc(pedidosCol, job.docId),
-          {
-            pdfPath: path,
-            pdfName: job.filename || 'pedido.pdf',
-            pdfCreatedAt: serverTimestamp()
-          },
-          { merge: true }
-        );
+          const tenantId = job.tenantId || (await getTenantId());
+          const ref = doc(db, "tenants", tenantId, "pedidos", job.docId);
+          const snap = await getDoc(ref);
+          if (!snap.exists()) throw new Error("Doc do pedido não encontrado para rebuild.");
+          const pedido = snap.data() || {};
 
-        console.log("[StorageQueue] enviado:", path);
+          const { blob: rebuiltBlob, nomeArq } = await construirPDFDePedidoFirestore(pedido);
+          blob = rebuiltBlob; if (nomeArq) filename = nomeArq;
+        } else if (job.dataUrl){
+          // (modo antigo – compat) se algum job antigo ainda existe com dataUrl:
+          const res = await fetch(job.dataUrl); blob = await res.blob();
+        }
+
+        if (!blob) throw new Error("Blob ausente no job para upload.");
+        await uploadAndTag({ tenantId: job.tenantId, docId: job.docId, blob, filename });
       }catch(e){
         console.warn("[StorageQueue] falhou, mantém na fila:", e?.message || e);
-        rest.push(job);
+        rest.push(job); // mantém para tentar depois
       }
     }
     saveQ(rest);
