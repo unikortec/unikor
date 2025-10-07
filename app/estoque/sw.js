@@ -1,4 +1,4 @@
-// Service Worker — UNIKOR Estoque V1.0.3
+// Service Worker — UNIKOR Estoque V1.0.4
 const APP_VERSION  = '1.0.4';
 const CACHE_TAG    = 'estoque';
 const STATIC_CACHE = `${CACHE_TAG}-static-${APP_VERSION}`;
