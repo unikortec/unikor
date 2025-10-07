@@ -1,15 +1,26 @@
+// app/pedidos/js/app.js
 import { up } from './utils.js';
 import { initItens, adicionarItem, getItens } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
 
-// >>> novos imports p/ salvar idempotente e garantir frete
+// >>> salvar idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF } from './frete.js';
-import { waitForLogin } from './firebase.js';
 
-console.log('App inicializado');
+// >>> precisamos do app/db/getTenantId + helpers do Firestore p/ registrar o PDF
+import {
+  waitForLogin, app, db, getTenantId,
+  doc, setDoc, serverTimestamp
+} from './firebase.js';
 
-/* ======== Qualidade de digitação ======== */
+// >>> Storage SDK (upload do PDF para o bucket)
+import {
+  getStorage, ref, uploadBytes
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+
+console.log('[APP] Pedidos inicializado');
+
+/* ===================== Qualidade de digitação ===================== */
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
@@ -25,7 +36,7 @@ function habilitarEspacoNoCliente() {
   });
 }
 
-/* ======== Leitura da tela ======== */
+/* ===================== Helpers ===================== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
@@ -49,7 +60,7 @@ function validarAntesGerar() {
   return true;
 }
 
-/* ======== Pagamento + Payload ======== */
+/* ===================== Pagamento + Payload ===================== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -112,7 +123,7 @@ function montarPayloadPedido(){
   };
 }
 
-/* ======== Persistência idempotente ======== */
+/* ===================== Persistência idempotente ===================== */
 async function persistirPedidoSeNecessario(){
   await waitForLogin();
   await ensureFreteBeforePDF();
@@ -120,18 +131,21 @@ async function persistirPedidoSeNecessario(){
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
 
+  // evita reenvio imediato
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
 
   try{
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
+    // <- necessário para upload/reimpressão do último
+    if (id) localStorage.setItem('unikor:lastPedidoId', id);
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
-// >>> versão com limite de tempo (não trava UI)
+// versão com limite de tempo (não trava a UI em mobile/desktop)
 async function persistirComTimeout(ms=4000){
   try{
     await Promise.race([
@@ -141,7 +155,38 @@ async function persistirComTimeout(ms=4000){
   }catch(_){} // segue adiante
 }
 
-/* ======== Ações ======== */
+/* ===================== Upload do PDF (Storage) ===================== */
+// Garante 1 upload por pedido (evita duplicar ao salvar/compartilhar)
+async function uploadPdfParaStorage(blob, filename){
+  try{
+    const tenantId = await getTenantId();
+    const docId = localStorage.getItem('unikor:lastPedidoId');
+    if (!tenantId || !docId) return;
+
+    // guarda último id que já subiu (não duplica)
+    const lastUp = localStorage.getItem('unikor:lastUploadedId');
+    if (lastUp === docId) return;
+
+    const storage = getStorage(app);
+    const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
+
+    await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
+
+    await setDoc(
+      doc(db, "tenants", tenantId, "pedidos", docId),
+      { pdfPath: path, pdfCreatedAt: serverTimestamp() },
+      { merge: true }
+    );
+
+    localStorage.setItem('unikor:lastUploadedId', docId);
+    console.info('[Storage] PDF enviado:', path);
+  }catch(e){
+    // não bloqueia o fluxo no mobile/desktop
+    console.warn('[Storage] Falha no upload:', e?.message || e);
+  }
+}
+
+/* ===================== Ações ===================== */
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
@@ -153,7 +198,7 @@ async function gerarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
   showOverlay();
   try {
-    await persistirComTimeout(4000);      // <<< não deixa travar
+    await persistirComTimeout(4000);
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
   } catch (e) {
@@ -169,7 +214,7 @@ async function gerarPDF() {
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-  const { salvarPDFLocal } = await import('./pdf.js');
+  const { salvarPDFLocal, construirPDF } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -178,8 +223,15 @@ async function salvarPDF() {
   showOverlay();
   try {
     await persistirComTimeout(4000);
+
+    // salva local
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
+
+    // gera o mesmo PDF (blob) e sobe p/ Storage (1x por pedido)
+    const { blob, nomeArq } = await construirPDF();
+    await uploadPdfParaStorage(blob, nomeArq);
+
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
@@ -193,7 +245,7 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-  const { compartilharPDFNativo } = await import('./pdf.js');
+  const { compartilharPDFNativo, construirPDF } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -202,6 +254,11 @@ async function compartilharPDF() {
   showOverlay();
   try {
     await persistirComTimeout(4000);
+
+    // gera o blob e já sobe (não duplica por causa do guard)
+    const { blob, nomeArq } = await construirPDF();
+    await uploadPdfParaStorage(blob, nomeArq);
+
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
@@ -216,7 +273,30 @@ async function compartilharPDF() {
   }
 }
 
-/* ======== Inicialização ======== */
+/* ===================== Reimprimir último ===================== */
+async function reimprimirUltimoPedidoSalvo() {
+  const id = localStorage.getItem('unikor:lastPedidoId');
+  if (!id) { alert('Nenhum pedido salvo nesta sessão.'); return; }
+
+  const btn = document.getElementById('btnReimprimirUltimo');
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Reimprimindo...'; }
+  showOverlay();
+  try {
+    const { gerarPDFPreviewDePedidoFirestore } = await import('./pdf.js');
+    await gerarPDFPreviewDePedidoFirestore(id);
+    toastOk('Reimpressão gerada');
+  } catch (e) {
+    console.error('[Reimpressão] Erro:', e);
+    toastErro('Erro ao reimprimir');
+    alert('Erro ao reimprimir: ' + (e.message || e));
+  } finally {
+    hideOverlay();
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+  }
+}
+
+/* ===================== Inicialização ===================== */
 document.addEventListener('DOMContentLoaded', () => {
   initItens();
 
@@ -231,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnGerarPdf')?.addEventListener('click', gerarPDF);
   document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
   document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
+  document.getElementById('btnReimprimirUltimo')?.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
   const inputCliente = document.getElementById('cliente');
   if (inputCliente) inputCliente.addEventListener('input', () => formatarNome(inputCliente));
@@ -238,9 +319,10 @@ document.addEventListener('DOMContentLoaded', () => {
   habilitarEspacoNoCliente();
 });
 
-// exposição
+// exposição p/ HTML
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
+window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
 
-console.log('App configurado completamente');
+console.log('[APP] Configurado (desktop + mobile ok)');
