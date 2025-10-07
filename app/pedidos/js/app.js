@@ -14,7 +14,7 @@ import {
 } from './pdf.js';
 
 // Storage (cache/fila p/ reimpressão turbo)
-import { queueStorageUpload, drainStorageQueueWhenOnline } from './storageQueue.js';
+import { queueStorageUpload, drainStorageQueueWhenOnline, drainOnce } from './storageQueue.js';
 
 // SUGESTÕES (últimos itens e preços do cliente)
 import {
@@ -142,27 +142,23 @@ async function salvarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
-    // 1) salva pedido (gera/atualiza id)
     await persistirPedidoSeNecessario();
 
-    // 2) salva local (download)
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
 
-    // 3) cache local + fila p/ Storage
     try {
-      const { construirPDF } = await import('./pdf.js'); // <- geramos o blob de novo para cache/queue
+      const { construirPDF } = await import('./pdf.js');
       const { blob, nomeArq } = await construirPDF();
 
-      // cache p/ reimpressão instantânea
       const docId = localStorage.getItem('unikor:lastPedidoId');
       const dataUrl = await blobToDataURL(blob);
       if (docId) cacheLastPdfDataUrl(docId, dataUrl, nomeArq);
 
-      // fila: envia ao Firebase Storage e anota pdfPath no Firestore
       const tenantId = await getTenantId();
       if (tenantId && docId) {
         await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
+        await drainOnce(); // envio imediato
         drainStorageQueueWhenOnline();
       }
     } catch (err) {
@@ -186,16 +182,15 @@ async function compartilharPDF() {
   try {
     await persistirPedidoSeNecessario();
 
-    // Gera o mesmo blob/nome (para já tentar subir ao Storage também)
     const { construirPDF } = await import('./pdf.js');
     const { blob, nomeArq } = await construirPDF();
 
-    // Tenta upload imediato (ou enfileira)
     try{
       const tenantId = await getTenantId();
       const docId = localStorage.getItem('unikor:lastPedidoId');
       if (tenantId && docId){
         await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
+        await drainOnce(); // envio imediato
         drainStorageQueueWhenOnline();
       }
     }catch(e){
@@ -215,7 +210,7 @@ async function compartilharPDF() {
   }
 }
 
-// ===== Reimpressão turbo: cache -> Storage -> fallback reconstrução =====
+// ===== Reimpressão turbo =====
 async function reimprimirUltimoPedidoSalvo() {
   const btn = document.getElementById('btnReimprimirUltimo');
   if (!btn) return;
@@ -227,7 +222,6 @@ async function reimprimirUltimoPedidoSalvo() {
   btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
   showOverlay();
   try {
-    // 1) cache local instantâneo
     const cached = localStorage.getItem(`unikor:lastPdfDataUrl_${id}`);
     if (cached) {
       window.open(cached, '_blank', 'noopener,noreferrer');
@@ -235,7 +229,6 @@ async function reimprimirUltimoPedidoSalvo() {
       return;
     }
 
-    // 2) baixar do Storage se já existe pdfPath
     const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js');
     const { getStorage, ref, getDownloadURL } =
       await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js');
@@ -254,7 +247,6 @@ async function reimprimirUltimoPedidoSalvo() {
       }
     }
 
-    // 3) fallback: reconstruir do Firestore
     await waitForLogin();
     await gerarPDFPreviewDePedidoFirestore(id);
     toastOk('Reimpressão (reconstruída)');
@@ -267,7 +259,7 @@ async function reimprimirUltimoPedidoSalvo() {
   }
 }
 
-/* ====== Plano B: hidratar datalist de clientes mesmo sem abrir o modal ====== */
+/* ====== Plano B: datalist clientes ====== */
 async function hydrateListaClientesFallback(){
   try{
     const { clientesMaisUsados } = await import('./clientes.js');
@@ -284,7 +276,7 @@ async function hydrateListaClientesFallback(){
   }
 }
 
-/* ===================== Autosave/Restore dos ITENS (iOS-safe) ===================== */
+/* ====== Autosave (iOS-safe) ====== */
 const DRAFT_KEY = 'unikor:pedido:draftItens';
 
 function salvarRascunhoItens(){
@@ -296,21 +288,18 @@ function salvarRascunhoItens(){
 function restaurarRascunhoItensSeVazio(){
   try{
     const atual = getItens();
-    if (Array.isArray(atual) && atual.length) return; // já tem itens
+    if (Array.isArray(atual) && atual.length) return;
     const raw = sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     const lista = JSON.parse(raw);
     if (Array.isArray(lista) && lista.length){
-      // adiciona respeitando a API existente
-      lista.forEach(obj => {
-        try { adicionarItem(obj); } catch { adicionarItem(); }
-      });
+      lista.forEach(obj => { try { adicionarItem(obj); } catch { adicionarItem(); } });
       setTimeout(() => atualizarFreteUI(), 30);
     }
   }catch{}
 }
 
-/* ===================== Init ===================== */
+/* ====== Init ====== */
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[APP] DOM carregado');
 
@@ -318,13 +307,11 @@ document.addEventListener('DOMContentLoaded', () => {
   atualizarFreteAoEditarItem(atualizarFreteUI);
   setTimeout(() => atualizarFreteUI(), 50);
 
-  // Observa mudanças nos itens para autosave
   const itensContainer = document.getElementById('itens');
   if (itensContainer){
     itensContainer.addEventListener('input', salvarRascunhoItens, { passive:true });
     itensContainer.addEventListener('change', salvarRascunhoItens, { passive:true });
   }
-  // Tenta restaurar caso a lista esteja vazia (iOS retomando aba)
   restaurarRascunhoItensSeVazio();
 
   const btnAdicionar = document.getElementById('adicionarItemBtn');
@@ -334,7 +321,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
   document.getElementById('btnReimprimirUltimo')?.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
-  // Sanitiza cliente (mantém espaços)
   let inputCliente = document.getElementById('cliente');
   if (inputCliente) {
     const val = inputCliente.value;
@@ -345,25 +331,21 @@ document.addEventListener('DOMContentLoaded', () => {
     inputCliente.addEventListener('input', () => formatarNome(inputCliente));
   }
 
-  // Hidrata datalist mesmo sem abrir o modal
   hydrateListaClientesFallback();
 
-  // Sugestões por cliente (itens + último preço)
   const clienteInput = document.getElementById('cliente');
   async function carregarSugestoesDoClienteAtual(){
     const nomeUpper = String(clienteInput?.value || '').trim().toUpperCase();
     if (!nomeUpper) return;
     await carregarSugestoesParaCliente(nomeUpper);
-    // liga o datalist nos inputs de produto já existentes
     document.querySelectorAll('#itens .item .produto').forEach(bindAutoCompleteNoInputProduto);
   }
   if (clienteInput){
     clienteInput.addEventListener('change', carregarSugestoesDoClienteAtual);
     clienteInput.addEventListener('blur', carregarSugestoesDoClienteAtual);
-    carregarSugestoesDoClienteAtual(); // tentativa inicial
+    carregarSugestoesDoClienteAtual();
   }
 
-  // Auto-bind para inputs de produto criados dinamicamente
   if (itensContainer){
     itensContainer.addEventListener('focusin', (ev) => {
       if (ev.target && ev.target.classList && ev.target.classList.contains('produto')){
@@ -372,9 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // inicia o drenador da fila (idempotente)
   drainStorageQueueWhenOnline();
 });
 
-// Exposição opcional
 window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
