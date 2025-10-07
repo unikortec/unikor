@@ -245,7 +245,9 @@ async function salvarPDF() {
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-  const { compartilharPDFNativo, construirPDF } = await import('./pdf.js');
+
+  // importações leves só quando necessário
+  const { construirPDF } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -253,20 +255,28 @@ async function compartilharPDF() {
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
   showOverlay();
   try {
-    await persistirComTimeout(4000);
-
-    // gera o blob e já sobe (não duplica por causa do guard)
+    // 1) CONSTRÓI JÁ (mantém user-activation)
     const { blob, nomeArq } = await construirPDF();
-    await uploadPdfParaStorage(blob, nomeArq);
 
-    const res = await compartilharPDFNativo();
+    // 2) COMPARTILHA IMEDIATO
+    const { compartilharComBlob } = await import('./pdf.js');
+    const res = await compartilharComBlob(blob, nomeArq);
+
+    // 3) EM PARALELO: persiste e sobe pro Storage (não bloquear o share)
+    (async () => {
+      try {
+        await persistirComTimeout(4000);
+        await uploadPdfParaStorage(blob, nomeArq);
+      } catch (_) {}
+    })();
+
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
-    else                        toastOk('Abrimos o PDF para envio');
+    else                        toastOk('Abrimos o PDF (fallback)');
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
-    alert('Erro ao compartilhar PDF: ' + e.message);
+    alert('Erro ao compartilhar PDF: ' + (e.message || e));
   } finally {
     hideOverlay();
     botao.disabled = false; botao.textContent = textoOriginal;
