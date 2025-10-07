@@ -185,6 +185,23 @@ async function compartilharPDF() {
   showOverlay();
   try {
     await persistirPedidoSeNecessario();
+
+    // Gera o mesmo blob/nome (para já tentar subir ao Storage também)
+    const { construirPDF } = await import('./pdf.js');
+    const { blob, nomeArq } = await construirPDF();
+
+    // Tenta upload imediato (ou enfileira)
+    try{
+      const tenantId = await getTenantId();
+      const docId = localStorage.getItem('unikor:lastPedidoId');
+      if (tenantId && docId){
+        await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
+        drainStorageQueueWhenOnline();
+      }
+    }catch(e){
+      console.warn('[PDF] queue/upload ao compartilhar falhou (segue):', e?.message||e);
+    }
+
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
