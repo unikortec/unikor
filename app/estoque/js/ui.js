@@ -40,7 +40,7 @@ export async function bootFromFirestoreIfNeeded() {
       if (Object.keys(snapData).length) {
         ultimo.value = {
           dateISO: new Date().toISOString(),
-          dateLabel: "",
+          dateLabel: new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' }), // preenche rótulo
           data: snapData,
         };
         localStorage.setItem("estoque_v3_last_report", JSON.stringify(ultimo.value));
@@ -52,16 +52,28 @@ export async function bootFromFirestoreIfNeeded() {
 }
 
 export function mountUI() {
-  // logo → volta para /app/
+  // LOGO → voltar página anterior (fallback /app/) sem quebrar tela de login
   const logoEl = document.getElementById("logoHome");
-  if (logoEl) logoEl.onclick = ()=>{ window.location.href = "/app/"; };
+  if (logoEl) {
+    logoEl.onclick = ()=>{
+      const before = location.href;
+      if (history.length > 1) {
+        history.back();
+        // se por algum motivo voltar para a mesma página, força home
+        setTimeout(()=>{ if (location.href === before) window.location.replace("/app/"); }, 400);
+      } else {
+        window.location.replace("/app/");
+      }
+    };
+  }
 
   const buscaEl = $("#busca");
   if (buscaEl) {
-    buscaEl.addEventListener("input", (e) => {
+    const onInput = (e)=>{
       termoBusca = (e.target.value || "").trim().toUpperCase();
       render();
-    });
+    };
+    buscaEl.addEventListener("input", onInput, { passive:true });
   }
 
   const uploadBtn = $("#btnPrecoUpload");
@@ -72,7 +84,7 @@ export function mountUI() {
     inputUpload.style.display = "none";
     document.body.appendChild(inputUpload);
 
-    uploadBtn.onclick = async () => {
+    uploadBtn.onclick = async (ev) => {
       const querModelo = confirm(
         "OK para baixar o modelo de preços e mínimos.\nCancelar para enviar uma planilha."
       );
@@ -148,7 +160,9 @@ export function render() {
       const row = linhaProduto(fam.nome, p, idx);
       if (row) body.appendChild(row);
     }
-    body.appendChild(document.createElement("div")).className = "divider";
+    const divider = document.createElement("div");
+    divider.className = "divider";
+    body.appendChild(divider);
     body.appendChild(blocoNovaLinhaProduto(fam.nome, idx));
 
     head.append(title, meta);
@@ -162,11 +176,28 @@ function linhaProduto(fam, prod, famIdx) {
   if (termoBusca && !String(prod).toUpperCase().includes(termoBusca)) return null;
 
   const wrap = document.createElement("div");
-  wrap.className = "row";
+  wrap.className = "row row-produto";
 
   const nome = document.createElement("div");
   nome.className = "name";
   nome.innerHTML = `<strong>${prod}:</strong>`;
+
+  // X pequeno para excluir itens CUSTOM (com confirmação)
+  const canDelete = !PADROES[fam]?.has(prod);
+  if (canDelete){
+    const delSmall = document.createElement('button');
+    delSmall.className = 'btn xs btn-del-small';
+    delSmall.textContent = '×';
+    delSmall.title = 'Excluir item (custom)';
+    delSmall.onclick = ()=>{
+      if (confirm(`Excluir "${prod}" desta família? Essa ação remove apenas o item custom.`)) {
+        const ok = deleteIfCustom(fam, prod);
+        if (ok) wrap.remove();
+        else alert("Este item faz parte do catálogo padrão e não pode ser excluído.");
+      }
+    };
+    nome.appendChild(delSmall);
+  }
 
   const last = document.createElement("div");
   last.className = "last";
