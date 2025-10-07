@@ -498,3 +498,5 @@ export async function gerarPDFPreviewDePedidoFirestore(pedidoId){
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 30000);
 }
+// Exposto para a fila reconstruir PDF sem duplicar código:
+export const __construirPDFBasePublic = construirPDFBase;
