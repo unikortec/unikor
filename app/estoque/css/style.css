@@ -127,6 +127,19 @@ header.hdr{
   border-radius:8px;
 }
 
+/* ===== Paleta no cabeçalho de cada família (voltou!) ===== */
+.fam-0  .fam-head{background:var(--fam0-strong)}
+.fam-1  .fam-head{background:var(--fam1-strong)}
+.fam-2  .fam-head{background:var(--fam2-strong)}
+.fam-3  .fam-head{background:var(--fam3-strong)}
+.fam-4  .fam-head{background:var(--fam4-strong)}
+.fam-5  .fam-head{background:var(--fam5-strong)}
+.fam-6  .fam-head{background:var(--fam6-strong)}
+.fam-7  .fam-head{background:var(--fam7-strong)}
+.fam-8  .fam-head{background:var(--fam8-strong)}
+.fam-9  .fam-head{background:var(--fam9-strong)}
+.fam-10 .fam-head{background:var(--fam10-strong)}
+
 /* Alternância de fundo por família — apenas nas linhas de produto, não no divider */
 .fam-0 .fam-body .row-produto:nth-of-type(even){background:var(--fam0-soft)}
 .fam-1 .fam-body .row-produto:nth-of-type(even){background:var(--fam1-soft)}
