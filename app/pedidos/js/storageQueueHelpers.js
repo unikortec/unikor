@@ -3,31 +3,75 @@
 // sem importar diretamente pdf.js (evita import circular).
 import { __construirPDFBasePublic as construirPDFBase } from './pdf.js';
 
+// ==== util de moeda/precisão igual ao PDF ====
+// "12,34" | "12.34" -> 1234 (centavos)
+function strToCents(str){
+  const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
+  if (!s) return 0;
+  return Math.round(Number(s) * 100);
+}
+// quantidade com até 3 casas (kg) -> milésimos
+function toThousandths(n){
+  return Math.round(Number(n || 0) * 1000);
+}
+
 /**
  * Recebe o objeto "pedido" (snap.data()) e monta o PDF usando o miolo base.
  * Retorna { blob, nomeArq }.
  */
 export async function construirPDFDePedidoFirestore(pedidoDocData){
   const p = pedidoDocData || {};
+
   const itens = Array.isArray(p.itens) ? p.itens.map(it=>{
     const produto = String(it.produto||'').trim();
     const tipo = String(it.tipo||'KG').toUpperCase();
 
-    // preferimos total salvo; se não houver, calculamos:
+    // Preferimos o total salvo; se não houver, recalculamos com a mesma regra do PDF
     const precoCents = Math.round(Number(it.precoUnit ?? it.preco ?? 0) * 100);
+
+    // preserva o que estava salvo (texto simples é opcional nos docs antigos)
+    const qtdNum = Number(it.quantidade ?? 0);
     const qtdTxt = String(it.quantidade ?? 0);
-    const qtdMil = Math.round(Number(it.quantidade ?? 0) * 1000);
+
+    // total inicial (se veio salvo)
     let totalCents = Math.round(Number(it.total ?? 0) * 100);
+
     if (!totalCents){
-      if (tipo === 'KG') totalCents = Math.round((qtdMil * precoCents) / 1000);
-      else               totalCents = Math.round((Number(qtdTxt) || 0) * precoCents);
+      if (tipo === 'KG') {
+        // milésimos de kg * preço
+        const qtdMil = toThousandths(qtdNum);
+        totalCents = Math.round((qtdMil * precoCents) / 1000);
+      } else {
+        // tipo UN — tenta detectar peso no nome (120g, 1.2kg, etc) como no PDF
+        let pesoTotalKgMil = 0; // milésimos de kg
+        const s = produto.toLowerCase().replace(',', '.').replace(/\s+/g,' ');
+        const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
+        let m, last=null; while((m=re.exec(s))!==null) last=m;
+        if (last){
+          const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
+          const val = parseFloat(raw);
+          if (isFinite(val) && val>0){
+            const unit = last[2].toLowerCase();
+            const kgUn = (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
+            pesoTotalKgMil = Math.round(kgUn * 1000 * (qtdNum || 0));
+          }
+        }
+        if (pesoTotalKgMil > 0) {
+          totalCents = Math.round((pesoTotalKgMil * precoCents) / 1000);
+        } else {
+          // fallback: UN * preço
+          totalCents = Math.round((qtdNum || 0) * precoCents);
+        }
+      }
     }
 
     return {
       produto, tipo,
+      // para o motor do PDF:
       qtdTxt,
       precoTxt: (Number(precoCents)/100).toFixed(2).replace('.', ','),
-      qtdMil, precoCents, totalCents,
+      qtdMil: toThousandths(qtdNum),
+      precoCents, totalCents,
       obs: String(it.obs||'').trim(),
       _pesoTotalKgMil: 0
     };
@@ -51,15 +95,7 @@ export async function construirPDFDePedidoFirestore(pedidoDocData){
     freteCobravel: Number(p.frete?.valorCobravel ?? p.frete?.valorBase ?? 0)
   };
 
-  const { doc } = construirPDFBase(data);
-  const blob = doc.output('blob');
-
-  // mesmo gerador de nome do pdf.js
-  const [ano,mes,dia] = String(data.entregaISO||'').split('-');
-  const aa=(ano||'').slice(-2)||'AA';
-  const hh=(data.hora||'').slice(0,2)||'HH';
-  const mm=(data.hora||'').slice(3,5)||'MM';
-  const nomeArq = `${(String(data.cliente||'Cliente').split(/\s+/).slice(0,2).map(s=>s[0]?.toUpperCase()+s.slice(1).toLowerCase()).join('')||'Cliente').replace(/[^A-Za-z0-9]/g,'')}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
-
+  // usar o blob/nome que o próprio miolo já retorna (evita re-serializar)
+  const { blob, nomeArq } = construirPDFBase(data);
   return { blob, nomeArq };
 }
