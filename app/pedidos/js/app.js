@@ -1,55 +1,55 @@
-// app/pedidos/js/app.js
 import { up } from './utils.js';
-import { initItens, adicionarItem, getItens, atualizarFreteAoEditarItem } from './itens.js';
+import { initItens, adicionarItem, getItens } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
+
+// >>> novos imports p/ salvar idempotente e garantir frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
-import { getFreteAtual, ensureFreteBeforePDF, atualizarFreteUI } from './frete.js';
-import { waitForLogin, db, app, getTenantId } from './firebase.js';
+import { getFreteAtual, ensureFreteBeforePDF } from './frete.js';
+import { waitForLogin } from './firebase.js';
 
-// PDF
-import {
-  salvarPDFLocal,
-  compartilharPDFNativo,
-  gerarPDFPreviewDePedidoFirestore
-} from './pdf.js';
+console.log('App inicializado');
 
-// Storage (cache/fila p/ reimpressão turbo)
-import { queueStorageUpload, drainStorageQueueWhenOnline, drainOnce } from './storageQueue.js';
-
-// SUGESTÕES (últimos itens e preços do cliente)
-import {
-  carregarSugestoesParaCliente,
-  bindAutoCompleteNoInputProduto
-} from './sugestoes.js';
-
-console.log('[APP] Pedidos inicializado');
-
-/* ===================== Helpers ===================== */
+/* ======== Qualidade de digitação ======== */
 function formatarNome(input) {
   if (!input) return;
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
 }
+function habilitarEspacoNoCliente() {
+  const el = document.getElementById('cliente');
+  if (!el) return;
+  ['keydown','keypress','keyup','beforeinput'].forEach(type=>{
+    el.addEventListener(type, (ev)=>{
+      if ((ev.key === ' ') || (ev.data === ' ')) ev.stopImmediatePropagation();
+    }, true);
+  });
+}
+
+/* ======== Leitura da tela ======== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 
-// blob -> dataURL (para cache de reimpressão)
-async function blobToDataURL(blob){
-  return await new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result));
-    r.onerror = rej;
-    r.readAsDataURL(blob);
-  });
-}
-function cacheLastPdfDataUrl(docId, dataUrl, nomeArq){
-  try {
-    localStorage.setItem(`unikor:lastPdfDataUrl_${docId}`, dataUrl);
-    localStorage.setItem(`unikor:lastPdfName_${docId}`, nomeArq || 'pedido.pdf');
-  } catch {}
+function coletarDadosFormulario() {
+  return {
+    cliente: document.getElementById('cliente')?.value || '',
+    telefone: document.getElementById('contato')?.value || '',
+    endereco: document.getElementById('endereco')?.value || '',
+    observacoes: document.getElementById('obsGeral')?.value || '',
+    itens: getItens()
+  };
 }
 
-/* ===================== Pagamento ===================== */
+function validarAntesGerar() {
+  const dados = coletarDadosFormulario();
+  if (!dados.cliente.trim()) { alert('Informe o nome do cliente'); return false; }
+  const itens = getItens();
+  if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
+    alert('Adicione pelo menos um item'); return false;
+  }
+  return true;
+}
+
+/* ======== Pagamento + Payload ======== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -61,7 +61,6 @@ function lerPagamento(){
   return p;
 }
 
-/* ===================== Payload ===================== */
 function montarPayloadPedido(){
   const itens = getItens().map(i=>{
     const q = num(i.quantidade);
@@ -78,9 +77,11 @@ function montarPayloadPedido(){
   }).filter(i=> i.produto || i.quantidade>0 || i.total>0);
 
   const subtotal = +(itens.reduce((s,i)=>s + num(i.total), 0).toFixed(2));
+
   const frete = getFreteAtual() || { valorBase:0, valorCobravel:0, isento:false };
   const isentoMan = !!document.getElementById('isentarFrete')?.checked;
   const freteCobrado = isentoMan ? 0 : num(frete.valorCobravel || frete.valorBase || 0);
+
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || 'ENTREGA';
 
   return {
@@ -97,7 +98,7 @@ function montarPayloadPedido(){
     frete: {
       isento: !!(frete.isento || isentoMan),
       valorBase: num(frete.valorBase || 0),
-      valorCobravel: freteCobrado
+      valorCobrado: freteCobrado
     },
     totalPedido: +(subtotal + freteCobrado).toFixed(2),
     pagamento: lerPagamento(),
@@ -111,7 +112,7 @@ function montarPayloadPedido(){
   };
 }
 
-/* ===================== Persistência ===================== */
+/* ======== Persistência idempotente ======== */
 async function persistirPedidoSeNecessario(){
   await waitForLogin();
   await ensureFreteBeforePDF();
@@ -123,80 +124,84 @@ async function persistirPedidoSeNecessario(){
 
   try{
     const { id } = await savePedidoIdempotente(payload);
-    console.info('[PEDIDOS] salvo em Firestore:', id);
+    console.info('[PEDIDOS] salvo:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
-    localStorage.setItem('unikor:lastPedidoId', id);
-
-    // garante que a fila (Storage) rode quando houver rede
-    drainStorageQueueWhenOnline();
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
-/* ===================== Ações PDF ===================== */
+// >>> versão com limite de tempo (não trava UI)
+async function persistirComTimeout(ms=4000){
+  try{
+    await Promise.race([
+      persistirPedidoSeNecessario(),
+      new Promise(resolve => setTimeout(resolve, ms))
+    ]);
+  }catch(_){} // segue adiante
+}
+
+/* ======== Ações ======== */
+async function gerarPDF() {
+  const botao = document.getElementById('btnGerarPdf');
+  if (!botao) return;
+  const { gerarPDFPreview } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
+  const textoOriginal = botao.textContent;
+  botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
+  showOverlay();
+  try {
+    await persistirComTimeout(4000);      // <<< não deixa travar
+    await gerarPDFPreview();
+    toastOk('PDF gerado (preview)');
+  } catch (e) {
+    console.error('[PDF] Erro ao gerar:', e);
+    toastErro('Erro ao gerar PDF');
+    alert('Erro ao gerar PDF: ' + e.message);
+  } finally {
+    hideOverlay();
+    botao.disabled = false; botao.textContent = textoOriginal;
+  }
+}
+
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
-  const t = botao.textContent;
+  const { salvarPDFLocal } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
+  const textoOriginal = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
-    await persistirPedidoSeNecessario();
-
+    await persistirComTimeout(4000);
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
-
-    try {
-      const { construirPDF } = await import('./pdf.js');
-      const { blob, nomeArq } = await construirPDF();
-
-      const docId = localStorage.getItem('unikor:lastPedidoId');
-      const dataUrl = await blobToDataURL(blob);
-      if (docId) cacheLastPdfDataUrl(docId, dataUrl, nomeArq);
-
-      const tenantId = await getTenantId();
-      if (tenantId && docId) {
-        await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
-        await drainOnce(); // envio imediato
-        drainStorageQueueWhenOnline();
-      }
-    } catch (err) {
-      console.warn('[PDF] cache/queue falhou (segue ok):', err);
-    }
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
     toastErro('Erro ao salvar PDF');
+    alert('Erro ao salvar PDF: ' + e.message);
   } finally {
     hideOverlay();
-    botao.disabled = false; botao.textContent = t;
+    botao.disabled = false; botao.textContent = textoOriginal;
   }
 }
 
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
-  const t = botao.textContent;
+  const { compartilharPDFNativo } = await import('./pdf.js');
+
+  if (!validarAntesGerar()) return;
+
+  const textoOriginal = botao.textContent;
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
   showOverlay();
   try {
-    await persistirPedidoSeNecessario();
-
-    const { construirPDF } = await import('./pdf.js');
-    const { blob, nomeArq } = await construirPDF();
-
-    try{
-      const tenantId = await getTenantId();
-      const docId = localStorage.getItem('unikor:lastPedidoId');
-      if (tenantId && docId){
-        await queueStorageUpload({ tenantId, docId, blob, filename: nomeArq });
-        await drainOnce(); // envio imediato
-        drainStorageQueueWhenOnline();
-      }
-    }catch(e){
-      console.warn('[PDF] queue/upload ao compartilhar falhou (segue):', e?.message||e);
-    }
-
+    await persistirComTimeout(4000);
     const res = await compartilharPDFNativo();
     if (res.compartilhado)      toastOk('PDF compartilhado');
     else if (res.cancelado)     toastOk('Compartilhamento cancelado');
@@ -204,157 +209,38 @@ async function compartilharPDF() {
   } catch (e) {
     console.error('[PDF] Erro ao compartilhar:', e);
     toastErro('Erro ao compartilhar PDF');
+    alert('Erro ao compartilhar PDF: ' + e.message);
   } finally {
     hideOverlay();
-    botao.disabled = false; botao.textContent = t;
+    botao.disabled = false; botao.textContent = textoOriginal;
   }
 }
 
-// ===== Reimpressão turbo =====
-async function reimprimirUltimoPedidoSalvo() {
-  const btn = document.getElementById('btnReimprimirUltimo');
-  if (!btn) return;
-
-  const id = localStorage.getItem('unikor:lastPedidoId');
-  if (!id) { alert('Ainda não há pedido salvo nesta sessão.'); return; }
-
-  const original = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Reimprimindo...';
-  showOverlay();
-  try {
-    const cached = localStorage.getItem(`unikor:lastPdfDataUrl_${id}`);
-    if (cached) {
-      window.open(cached, '_blank', 'noopener,noreferrer');
-      toastOk('Reimpressão (cache local)');
-      return;
-    }
-
-    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js');
-    const { getStorage, ref, getDownloadURL } =
-      await import('https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js');
-
-    const tenantId = await getTenantId();
-    const docRef = doc(db, "tenants", tenantId, "pedidos", id);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      const d = snap.data() || {};
-      if (d.pdfPath) {
-        const storage = getStorage(app);
-        const url = await getDownloadURL(ref(storage, d.pdfPath));
-        window.open(url, '_blank', 'noopener,noreferrer');
-        toastOk('Reimpressão (arquivo do Storage)');
-        return;
-      }
-    }
-
-    await waitForLogin();
-    await gerarPDFPreviewDePedidoFirestore(id);
-    toastOk('Reimpressão (reconstruída)');
-  } catch (e) {
-    console.error('[Reimpressão] Erro:', e);
-    toastErro('Erro ao reimprimir');
-  } finally {
-    hideOverlay();
-    btn.disabled = false; btn.textContent = original;
-  }
-}
-
-/* ====== Plano B: datalist clientes ====== */
-async function hydrateListaClientesFallback(){
-  try{
-    const { clientesMaisUsados } = await import('./clientes.js');
-    const list = document.getElementById('listaClientes');
-    if (!list) return;
-    const nomes = await clientesMaisUsados(80);
-    list.innerHTML = '';
-    nomes.forEach(n=>{
-      const o = document.createElement('option');
-      o.value = n; list.appendChild(o);
-    });
-  }catch(e){
-    console.warn('[APP] Falha ao hidratar datalist (fallback):', e?.message||e);
-  }
-}
-
-/* ====== Autosave (iOS-safe) ====== */
-const DRAFT_KEY = 'unikor:pedido:draftItens';
-
-function salvarRascunhoItens(){
-  try{
-    const itens = getItens();
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(itens || []));
-  }catch{}
-}
-function restaurarRascunhoItensSeVazio(){
-  try{
-    const atual = getItens();
-    if (Array.isArray(atual) && atual.length) return;
-    const raw = sessionStorage.getItem(DRAFT_KEY);
-    if (!raw) return;
-    const lista = JSON.parse(raw);
-    if (Array.isArray(lista) && lista.length){
-      lista.forEach(obj => { try { adicionarItem(obj); } catch { adicionarItem(); } });
-      setTimeout(() => atualizarFreteUI(), 30);
-    }
-  }catch{}
-}
-
-/* ====== Init ====== */
+/* ======== Inicialização ======== */
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('[APP] DOM carregado');
-
   initItens();
-  atualizarFreteAoEditarItem(atualizarFreteUI);
-  setTimeout(() => atualizarFreteUI(), 50);
 
-  const itensContainer = document.getElementById('itens');
-  if (itensContainer){
-    itensContainer.addEventListener('input', salvarRascunhoItens, { passive:true });
-    itensContainer.addEventListener('change', salvarRascunhoItens, { passive:true });
-  }
-  restaurarRascunhoItensSeVazio();
+  setTimeout(() => {
+    const containerItens = document.getElementById('itens');
+    if (containerItens && containerItens.children.length === 0) {
+      adicionarItem();
+    }
+  }, 100);
 
-  const btnAdicionar = document.getElementById('adicionarItemBtn');
-  if (btnAdicionar) btnAdicionar.addEventListener('click', e => { adicionarItem(); salvarRascunhoItens(); });
-
+  document.getElementById('adicionarItemBtn')?.addEventListener('click', adicionarItem);
+  document.getElementById('btnGerarPdf')?.addEventListener('click', gerarPDF);
   document.getElementById('btnSalvarPdf')?.addEventListener('click', salvarPDF);
   document.getElementById('btnCompartilharPdf')?.addEventListener('click', compartilharPDF);
-  document.getElementById('btnReimprimirUltimo')?.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
-  let inputCliente = document.getElementById('cliente');
-  if (inputCliente) {
-    const val = inputCliente.value;
-    const clone = inputCliente.cloneNode(true);
-    inputCliente.replaceWith(clone);
-    inputCliente = clone;
-    inputCliente.value = val;
-    inputCliente.addEventListener('input', () => formatarNome(inputCliente));
-  }
+  const inputCliente = document.getElementById('cliente');
+  if (inputCliente) inputCliente.addEventListener('input', () => formatarNome(inputCliente));
 
-  hydrateListaClientesFallback();
-
-  const clienteInput = document.getElementById('cliente');
-  async function carregarSugestoesDoClienteAtual(){
-    const nomeUpper = String(clienteInput?.value || '').trim().toUpperCase();
-    if (!nomeUpper) return;
-    await carregarSugestoesParaCliente(nomeUpper);
-    document.querySelectorAll('#itens .item .produto').forEach(bindAutoCompleteNoInputProduto);
-  }
-  if (clienteInput){
-    clienteInput.addEventListener('change', carregarSugestoesDoClienteAtual);
-    clienteInput.addEventListener('blur', carregarSugestoesDoClienteAtual);
-    carregarSugestoesDoClienteAtual();
-  }
-
-  if (itensContainer){
-    itensContainer.addEventListener('focusin', (ev) => {
-      if (ev.target && ev.target.classList && ev.target.classList.contains('produto')){
-        bindAutoCompleteNoInputProduto(ev.target);
-      }
-    });
-  }
-
-  drainStorageQueueWhenOnline();
+  habilitarEspacoNoCliente();
 });
 
-window.reimprimirUltimoPedidoSalvo = reimprimirUltimoPedidoSalvo;
+// exposição
+window.gerarPDF = gerarPDF;
+window.salvarPDF = salvarPDF;
+window.compartilharPDF = compartilharPDF;
+
+console.log('App configurado completamente');
