@@ -65,6 +65,7 @@ header.hdr{
   border-radius:12px;
   padding:10px 14px;
   cursor:pointer;
+  min-height:44px; /* área de toque mobile */
 }
 .btn:hover{box-shadow:0 6px 16px rgba(23,68,46,.15)}
 .btn.success{
@@ -103,7 +104,7 @@ header.hdr{
   border-bottom:1px dashed var(--line);
   align-items:center;
 }
-.name{grid-area:name;font-weight:800}
+.name{grid-area:name;font-weight:800;display:flex;align-items:center;gap:8px}
 .last{grid-area:last;font-size:12px;color:var(--muted);justify-self:end}
 .chips{grid-area:chips;display:flex;gap:8px;flex-wrap:wrap}
 .chip{
@@ -112,37 +113,42 @@ header.hdr{
 }
 .chip.active{border-color:var(--brand-700);background:var(--brand-700);color:#fff}
 .qty{grid-area:qty;display:flex;gap:8px;align-items:center;justify-self:end}
-.qty input{width:130px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.qty input{width:130px;padding:10px;border:1px solid var(--line);border-radius:10px;min-height:44px}
 .result{grid-area:result;font-size:13px;color:var(--ink);padding:4px 2px 6px}
 
 /* Ações menores e com espaçamento */
 .actions{display:flex;gap:8px;margin-top:6px}
-.btn.xs{font-size:12px;padding:6px 10px;font-weight:700;border-radius:10px}
-.btn-edit{color:#fff;border-color:transparent}
-.btn-clear{background:#ef4444;color:#fff;border-color:#ef4444}
+.btn.xs{font-size:12px;padding:6px 10px;font-weight:700;border-radius:10px;min-height:36px}
 
-/* Alternância de fundo por família + cor do botão Editar */
-.fam-0 .fam-head{background:var(--fam0-strong)} .fam-0 .fam-body .row:nth-child(even){background:var(--fam0-soft)}
-.fam-1 .fam-head{background:var(--fam1-strong)} .fam-1 .fam-body .row:nth-child(even){background:var(--fam1-soft)}
-.fam-2 .fam-head{background:var(--fam2-strong)} .fam-2 .fam-body .row:nth-child(even){background:var(--fam2-soft)}
-.fam-3 .fam-head{background:var(--fam3-strong)} .fam-3 .fam-body .row:nth-child(even){background:var(--fam3-soft)}
-.fam-4 .fam-head{background:var(--fam4-strong)} .fam-4 .fam-body .row:nth-child(even){background:var(--fam4-soft)}
-.fam-5 .fam-head{background:var(--fam5-strong)} .fam-5 .fam-body .row:nth-child(even){background:var(--fam5-soft)}
-.fam-6 .fam-head{background:var(--fam6-strong)} .fam-6 .fam-body .row:nth-child(even){background:var(--fam6-soft)}
-.fam-7 .fam-head{background:var(--fam7-strong)} .fam-7 .fam-body .row:nth-child(even){background:var(--fam7-soft)}
-.fam-8 .fam-head{background:var(--fam8-strong)} .fam-8 .fam-body .row:nth-child(even){background:var(--fam8-soft)}
-.fam-9 .fam-head{background:var(--fam9-strong)} .fam-9 .fam-body .row:nth-child(even){background:var(--fam9-soft)}
-.fam-10 .fam-head{background:var(--fam10-strong)} .fam-10 .fam-body .row:nth-child(even){background:var(--fam10-soft)}
+/* Botão X pequeno ao lado do nome (apenas itens custom) */
+.btn-del-small{
+  width:32px; min-width:32px; height:32px; min-height:32px;
+  padding:0; line-height:28px; text-align:center; font-size:16px;
+  border-radius:8px;
+}
+
+/* Alternância de fundo por família — apenas nas linhas de produto, não no divider */
+.fam-0 .fam-body .row-produto:nth-of-type(even){background:var(--fam0-soft)}
+.fam-1 .fam-body .row-produto:nth-of-type(even){background:var(--fam1-soft)}
+.fam-2 .fam-body .row-produto:nth-of-type(even){background:var(--fam2-soft)}
+.fam-3 .fam-body .row-produto:nth-of-type(even){background:var(--fam3-soft)}
+.fam-4 .fam-body .row-produto:nth-of-type(even){background:var(--fam4-soft)}
+.fam-5 .fam-body .row-produto:nth-of-type(even){background:var(--fam5-soft)}
+.fam-6 .fam-body .row-produto:nth-of-type(even){background:var(--fam6-soft)}
+.fam-7 .fam-body .row-produto:nth-of-type(even){background:var(--fam7-soft)}
+.fam-8 .fam-body .row-produto:nth-of-type(even){background:var(--fam8-soft)}
+.fam-9 .fam-body .row-produto:nth-of-type(even){background:var(--fam9-soft)}
+.fam-10 .fam-body .row-produto:nth-of-type(even){background:var(--fam10-soft)}
 
 /* cor do botão Editar por família */
-.fam-0  .btn-edit{background:var(--fam0-strong)}
-.fam-1  .btn-edit{background:var(--fam1-strong)}
-.fam-2  .btn-edit{background:var(--fam2-strong)}
-.fam-3  .btn-edit{background:var(--fam3-strong)}
-.fam-4  .btn-edit{background:var(--fam4-strong)}
-.fam-5  .btn-edit{background:var(--fam5-strong)}
-.fam-6  .btn-edit{background:var(--fam6-strong)}
-.fam-7  .btn-edit{background:var(--fam7-strong)}
-.fam-8  .btn-edit{background:var(--fam8-strong)}
-.fam-9  .btn-edit{background:var(--fam9-strong)}
-.fam-10 .btn-edit{background:var(--fam10-strong)}
+.fam-0  .btn-edit{background:var(--fam0-strong); color:#fff; border-color:transparent}
+.fam-1  .btn-edit{background:var(--fam1-strong); color:#fff; border-color:transparent}
+.fam-2  .btn-edit{background:var(--fam2-strong); color:#fff; border-color:transparent}
+.fam-3  .btn-edit{background:var(--fam3-strong); color:#fff; border-color:transparent}
+.fam-4  .btn-edit{background:var(--fam4-strong); color:#fff; border-color:transparent}
+.fam-5  .btn-edit{background:var(--fam5-strong); color:#fff; border-color:transparent}
+.fam-6  .btn-edit{background:var(--fam6-strong); color:#fff; border-color:transparent}
+.fam-7  .btn-edit{background:var(--fam7-strong); color:#fff; border-color:transparent}
+.fam-8  .btn-edit{background:var(--fam8-strong); color:#fff; border-color:transparent}
+.fam-9  .btn-edit{background:var(--fam9-strong); color:#fff; border-color:transparent}
+.fam-10 .btn-edit{background:var(--fam10-strong); color:#fff; border-color:transparent}
