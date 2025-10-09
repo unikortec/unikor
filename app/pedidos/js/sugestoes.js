@@ -1,12 +1,13 @@
-// app/pedidos/js/sugestoes.js
 import {
   db, getTenantId,
   collection, query, where, orderBy, limit, getDocs
 } from './firebase.js';
 
-let ultimoPrecoPorProduto = new Map(); // produto -> preço
+/** @type {Map<string, number>} */
+let ultimoPrecoPorProduto = new Map(); // Mapeia: produto -> preço
 let datalistEl = null;
 
+/** Garante que o elemento <datalist> exista no DOM e o retorna. */
 function ensureDatalist(){
   if (!datalistEl){
     datalistEl = document.getElementById('sugestoesItensCliente');
@@ -20,9 +21,10 @@ function ensureDatalist(){
 }
 
 /**
- * Carrega do Firestore os últimos itens e preços do cliente informado.
- * @param {string} clienteUpper nome do cliente em UPPERCASE (o mesmo salvo no pedido)
- * @param {number} maxPedidos quantos pedidos recentes varrer (padrão 80)
+ * Carrega do Firestore os últimos itens e preços de um cliente para popular as sugestões.
+ * @param {string} clienteUpper Nome do cliente em UPPERCASE.
+ * @param {number} [maxPedidos=80] Quantidade de pedidos recentes a serem pesquisados.
+ * @returns {Promise<{itens: Array<{produto: string, ultimoPreco: number}>, map: Map<string, number>}>}
  */
 export async function carregarSugestoesParaCliente(clienteUpper, maxPedidos = 80){
   ultimoPrecoPorProduto = new Map();
@@ -35,8 +37,7 @@ export async function carregarSugestoesParaCliente(clienteUpper, maxPedidos = 80
   try{
     const tenantId = await getTenantId();
     const col = collection(db, 'tenants', tenantId, 'pedidos');
-    // pega pedidos mais recentes do cliente
-    // OBS: assumindo que você salva createdAt/serverTimestamp ao gravar.
+    
     const q = query(
       col,
       where('clienteUpper', '==', nome),
@@ -45,15 +46,14 @@ export async function carregarSugestoesParaCliente(clienteUpper, maxPedidos = 80
     );
     const snap = await getDocs(q);
 
-    // percorre pedidos e coleta o último preço visto por produto
     const vistos = new Set();
     const itensAgrupados = [];
     snap.forEach(docSnap => {
       const d = docSnap.data() || {};
       (Array.isArray(d.itens) ? d.itens : []).forEach(it => {
         const produto = String(it.produto||'').trim();
-        if (!produto) return;
-        if (vistos.has(produto)) return; // queremos o mais recente
+        if (!produto || vistos.has(produto)) return; // Ignora se vazio ou já processado
+        
         vistos.add(produto);
         const preco = Number(it.precoUnit ?? it.preco ?? 0) || 0;
         ultimoPrecoPorProduto.set(produto, preco);
@@ -61,10 +61,9 @@ export async function carregarSugestoesParaCliente(clienteUpper, maxPedidos = 80
       });
     });
 
-    // Preenche datalist
+    // Preenche o datalist com as sugestões
     itensAgrupados.forEach(({produto, ultimoPreco})=>{
       const opt = document.createElement('option');
-      // Mostramos “Produto — R$ 0,00” (valor informativo); o value é só o nome.
       opt.value = produto;
       opt.label = ultimoPreco > 0 ? `${produto} — R$ ${ultimoPreco.toFixed(2)}` : produto;
       list.appendChild(opt);
@@ -77,42 +76,45 @@ export async function carregarSugestoesParaCliente(clienteUpper, maxPedidos = 80
   }
 }
 
-/** Retorna último preço conhecido para um produto (ou 0) */
+/** 
+ * Retorna o último preço conhecido para um produto, conforme as sugestões carregadas.
+ * @param {string} produto O nome do produto.
+ * @returns {number} O último preço sugerido, ou 0 se não houver.
+ */
 export function getUltimoPrecoSugerido(produto){
   return Number(ultimoPrecoPorProduto.get(String(produto||'').trim()) || 0);
 }
 
 /** 
- * Garante que um input de produto use o datalist de sugestões,
- * e instala um auto-fill de preço quando existir sugestão.
+ * Vincula um input de produto ao datalist de sugestões e configura o preenchimento
+ * automático do preço correspondente.
+ * @param {HTMLInputElement} prodInput O elemento input do produto.
  */
 export function bindAutoCompleteNoInputProduto(prodInput){
   if (!prodInput) return;
   ensureDatalist();
   prodInput.setAttribute('list', 'sugestoesItensCliente');
 
-  // encontra o input de preço que esteja dentro do mesmo .item
   const itemEl = prodInput.closest('.item');
   const precoInput = itemEl ? itemEl.querySelector('.preco') : null;
 
   const tentarPreencherPreco = () => {
     if (!precoInput) return;
     const nome = String(prodInput.value||'').trim();
-    const preco = getUltimoPrecoSugerido(nome);
-    // só preenche se o preço atual for 0/vazio
-    const atual = Number(precoInput.value || 0);
-    if ((!atual || atual === 0) && preco > 0){
-      // formato com 2 casas (deixa vírgula/ponto pro seu mask se existir)
-      precoInput.value = preco.toFixed(2);
-      // dispara um evento para quem recalcula total/frete reagir
+    const precoSugerido = getUltimoPrecoSugerido(nome);
+    
+    const precoAtual = Number(precoInput.value || 0);
+    if ((!precoAtual || precoAtual === 0) && precoSugerido > 0){
+      precoInput.value = precoSugerido.toFixed(2);
+      // Dispara eventos para que outros scripts (cálculo de total, etc.) sejam acionados
       precoInput.dispatchEvent(new Event('input', { bubbles: true }));
       precoInput.dispatchEvent(new Event('change', { bubbles: true }));
     }
   };
 
-  // Quando o usuário escolhe/termina de digitar um produto, tenta preencher o preço
   prodInput.addEventListener('change', tentarPreencherPreco);
   prodInput.addEventListener('blur', tentarPreencherPreco);
 }
 
+/** Retorna o mapa de produtos e seus últimos preços. */
 export function getMapUltimoPreco(){ return ultimoPrecoPorProduto; }
