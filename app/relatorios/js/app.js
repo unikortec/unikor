@@ -10,7 +10,7 @@ import {
   gerarPDFDoModal
 } from './modal.js';
 import { exportarXLSX, exportarPDF } from './export.js';
-import { printPedido80mm } from './print.js'; // gera a cópia no mesmo layout do app Pedidos
+import { printPedido80mm } from './print.js'; // PDF 80mm no layout do app Pedidos
 
 // estado global mínimo
 window.__rows = [];
@@ -49,12 +49,11 @@ function limpar(){
   ["fDataIni","fDataFim","fHoraIni","fHoraFim","fCliente"].forEach(id=>$(id).value="");
   $("fTipo").value = "";
   $("tbody").innerHTML = "";
-  $("ftCount").textContent = "0 pedidos";
+  // rodapé mostra só os números (títulos ficam fixos no layout)
+  $("ftCount").textContent = "0";
+  $("ftItens").textContent = "0";
   $("ftTotal").textContent = "R$ 0,00";
-  const elItems = $("ftItens");
-  const elFrete = $("ftFrete");
-  if (elItems) elItems.textContent = "0 itens";
-  if (elFrete) elFrete.textContent = "R$ 0,00";
+  $("ftFrete").textContent = "R$ 0,00";
   window.__rows = [];
 }
 
@@ -82,10 +81,12 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnXLSX").onclick = ()=> exportarXLSX(window.__rows);
   $("btnPDF").onclick  = ()=> exportarPDF(window.__rows);
 
-  // ações na tabela
-  $("tbody").addEventListener("click", async (ev)=>{
+  // ações na tabela — pointerup cobre toque (iOS/Android) e mouse
+  const handleRowAction = async (ev)=>{
+    const t = ev.target;
+
     // editar pedido (abre modal)
-    const tdEdit = ev.target.closest(".cell-client");
+    const tdEdit = t.closest(".cell-client");
     if (tdEdit){
       const id = tdEdit.getAttribute("data-id");
       if (id) await carregarPedidoEmModal(id);
@@ -93,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // imprimir cópia (gera PDF no layout do app Pedidos)
-    const btnPrint = ev.target.closest(".btn-print");
+    const btnPrint = t.closest(".btn-print");
     if (btnPrint){
       const id = btnPrint.getAttribute("data-id");
       if (id) await printPedido80mm(id);
@@ -101,11 +102,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // cancelar/excluir
-    const btnCancel = ev.target.closest(".btn-cancel");
+    const btnCancel = t.closest(".btn-cancel");
     if (btnCancel){
       const id = btnCancel.getAttribute("data-id");
       if (id) await excluirPedido(id);
     }
+  };
+  ["pointerup","click"].forEach(evt => {
+    $("tbody").addEventListener(evt, handleRowAction, { passive:true });
   });
 
   // modal
@@ -113,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $("btnAddItem").addEventListener("click", ()=> addItemRow({}));
   $("btnSalvar").addEventListener("click", ()=> salvarEdicao(atualizarListaLocal));
 
-  // botão PDF dentro do modal (usa o mesmo layout do app Pedidos)
+  // botão PDF dentro do modal (gera PDF a partir dos dados do modal)
   const btnPDFPedido = $("btnPDFPedido");
   if (btnPDFPedido) btnPDFPedido.addEventListener("click", gerarPDFDoModal);
 });
