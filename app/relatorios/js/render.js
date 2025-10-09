@@ -1,30 +1,14 @@
 // =========================
-// UNIKOR RELATÓRIOS - render.js (com milhares e R$ inline)
+// UNIKOR RELATÓRIOS - render.js
 // =========================
 
 export const $ = (id)=>document.getElementById(id);
-
-export const moneyBR = (n)=>{
-  const v = Number(n || 0);
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(v);
-  } catch {
-    // fallback
-    const s = (Math.round(v * 100) / 100).toFixed(2);
-    const [int, dec] = s.split(".");
-    return int.replace(/\B(?=(\d{3})+(?!\d))/g,".") + "," + dec;
-  }
-};
-
+export const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
 export const toBR = (iso)=> { 
   if(!iso) return ""; 
   const [y,m,d] = iso.split("-"); 
   return `${d}/${m}/${y}`; 
 };
-
 export const userPrefix = (emailOrUid="") => String(emailOrUid).split("@")[0] || "—";
 
 function freteFromRow(r){
@@ -100,16 +84,20 @@ export function renderRows(docs){
     `);
   }
 
+  // === Nenhum resultado ===
   if (!rows.length){
     tbody.innerHTML = `<tr><td colspan="11" class="muted">Sem resultados.</td></tr>`;
     $("ftCount").textContent = "0";
-    $("ftTotal").textContent = "R$ 0,00";
     $("ftItens").textContent = "0";
+    $("ftTotal").textContent = "R$ 0,00";
     $("ftFrete").textContent = "R$ 0,00";
     return;
   }
 
+  // === Render ===
   tbody.innerHTML = rows.join("");
+
+  // === Totais (só números) ===
   $("ftCount").textContent = `${seen.size}`;
   $("ftItens").textContent = `${totalQtdeItens}`;
   $("ftTotal").textContent = `R$ ${moneyBR(totalItensValor)}`;
