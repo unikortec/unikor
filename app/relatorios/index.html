@@ -25,7 +25,7 @@
   <main class="container">
     <!-- Filtros -->
     <section class="card filters">
-      <div class="filters-title">LEO</div>
+      <!-- (removido o “LEO” aqui) -->
 
       <div class="grid">
         <div class="field" data-span="6">
@@ -103,18 +103,102 @@
 
       <!-- Totais (labels vêm do CSS ::before) -->
       <div class="footer-totals">
-        <div id="ftCount">0 pedidos</div>
-        <div id="ftItens">0 itens</div>
-        <div id="ftTotal">R$ 0,00</div>
-        <div id="ftFrete">R$ 0,00</div>
+        <div class="ft-box"><div class="ft-label">PEDIDOS</div><div id="ftCount">0</div></div>
+        <div class="ft-box"><div class="ft-label">ITENS</div><div id="ftItens">0</div></div>
+        <div class="ft-box"><div class="ft-label">TOTAL R$</div><div id="ftTotal">R$ 0,00</div></div>
+        <div class="ft-box"><div class="ft-label">TOTAL FRETE</div><div id="ftFrete">R$ 0,00</div></div>
       </div>
     </section>
   </main>
 
+  <!-- ===== Modal de Edição do Pedido ===== -->
+  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true" style="display:none;">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>Editar Pedido</h3>
+        <button id="btnFecharModal" class="btn icon" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="grid">
+          <div class="field" data-span="6">
+            <label for="mId">ID do Pedido</label>
+            <input id="mId" type="text" readonly />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mCliente">Cliente</label>
+            <input id="mCliente" type="text" />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mDataEntregaISO">Data Entrega (ISO)</label>
+            <input id="mDataEntregaISO" type="date" />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mHoraEntrega">Hora Entrega</label>
+            <input id="mHoraEntrega" type="time" />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mTipo">Tipo</label>
+            <select id="mTipo">
+              <option value="ENTREGA">ENTREGA</option>
+              <option value="RETIRADA">RETIRADA</option>
+            </select>
+          </div>
+          <div class="field" data-span="6">
+            <label for="mPagamento">Pagamento</label>
+            <input id="mPagamento" type="text" placeholder="ex.: PIX, DINHEIRO, CRÉDITO" />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mCupomFiscal">Nº do Cupom Fiscal</label>
+            <input id="mCupomFiscal" type="text" placeholder="ex.: 123456-1/001" />
+          </div>
+          <div class="field" data-span="6">
+            <label for="mFrete">Frete (R$)</label>
+            <input id="mFrete" type="text" inputmode="decimal" placeholder="0,00" />
+          </div>
+          <div class="field" data-span="12">
+            <label for="mObs">Observações</label>
+            <textarea id="mObs" rows="2" placeholder="opcional"></textarea>
+          </div>
+        </div>
+
+        <div class="items">
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th>Descrição</th>
+                <th>Qtd</th>
+                <th>Un</th>
+                <th>R$ Unit.</th>
+                <th>Subtotal</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+          <div class="items-actions">
+            <button id="btnAddItem" class="btn">Adicionar item</button>
+            <div class="total-box">
+              <label>Total itens:</label>
+              <input id="mTotal" type="text" readonly value="R$ 0,00"/>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btnPDFPedido" class="btn btn-gray">Gerar PDF</button>
+        <div class="spacer"></div>
+        <button id="btnSalvar" class="btn btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+  <!-- ===== /Modal ===== -->
+
   <!-- jsPDF (para export) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
-  <!-- App JS (seu código atual) -->
+  <!-- App JS -->
   <script type="module" src="./js/firebase.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
