@@ -1,5 +1,5 @@
 // /app/pedidos/sw.js
-const APP_VER   = '1.3.3';   // 🔺 bump para forçar atualização
+const APP_VER   = '1.3.4';   // 🔺 bump para forçar atualização
 const TAG       = 'pedidos';
 const STATIC    = `${TAG}-static-${APP_VER}`;
 const OFFLINE   = './index.html';
