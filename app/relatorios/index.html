@@ -11,39 +11,47 @@
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
+  <!-- Topo -->
   <header class="topbar">
     <div class="wrap">
+      <a class="logo" href="/app/">
+        <img src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+      </a>
       <h1>Relatórios</h1>
       <div class="user">Usuário: <span id="userTag">—</span></div>
     </div>
   </header>
 
   <main class="container">
+    <!-- Filtros -->
     <section class="card filters">
       <div class="filters-title">LEO</div>
 
       <div class="grid">
-        <div class="field">
+        <div class="field" data-span="6">
           <label for="fDataIni">Data entrega — de</label>
           <input type="date" id="fDataIni" />
         </div>
-        <div class="field">
+        <div class="field" data-span="6">
           <label for="fDataFim">Data entrega — até</label>
           <input type="date" id="fDataFim" />
         </div>
-        <div class="field">
+
+        <div class="field" data-span="6">
           <label for="fHoraIni">Horário — de</label>
           <input type="time" id="fHoraIni" />
         </div>
-        <div class="field">
+        <div class="field" data-span="6">
           <label for="fHoraFim">Horário — até</label>
           <input type="time" id="fHoraFim" />
         </div>
-        <div class="field field-wide">
+
+        <div class="field" data-span="12">
           <label for="fCliente">Cliente (contém)</label>
           <input type="text" id="fCliente" placeholder="ex.: mercado" />
         </div>
-        <div class="field">
+
+        <div class="field" data-span="6">
           <label for="fTipo">Tipo (Entrega/Retirada)</label>
           <select id="fTipo">
             <option value="">Todos</option>
@@ -51,7 +59,8 @@
             <option value="RETIRADA">RETIRADA</option>
           </select>
         </div>
-        <div class="field">
+
+        <div class="field" data-span="6">
           <label for="fFormato">Formato</label>
           <select id="fFormato" disabled>
             <option>Reduzido</option>
@@ -67,6 +76,7 @@
       </div>
     </section>
 
+    <!-- Tabela -->
     <section class="card table-wrap">
       <div class="table-scroll">
         <table>
@@ -91,6 +101,7 @@
         </table>
       </div>
 
+      <!-- Totais (labels vêm do CSS ::before) -->
       <div class="footer-totals">
         <div id="ftCount">0 pedidos</div>
         <div id="ftItens">0 itens</div>
@@ -100,7 +111,10 @@
     </section>
   </main>
 
+  <!-- jsPDF (para export) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- App JS (seu código atual) -->
   <script type="module" src="./js/firebase.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
