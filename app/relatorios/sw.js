@@ -1,6 +1,6 @@
 /* Unikor – Relatórios SW */
-const APP_VERSION = '1.1.6';
-const CACHE = `unikor-relatorios::${APP_VERSION}`;
+const APP_VERSION = '1.1.7';
+const CACHE = `unikor-delatórios::${APP_VERSION}`;
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
