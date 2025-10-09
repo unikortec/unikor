@@ -1,46 +1,46 @@
-// app/pedidos/js/storageQueue.js
 // Fila confiável para enviar PDFs de pedidos ao Firebase Storage.
 // - Se online: tenta enviar na hora.
 // - Se falhar/offline: enfileira um job leve (sem Base64) e mais tarde reconstrói o PDF a partir do Firestore.
 
-import { app, db } from './firebase.js';
-import {
-  getStorage, ref, uploadBytes
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
-import {
-  collection, doc, setDoc, serverTimestamp, getDoc
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { app, db, getTenantId } from './firebase.js';
+import { getStorage, ref, uploadBytes } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+import { collection, doc, setDoc, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { construirPDFDePedidoFirestore } from "./storageQueueHelpers.js";
 
 const storage = getStorage(app);
-
 const KEY = "__unikor_storage_upload_queue_v2__";
 
-// ---------- helpers de persistência ----------
+// ---------- helpers de persistência da fila no localStorage ----------
 function loadQ(){
   try { return JSON.parse(localStorage.getItem(KEY) || "[]"); }
   catch { return []; }
 }
 function saveQ(q){
-  try { localStorage.setItem(KEY, JSON.stringify(q)); } catch {}
+  try { localStorage.setItem(KEY, JSON.stringify(q)); } catch(e) {
+    console.error("[StorageQueue] Falha ao salvar fila no localStorage:", e);
+  }
 }
 
-// Blob -> ArrayBuffer (para uploadBytes)
+/** Converte um Blob para ArrayBuffer, necessário para uploadBytes. */
 function blobToArrayBuffer(blob){
   return new Promise((resolve, reject)=>{
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result);
-    fr.onerror = reject;
+    fr.onerror = (err) => reject(err);
     fr.readAsArrayBuffer(blob);
   });
 }
 
-// Envia ao Storage + anota no Firestore
+/**
+ * Faz o upload do Blob para o Firebase Storage e atualiza o documento no Firestore com o caminho do PDF.
+ * @param {{tenantId: string, docId: string, blob: Blob, filename: string}} params
+ */
 async function uploadAndTag({ tenantId, docId, blob, filename }){
   const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
-  const r = ref(storage, path);
+  const storageRef = ref(storage, path);
 
   const bytes = await blobToArrayBuffer(blob);
-  await uploadBytes(r, new Uint8Array(bytes), { contentType: "application/pdf" });
+  await uploadBytes(storageRef, bytes, { contentType: "application/pdf" });
 
   const pedidosCol = collection(db, "tenants", tenantId, "pedidos");
   await setDoc(
@@ -53,15 +53,17 @@ async function uploadAndTag({ tenantId, docId, blob, filename }){
     { merge: true }
   );
 
-  console.log("[StorageQueue] enviado:", path);
+  console.log("[StorageQueue] Enviado com sucesso:", path);
 }
 
-// ========== Runner compartilhado (usado no agendador e no drainOnce) ==========
+/**
+ * Processa a fila de uploads pendentes. É executado periodicamente e quando a conexão volta.
+ */
 async function runQueueOnce(){
   let q = loadQ();
   if (!q.length || !navigator.onLine) return;
 
-  const rest = [];
+  const jobsRestantes = [];
   for (const job of q){
     try{
       let blob = null;
@@ -69,73 +71,72 @@ async function runQueueOnce(){
 
       if (job.source === "rebuild"){
         // Reconstroi o PDF lendo o pedido salvo no Firestore
-        const { getTenantId } = await import("./firebase.js");
-        const { doc, getDoc } =
-          await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js");
-        const { construirPDFDePedidoFirestore } = await import("./storageQueueHelpers.js");
-        // construirPDFDePedidoFirestore: helper isolado p/ evitar import circular do pdf.js aqui.
-
         const tenantId = job.tenantId || (await getTenantId());
-        const ref = doc(db, "tenants", tenantId, "pedidos", job.docId);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) throw new Error("Doc do pedido não encontrado para rebuild.");
-        const pedido = snap.data() || {};
+        const docRef = doc(db, "tenants", tenantId, "pedidos", job.docId);
+        const snap = await getDoc(docRef);
+        if (!snap.exists()) throw new Error(`Doc do pedido ${job.docId} não encontrado para rebuild.`);
+        
+        const { blob: rebuiltBlob, nomeArq } = await construirPDFDePedidoFirestore(snap.data());
+        blob = rebuiltBlob;
+        if (nomeArq) filename = nomeArq;
 
-        const { blob: rebuiltBlob, nomeArq } = await construirPDFDePedidoFirestore(pedido);
-        blob = rebuiltBlob; if (nomeArq) filename = nomeArq;
-      } else if (job.dataUrl){
-        // (modo antigo – compat) se algum job antigo ainda existe com dataUrl:
-        const res = await fetch(job.dataUrl); blob = await res.blob();
+      } else if (job.dataUrl) { // Modo antigo para compatibilidade
+        const res = await fetch(job.dataUrl);
+        blob = await res.blob();
       }
 
-      if (!blob) throw new Error("Blob ausente no job para upload.");
+      if (!blob) throw new Error(`Blob ausente no job para upload do doc ${job.docId}.`);
+      
       await uploadAndTag({ tenantId: job.tenantId, docId: job.docId, blob, filename });
-    }catch(e){
-      console.warn("[StorageQueue] falhou, mantém na fila:", e?.message || e);
-      rest.push(job); // mantém para tentar depois
+
+    } catch(e) {
+      console.warn("[StorageQueue] Falha ao processar job, será mantido na fila:", e?.message || e);
+      jobsRestantes.push(job); // Mantém o job na fila para tentar novamente
     }
   }
-  saveQ(rest);
+  saveQ(jobsRestantes);
 }
 
-// ========== API ==========
+// ========== API PÚBLICA ==========
 
 /**
- * Sobe o PDF imediatamente se possível; se não, coloca na fila (job leve).
- * @param {Object} p
- * @param {string} p.tenantId
- * @param {string} p.docId
- * @param {Blob}   p.blob
- * @param {string} p.filename
+ * Adiciona um PDF à fila de upload. Tenta enviar imediatamente se online;
+ * caso contrário, enfileira um job leve para ser processado depois.
+ * @param {{tenantId: string, docId: string, blob: Blob, filename: string}} params
  */
 export async function queueStorageUpload({ tenantId, docId, blob, filename }){
-  // tenta envio direto quando online
+  // Tenta o envio direto quando online para uma experiência mais rápida
   if (navigator.onLine){
     try{
       await uploadAndTag({ tenantId, docId, blob, filename });
-      return;
+      return; // Sucesso, não precisa enfileirar
     }catch(e){
-      console.warn("[StorageQueue] upload imediato falhou, vai para fila:", e?.message||e);
+      console.warn("[StorageQueue] Upload imediato falhou, enfileirando para mais tarde:", e?.message||e);
     }
   }
 
-  // fallback: salva job leve (reconstrói depois a partir do Firestore)
+  // Fallback: salva um job leve que permite reconstruir o PDF depois
   const q = loadQ();
   q.push({ t: Date.now(), tenantId, docId, filename, source: "rebuild" });
   saveQ(q);
-  console.log("[StorageQueue] job enfileirado (rebuild):", docId);
+  console.log("[StorageQueue] Job enfileirado (rebuild):", docId);
 }
 
-/** Drena a fila periodicamente e quando voltar a conexão. */
+/**
+ * Inicia o processo que verifica e processa a fila periodicamente e quando a conexão de rede é restaurada.
+ */
 export function drainStorageQueueWhenOnline(){
   const run = () => { runQueueOnce().catch(()=>{}); };
 
   window.addEventListener("online", run);
-  setInterval(run, 45000);
-  run();
+  setInterval(run, 45000); // Tenta a cada 45 segundos
+  setTimeout(run, 2000); // Tenta uma vez logo após o carregamento da página
 }
 
-/** Faz uma drenagem única imediatamente (usado após salvar/compartilhar). */
+/**
+ * Força uma única tentativa de processar a fila imediatamente.
+ * Útil para ser chamado após salvar um pedido, para dar feedback mais rápido ao usuário.
+ */
 export async function drainOnce(){
-  try { await runQueueOnce(); } catch(e) { /* silencioso */ }
+  try { await runQueueOnce(); } catch(e) { /* falha silenciosa */ }
 }
