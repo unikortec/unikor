@@ -1,95 +1,121 @@
 // relatorios/js/print.js
-import { pedidos_get } from "./db.js";
-import { moneyBR } from "./render.js";
-import { app } from "./firebase.js";
+import { db, getTenantId, doc, getDoc } from "./firebase.js";
 
-const money = n => `R$ ${moneyBR(n)}`;
+// importa o miolo de desenho do app Pedidos (sem duplicar código)
+async function loadPDFCore(){
+  // caminho relativo ao site; ajuste se sua pasta for diferente
+  const pdf = await import("/app/pedidos/js/pdf.js");
+  if (!pdf.__construirPDFBasePublic) throw new Error("PDF core indisponível");
+  return pdf.__construirPDFBasePublic;
+}
 
-/**
- * Reimprime o pedido:
- * 1) se existir `pdfPath` no doc, abre o PDF do Firebase Storage (mais rápido);
- * 2) senão, reconstrói no layout 80mm e baixa.
- * Evita consultas duplicadas (usa o mesmo doc para os dois caminhos).
- */
-export async function printPedido80mm(pedidoId){
-  const { jsPDF } = window.jspdf;
-  if (!pedidoId){ alert("ID do pedido inválido."); return; }
+/* --- normalização igual usamos no app Pedidos --- */
+function digitsOnly(v){ return String(v||"").replace(/\D/g,""); }
 
-  // pega o doc uma vez
-  const r = await pedidos_get(pedidoId).catch(()=>null);
-  if (!r){ alert("Pedido não encontrado."); return; }
-
-  // tenta abrir do Storage
-  try{
-    const pdfPath = r?.pdfPath;
-    if (pdfPath){
-      const { getStorage, ref, getDownloadURL } =
-        await import("https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js");
-      const url = await getDownloadURL(ref(getStorage(app), pdfPath));
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
+function normalizarPedidoSalvo(p){
+  const itens = Array.isArray(p.itens) ? p.itens.map(it=>{
+    const produto = String(it.produto||"").trim();
+    const tipo = String(it.tipo||"KG").toUpperCase();
+    const precoCents = Math.round(Number(it.precoUnit ?? it.preco ?? 0) * 100);
+    const qtdTxt = String(it.quantidade ?? 0);
+    const qtdMil = Math.round(Number(it.quantidade ?? 0) * 1000);
+    let totalCents = Math.round(Number(it.total ?? 0) * 100);
+    if (!totalCents){
+      if (tipo === "KG") totalCents = Math.round((qtdMil * precoCents) / 1000);
+      else               totalCents = Math.round((Number(qtdTxt) || 0) * precoCents);
     }
-  }catch(e){ /* se der erro, cai no fallback */ }
+    return {
+      produto, tipo,
+      qtdTxt, precoTxt: (Number(precoCents)/100).toFixed(2).replace(".", ","),
+      qtdMil, precoCents, totalCents,
+      obs: String(it.obs||"").trim(),
+      _pesoTotalKgMil: 0
+    };
+  }) : [];
 
-  // ===== Fallback: reconstrói cupom 80mm =====
-  const cliente = (r.cliente || "").toString().toUpperCase();
-  const ender   = (r?.entrega?.endereco || r.endereco || "").toString().toUpperCase();
-  const dataBR  = String(r.dataEntregaISO||"").split("-").reverse().join("/");
-  const hora    = r.horaEntrega || "";
-  const itens   = Array.isArray(r.itens) ? r.itens : [];
-  const frete   = r?.frete?.isento ? 0 : Number(r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? r?.freteValor ?? 0);
-  const pagamento = (r.pagamento||"").toString().toUpperCase();
-  const cupom     = (r.cupomFiscal && String(r.cupomFiscal).trim()) ? String(r.cupomFiscal) : "-";
-  const tipoEnt   = ((r?.entrega?.tipo||"").toUpperCase()==="RETIRADA" ? "RETIRADA" : "ENTREGA");
+  return {
+    cliente: String(p.cliente||p.clienteUpper||"").toUpperCase(),
+    endereco: String(p.entrega?.endereco || p.endereco || "").toUpperCase(),
+    entregaISO: p.dataEntregaISO || "",
+    hora: p.horaEntrega || "",
+    cnpj: digitsOnly(p.clienteFiscal?.cnpj || ""),
+    ie: String(p.clienteFiscal?.ie || "").toUpperCase(),
+    cep: digitsOnly(p.clienteFiscal?.cep || ""),
+    contato: digitsOnly(p.clienteFiscal?.contato || ""),
+    obsGeralTxt: String(p.obs || p.obsGeral || "").toUpperCase(),
+    tipoEnt: String(p.entrega?.tipo || "ENTREGA").toUpperCase(),
+    pagamento: String(p.pagamento || "").toUpperCase(),
+    itens,
+    freteLabel: (p.frete?.isento ? "ISENTO" : ("R$ " + Number(p.frete?.valorBase||0).toFixed(2))),
+    freteCobravel: Number(p.frete?.valorCobravel ?? p.frete?.valorBase ?? 0)
+  };
+}
 
-  const width = 80, margin = 4;
-  let y = margin + 2;
-  const doc = new jsPDF({ unit:"mm", format:[width, 600], orientation:"portrait" });
-  const line = () => { doc.setLineWidth(.2); doc.line(margin, y, width - margin, y); y += 2; };
+/* ========== imprimir do Firestore (lista) ========== */
+export async function printPedido80mm(pedidoId){
+  const tenantId = await getTenantId();
+  const ref = doc(db, "tenants", tenantId, "pedidos", pedidoId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) { alert("Pedido não encontrado."); return; }
 
-  doc.setFont("helvetica","bold"); doc.setFontSize(14);
-  doc.text("SERRA NOBRE", width/2, y, { align:"center" }); y += 6;
-  doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text(`ENTREGA: ${dataBR} ${hora}`, margin, y); y += 5;
-  doc.text(`TIPO: ${tipoEnt}`, margin, y); y += 5;
-  if (pagamento) { doc.text(`PAGAMENTO: ${pagamento}`, margin, y); y += 5; }
-  if (cupom && cupom !== "-") { doc.text(`CUPOM: ${cupom}`, margin, y); y += 5; }
-  line();
+  const core = await loadPDFCore();
+  const data = normalizarPedidoSalvo(snap.data() || {});
+  const { blob } = core(data);
 
-  doc.setFont("helvetica","bold"); doc.text("CLIENTE", margin, y); y += 4;
-  doc.setFont("helvetica","normal");
-  doc.text(cliente, margin, y); y += 5;
-  if (ender){ doc.text(ender, margin, y); y += 5; }
-  line();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
+}
 
-  doc.setFont("helvetica","bold"); doc.text("ITENS", margin, y); y += 5;
-  doc.setFont("helvetica","normal");
-  let subtotal = 0;
-  itens.forEach(it=>{
-    const nome = (it.produto || it.descricao || "").toString().toUpperCase();
-    const qtd  = Number(it.qtd ?? it.quantidade ?? 0);
-    const un   = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
-    const pu   = Number(it.precoUnit ?? it.preco ?? 0);
+// deixa disponível p/ app.js usar pela janela (delegate)
+window.printPedido80mm = printPedido80mm;
 
-    // usa subtotal salvo ou calcula simples (o relatório completo faz a regra de kg/un)
-    let tot = typeof it.subtotal === "number" ? Number(it.subtotal) : (qtd*pu);
-    subtotal += tot;
+/* ========== imprimir a partir do MODAL (sem salvar) ========== */
+// `modalState` deve vir do seu modal.js (campos básicos + itens)
+export async function printFromModal(modalState){
+  // modalState: { cliente, endereco, dataEntregaISO, horaEntrega, pagamento, obsGeral, entrega:{tipo}, frete:{isento,valorBase,valorCobravel}, itens:[{produto,tipo,quantidade,precoUnit,obs}] }
+  const core = await loadPDFCore();
 
-    const lines = doc.splitTextToSize(nome, width - margin*2);
-    lines.forEach((ln)=>{ doc.text(ln, margin, y); y += 4; });
-    doc.text(`${qtd} ${un} x ${money(pu)}`, margin, y);
-    doc.text(money(tot), width - margin, y, { align: "right" }); y += 6;
+  const itens = (modalState.itens || []).map(it=>{
+    const precoCents = Math.round(Number(it.precoUnit || it.preco || 0) * 100);
+    const qtdTxt = String(it.quantidade ?? 0);
+    const qtdMil = Math.round(Number(it.quantidade ?? 0) * 1000);
+    const tipo = String(it.tipo||"KG").toUpperCase();
+    let totalCents = Math.round(Number(it.total || 0) * 100);
+    if (!totalCents){
+      if (tipo === "KG") totalCents = Math.round((qtdMil * precoCents) / 1000);
+      else               totalCents = Math.round((Number(qtdTxt)||0) * precoCents);
+    }
+    return {
+      produto:String(it.produto||"").trim(),
+      tipo,
+      qtdTxt,
+      precoTxt: (Number(precoCents)/100).toFixed(2).replace(".", ","),
+      qtdMil, precoCents, totalCents,
+      obs:String(it.obs||"").trim(),
+      _pesoTotalKgMil:0
+    };
   });
 
-  line();
-  const total = subtotal + frete;
-  doc.text(`SUBTOTAL: ${money(subtotal)}`, margin, y); y += 5;
-  doc.text(`FRETE: ${money(frete)}`, margin, y); y += 5;
-  doc.setFont("helvetica","bold");
-  doc.text(`TOTAL: ${money(total)}`, margin, y); y += 7;
-  doc.setFont("helvetica","normal");
+  const data = {
+    cliente: String(modalState.cliente||"").toUpperCase(),
+    endereco: String(modalState.endereco||"").toUpperCase(),
+    entregaISO: modalState.dataEntregaISO || "",
+    hora: modalState.horaEntrega || "",
+    cnpj: digitsOnly(modalState?.clienteFiscal?.cnpj || ""),
+    ie: String(modalState?.clienteFiscal?.ie || "").toUpperCase(),
+    cep: digitsOnly(modalState?.clienteFiscal?.cep || ""),
+    contato: digitsOnly(modalState?.clienteFiscal?.contato || ""),
+    obsGeralTxt: String(modalState.obsGeral || modalState.obs || "").toUpperCase(),
+    tipoEnt: String(modalState?.entrega?.tipo || "ENTREGA").toUpperCase(),
+    pagamento: String(modalState.pagamento || "").toUpperCase(),
+    itens,
+    freteLabel: (modalState?.frete?.isento ? "ISENTO" : ("R$ " + Number(modalState?.frete?.valorBase||0).toFixed(2))),
+    freteCobravel: Number(modalState?.frete?.valorCobravel ?? modalState?.frete?.valorBase ?? 0)
+  };
 
-  doc.internal.pageSize.height = y + margin;
-  const nome = `Pedido_${(cliente||'').replace(/\s+/g,'_')}_${(r.dataEntregaISO||'').replaceAll('-','')}.pdf`;
-  doc.save(nome);
+  const { blob } = core(data);
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  setTimeout(()=>URL.revokeObjectURL(url), 30000);
 }
