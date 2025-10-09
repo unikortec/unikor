@@ -1,6 +1,7 @@
 // relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
+import { printFromModal } from './print.js'; // PDF 80mm direto dos dados do modal
 
 export function openModal(){
   const m = $("modalBackdrop");
@@ -195,14 +196,46 @@ export async function salvarEdicao(atualizarLista){
   }
 }
 
-/* ===== PDF do pedido (usa o PDF salvo no Storage quando existir) ===== */
+/* ===== Monta um objeto com os DADOS ATUAIS do modal (para imprimir sem salvar) ===== */
+function coletarCamposDoModal(){
+  const itens = [];
+  $("itemsBody").querySelectorAll("tr").forEach(tr=>{
+    const produto = (tr.querySelector(".it-desc").value||"").trim();
+    const quantidade = parseBRNumber(tr.querySelector(".it-qtd").value);
+    const tipo = (tr.querySelector(".it-un").value||"UN").trim().toUpperCase();
+    const precoUnit = parseBRNumber(tr.querySelector(".it-preco").value);
+    if (!produto && quantidade<=0) return;
+    itens.push({ produto, quantidade, tipo, precoUnit });
+  });
+
+  return {
+    cliente: $("mCliente").value.trim(),
+    dataEntregaISO: $("mDataEntregaISO").value || null,
+    horaEntrega: $("mHoraEntrega").value || "",
+    entrega: { tipo: $("mTipo").value || "ENTREGA" },
+    pagamento: $("mPagamento").value.trim() || "",
+    obs: $("mObs").value.trim() || "",
+    itens,
+    frete: {
+      isento: false,
+      valorBase: parseBRNumber($("mFrete").value),
+      valorCobravel: parseBRNumber($("mFrete").value)
+    },
+    clienteFiscal: {} // (campos fiscais não estão no modal atual)
+  };
+}
+
+/* ===== PDF do pedido (gera a partir dos dados do modal, sem salvar) ===== */
 export async function gerarPDFDoModal(){
-  const { jsPDF } = window.jspdf || {};
-  if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
-  const { printPedido80mm } = await import("./print.js");
-  if (window.__currentDocId){
-    await printPedido80mm(window.__currentDocId);
-  } else {
-    alert("Nenhum pedido carregado.");
+  try{
+    const state = coletarCamposDoModal();
+    if (!state.cliente && (!state.itens || !state.itens.length)){
+      alert("Preencha o cliente e pelo menos um item.");
+      return;
+    }
+    await printFromModal(state);
+  }catch(e){
+    console.error(e);
+    alert("Falha ao gerar PDF do modal.");
   }
 }
