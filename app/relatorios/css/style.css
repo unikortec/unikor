@@ -1,36 +1,177 @@
-/* ===== Melhorias visuais leves (não invasivas) ===== */
-
-/* Zebra na tabela principal (apenas corpo) */
-.table-wrap table tbody tr:nth-child(even){
-  background:#f8fafc; /* cinza bem claro */
+/* ===== Paleta Unikor ===== */
+:root {
+  --brand: #0ea5a6;
+  --brand-dark: #0a7f80;
+  --ink: #0f172a;
+  --muted: #475569;
+  --bg: #f1f5f9;
+  --line: #e2e8f0;
 }
 
-/* Hover sutil na tabela principal */
-.table-wrap table tbody tr:hover{
-  background:#eef2f7;
+/* ===== Reset básico ===== */
+* { box-sizing: border-box; }
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
 }
 
-/* Números sempre alinhados à direita (reforça) */
-.table-wrap table td:nth-child(5),
-.table-wrap table td:nth-child(8){
-  text-align:right;
+/* ===== Header ===== */
+header {
+  background: var(--brand);
+  color: #fff;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+header #userTag {
+  font-weight: 700;
 }
 
-/* Zebra nos itens do modal (mantém bordas existentes) */
-.items-table tbody tr:nth-child(even){
-  background:#f8fafc;
+/* ===== Conteúdo principal ===== */
+.page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 14px;
 }
 
-/* Inputs no modal mais confortáveis em telas pequenas */
-@media (max-width: 560px){
-  .items-table th, .items-table td{ padding:6px }
-  .modal .grid{ grid-template-columns:repeat(2,minmax(0,1fr)) }
+/* ===== Filtros ===== */
+.filters {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+  display: grid;
+  gap: 10px;
+}
+.filters label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: block;
+}
+.filters input, .filters select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
 
-/* Botão ícone: foco/hover melhorado (acessibilidade) */
-.btn.icon:hover,
-.btn.icon:focus{
-  filter: brightness(0.95);
-  outline: 2px solid #0000; /* sem outline do browser */
-  box-shadow: 0 0 0 3px #00000010;
+/* ===== Botões ===== */
+.btn {
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn:hover { background: var(--brand-dark); }
+.btn.secondary { background: #64748b; }
+.btn.ghost {
+  background: #f8fafc;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+/* ===== Tabela ===== */
+.table-wrap {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.table-scroller {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 800px;
+  font-size: 13px;
+}
+th, td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+th {
+  background: #f8fafc;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+tbody tr:hover {
+  background: #eef2f7;
+}
+td:nth-child(5),
+td:nth-child(8) {
+  text-align: right;
+}
+
+/* ===== Rodapé da tabela ===== */
+tfoot td {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+/* ===== Barra de ações fixa (mobile) ===== */
+.fab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 10px;
+  z-index: 99;
+}
+.fab-bar .btn {
+  flex: 1;
+  font-size: 14px;
+  padding: 10px 0;
+}
+
+/* ===== Ajustes mobile ===== */
+@media (max-width: 768px) {
+  .filters {
+    padding: 10px;
+  }
+  .filters input, .filters select {
+    font-size: 14px;
+  }
+  th, td {
+    padding: 6px;
+  }
+  header h1 {
+    font-size: 18px;
+  }
+  .fab-bar .btn {
+    margin: 0 4px;
+  }
 }
