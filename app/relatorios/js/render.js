@@ -1,7 +1,14 @@
-// relatorios/js/render.js
+// =========================
+// UNIKOR RELATÓRIOS - render.js
+// =========================
+
 export const $ = (id)=>document.getElementById(id);
 export const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
-export const toBR = (iso)=> { if(!iso) return ""; const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
+export const toBR = (iso)=> { 
+  if(!iso) return ""; 
+  const [y,m,d] = iso.split("-"); 
+  return `${d}/${m}/${y}`; 
+};
 export const userPrefix = (emailOrUid="") => String(emailOrUid).split("@")[0] || "—";
 
 function freteFromRow(r){
@@ -15,13 +22,16 @@ function freteFromRow(r){
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.').replace(/\s+/g,' ');
   const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
-  let m,last=null; while((m=re.exec(s))!==null) last=m;
+  let m,last=null; 
+  while((m=re.exec(s))!==null) last=m;
   if (!last) return 0;
   const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
-  const val = parseFloat(raw); if (!isFinite(val)||val<=0) return 0;
+  const val = parseFloat(raw); 
+  if (!isFinite(val)||val<=0) return 0;
   const unit = last[2].toLowerCase();
   return (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
 }
+
 function subtotalItem(it){
   const qtd = Number(it.qtd ?? it.quantidade ?? 0);
   const un  = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
@@ -74,18 +84,22 @@ export function renderRows(docs){
     `);
   }
 
+  // === Nenhum resultado ===
   if (!rows.length){
-    tbody.innerHTML = `<tr><td colspan="11">Sem resultados.</td></tr>`;
-    $("ftCount").textContent = "0 pedidos";
+    tbody.innerHTML = `<tr><td colspan="11" class="muted">Sem resultados.</td></tr>`;
+    $("ftCount").textContent = "0";
+    $("ftItens").textContent = "0";
     $("ftTotal").textContent = "R$ 0,00";
-    $("ftItens").textContent = "0 itens";
     $("ftFrete").textContent = "R$ 0,00";
     return;
   }
 
+  // === Render ===
   tbody.innerHTML = rows.join("");
-  $("ftCount").textContent = `${seen.size} pedido(s)`;
+
+  // === Totais (só números) ===
+  $("ftCount").textContent = `${seen.size}`;
+  $("ftItens").textContent = `${totalQtdeItens}`;
   $("ftTotal").textContent = `R$ ${moneyBR(totalItensValor)}`;
-  $("ftItens").textContent = `${totalQtdeItens} item(ns)`;
   $("ftFrete").textContent = `R$ ${moneyBR(totalFreteValor)}`;
 }
