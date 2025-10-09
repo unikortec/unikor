@@ -1,169 +1,135 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Relatórios — UNIKOR</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Relatórios — Unikor</title>
+  <meta name="theme-color" content="#0ea5a6" />
+  <base href="./">
 
-  <!-- jsPDF (PDF & impressão térmica) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <!-- CSS: use o seu style.css (que contém o bloco "Style" que você enviou) -->
+  <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
-  <!-- HEADER -->
-  <header class="brandbar">
-    <div class="brandbar__left">
-      <a href="/" class="brandbar__btn" title="Voltar para o portal">Voltar</a>
-      <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR">
-      <div class="brandbar__title">Relatórios</div>
-    </div>
-    <div class="brandbar__right">
-      <div class="brandbar__user"><span class="brandbar__user-label" id="userTag">—</span></div>
-    </div>
-  </header>
+  <div class="page">
+    <header style="display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px;">
+      <h1 style="margin:0;">Relatórios</h1>
+      <div style="font-weight:700;color:#0f766e;">Usuário: <span id="userTag">—</span></div>
+    </header>
 
-  <main id="app">
-    <section class="card">
-      <div class="filters">
-        <div><label>Data entrega — de</label><input type="date" id="fDataIni"></div>
-        <div><label>Data entrega — até</label><input type="date" id="fDataFim"></div>
-        <div><label>Horário — de</label><input type="time" id="fHoraIni"></div>
-        <div><label>Horário — até</label><input type="time" id="fHoraFim"></div>
-        <div><label>Cliente (contém)</label><input type="text" id="fCliente" placeholder="ex.: mercado"></div>
+    <!-- ====== Filtros ====== -->
+    <section class="filters collapsed" aria-label="Filtros">
+      <!-- o botão de abrir/fechar é injetado por app.js,
+           mas deixo um título de acessibilidade visível em desktop -->
+      <div class="row">
+        <strong style="font-size:13px;">LEO</strong>
+      </div>
+
+      <div class="row row--dates collapsible">
         <div>
-          <label>Tipo (Entrega/Retirada)</label>
+          <label for="fDataIni">Data entrega — de</label>
+          <input id="fDataIni" type="date" />
+        </div>
+        <div>
+          <label for="fDataFim">Data entrega — até</label>
+          <input id="fDataFim" type="date" />
+        </div>
+      </div>
+
+      <div class="row row--times collapsible">
+        <div>
+          <label for="fHoraIni">Horário — de</label>
+          <input id="fHoraIni" type="time" />
+        </div>
+        <div>
+          <label for="fHoraFim">Horário — até</label>
+          <input id="fHoraFim" type="time" />
+        </div>
+      </div>
+
+      <div class="row row--type-format collapsible">
+        <div>
+          <label for="fCliente">Cliente (contém)</label>
+          <input id="fCliente" type="text" placeholder="ex.: mercado" />
+        </div>
+        <div>
+          <label for="fTipo">Tipo (Entrega/Retirada)</label>
           <select id="fTipo">
             <option value="">Todos</option>
-            <option value="ENTREGA">ENTREGA</option>
-            <option value="RETIRADA">RETIRADA</option>
+            <option value="ENTREGA">Entrega</option>
+            <option value="RETIRADA">Retirada</option>
           </select>
         </div>
         <div>
-          <label>Formato</label>
-          <select id="fModo">
-            <option value="reduzido">Reduzido</option>
-            <option value="detalhado">Detalhado</option>
-          </select>
+          <label>&nbsp;</label>
+          <div class="filter-actions">
+            <button id="btnBuscar" class="btn">Buscar</button>
+            <button id="btnLimpar" class="btn secondary">Limpar</button>
+            <button id="btnXLSX" class="btn ghost">Exportar XLSX</button>
+            <button id="btnPDF" class="btn ghost">Gerar PDF</button>
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="actions">
-        <button class="btn" id="btnBuscar"><span class="lbl">Buscar</span></button>
-        <button class="btn ghost" id="btnLimpar"><span class="lbl">Limpar</span></button>
-        <button class="btn warning" id="btnXLSX" title="Exportar para XLSX"><span class="lbl">Exportar XLSX</span></button>
-        <button class="btn gray" id="btnPDF" title="Gerar PDF"><span class="lbl">Gerar PDF</span></button>
-      </div>
-
-      <div class="table-wrap">
-        <table>
+    <!-- ====== Tabela ====== -->
+    <div class="table-wrap" style="margin-top:12px;">
+      <div class="table-scroller">
+        <table class="table">
           <thead>
             <tr>
               <th>Data</th>
               <th>Hora</th>
-              <th>Cliente (clique para editar)</th>
+              <th>Cliente <small>(clique para editar)</small></th>
               <th>Itens</th>
               <th>Total (R$)</th>
               <th>Tipo</th>
               <th>Pagamento</th>
               <th>Frete</th>
-              <th>Nº do Cupom</th>
-              <th>Imprimir</th>  <!-- NOVA -->
-              <th>Cancelar</th>
+              <th>Nº Cupom</th>
+              <th>Reimprimir</th>
+              <th>Excluir</th>
             </tr>
           </thead>
-
-          <tbody id="tbody"></tbody>
-
+          <tbody id="tbody">
+            <tr><td colspan="11">Carregue um filtro…</td></tr>
+          </tbody>
           <tfoot>
             <tr>
-              <td id="ftCount">0 pedidos</td>
-              <td id="ftItens" colspan="2">0 itens</td>
-              <td></td>
-              <td id="ftTotal">R$ 0,00</td>    <!-- total dos itens (sem frete) -->
+              <td id="ftCount" colspan="3">0 pedidos</td>
+              <td id="ftItens">0 itens</td>
+              <td id="ftTotal">R$ 0,00</td>
               <td colspan="2"></td>
-              <td id="ftFrete">R$ 0,00</td>    <!-- total de frete -->
+              <td id="ftFrete">R$ 0,00</td>
               <td colspan="3"></td>
             </tr>
           </tfoot>
         </table>
       </div>
-    </section>
-  </main>
-
-  <!-- Modal (edição de pedido) -->
-  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <header><h2 id="modalTitle">Editar Pedido</h2></header>
-
-      <div class="grid">
-        <div><label>ID do Pedido</label><input type="text" id="mId" readonly /></div>
-        <div><label>Cliente</label><input type="text" id="mCliente" /></div>
-        <div><label>Data Entrega (ISO)</label><input type="date" id="mDataEntregaISO" /></div>
-        <div><label>Hora Entrega</label><input type="time" id="mHoraEntrega" /></div>
-        <div><label>Tipo</label>
-          <select id="mTipo">
-            <option value="ENTREGA">ENTREGA</option>
-            <option value="RETIRADA">RETIRADA</option>
-          </select>
-        </div>
-        <div><label>Pagamento</label><input type="text" id="mPagamento" placeholder="ex.: PIX, DINHEIRO, CRÉDITO" /></div>
-        <div class="span-2"><label>Nº do Cupom Fiscal</label><input type="text" id="mCupomFiscal" placeholder="ex.: 123456-1/001" /></div>
-        <div class="span-4"><label>Observações</label><input type="text" id="mObs" placeholder="(opcional)" /></div>
-      </div>
-
-      <div class="muted">Itens do pedido</div>
-      <table class="items-table" id="itemsTable">
-        <thead><tr>
-          <th style="width:38%">Descrição</th>
-          <th style="width:10%">Qtd</th>
-          <th style="width:12%">Un</th>
-          <th style="width:16%">Preço Unit. (R$)</th>
-          <th style="width:14%">Subtotal (editável)</th>
-          <th style="width:10%">Remover</th>
-        </tr></thead>
-        <tbody id="itemsBody"></tbody>
-        <tfoot><tr><td colspan="6"><button class="btn ghost" id="btnAddItem" type="button">+ Adicionar item</button></td></tr></tfoot>
-      </table>
-
-      <div class="grid">
-        <div class="span-2"></div>
-        <div><label>Total dos Itens (R$)</label><input class="right" type="text" id="mTotal" readonly /></div>
-        <div><label>Frete (R$)</label><input class="right" type="text" id="mFrete" placeholder="0,00" /></div>
-      </div>
-
-      <div class="actions">
-        <button class="btn gray" id="btnFecharModal" type="button"><span class="lbl">Cancelar</span></button>
-        <!-- NOVO: gera a cópia do pedido no mesmo layout do módulo de pedidos -->
-        <button class="btn warning" id="btnPDFPedido" type="button" title="Gerar PDF do pedido"><span class="lbl">PDF</span></button>
-        <button class="btn" id="btnSalvar" type="button"><span class="lbl">Salvar alterações</span></button>
-      </div>
     </div>
+
+    <!-- ====== Editor / Modal (estrutural, conteúdo vem de modal.js) ====== -->
+    <div id="modalRoot"></div>
   </div>
 
-  <!-- App (módulos) -->
-  <script type="module" src="./js/app.js"></script>
+  <!-- Barra fixa de ações no mobile (opcional, repete os botões principais) -->
+  <div class="fab-bar">
+    <button id="btnBuscar" class="btn">Buscar</button>
+    <button id="btnXLSX" class="btn ghost">XLSX</button>
+    <button id="btnPDF" class="btn ghost">PDF</button>
+    <button id="btnLimpar" class="btn secondary">Limpar</button>
+  </div>
 
-  <!-- SW (auto-update) -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', async () => {
-        try {
-          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-          document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
-          setInterval(() => reg.update(), 10 * 60 * 1000);
-          reg.addEventListener('updatefound', () => {
-            const nw = reg.installing;
-            nw && nw.addEventListener('statechange', () => {
-              if (nw.state === 'installed' && navigator.serviceWorker.controller) reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
-            });
-          });
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
-          });
-        } catch {}
-      });
-    }
-  </script>
+  <!-- libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- módulos (mesma pasta /js) -->
+  <script type="module" src="./js/firebase.js"></script>
+  <script type="module" src="./js/db.js"></script>
+  <script type="module" src="./js/render.js"></script>
+  <script type="module" src="./js/export.js"></script>
+  <script type="module" src="./js/print.js"></script>
+  <script type="module" src="./js/modal.js"></script>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>
