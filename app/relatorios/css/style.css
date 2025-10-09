@@ -1,18 +1,19 @@
 /* ===========================
    UNIKOR – RELATÓRIOS (clássico)
-   ÚNICO ARQUIVO DE ESTILOS
    =========================== */
 
-/* ---- Reset/BASE suave ---- */
+/* ---- Paleta/vars ---- */
 :root{
-  --teal: #0ea5a6;           /* topo */
-  --teal-dark:#0b7f80;       /* botões */
-  --green:#1b7a3f;           /* títulos/links */
-  --ink:#0f172a;             /* texto principal */
-  --muted:#6b7280;           /* texto secundário */
-  --bg:#f5f7fb;              /* fundo app */
-  --card:#ffffff;            /* cartões */
-  --line:#e7edf3;            /* linhas suaves */
+  /* <<< TROQUE AQUI PARA O VERDE/TEAL OFICIAL UNIKOR >>> */
+  --brand: #0ea5a6;          /* cor da barra (ajuste pro tom oficial) */
+  --brand-dark:#0b7f80;
+
+  --green:#1b7a3f;           /* botões/links */
+  --ink:#0f172a;
+  --muted:#6b7280;
+  --bg:#f5f7fb;
+  --card:#ffffff;
+  --line:#e7edf3;
   --zebra1:#ffffff;
   --zebra2:#f6fafb;
   --shadow: 0 10px 30px rgba(16,24,40,.06), 0 4px 8px rgba(16,24,40,.06);
@@ -21,91 +22,73 @@
 *{ box-sizing:border-box }
 html,body{ height:100% }
 body{
-  margin:0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin:0; font: 15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
   color:var(--ink); background:var(--bg);
 }
 
 /* ---- Topbar ---- */
 .topbar{
-  background:var(--teal);
+  background:var(--brand);
   color:#fff;
-  position:sticky; top:0; z-index:200; /* abaixo do modal */
+  position:sticky; top:0; z-index:200;
   box-shadow: 0 1px 0 #00000014;
 }
 .topbar .wrap{
-  max-width:1100px; margin:0 auto; padding:14px 16px;
+  max-width:1100px; margin:0 auto; padding:12px 16px;
   display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px;
 }
-.topbar .logo{
-  display:inline-flex; align-items:center; gap:10px; text-decoration:none;
-}
-.topbar .logo img{ height:28px; width:auto; display:block }
+.topbar .logo{ display:inline-flex; align-items:center; gap:10px; text-decoration:none }
+.topbar .logo img{ height:36px; width:auto; display:block }     /* logo MAIOR */
 .topbar h1{
   margin:0; text-align:center; letter-spacing:.5px;
-  font-size:28px; font-weight:800; text-transform:uppercase;
+  font-size:18px; font-weight:800; text-transform:uppercase;   /* título MENOR */
 }
-.topbar .user{ font-weight:600 }
+.topbar .user{ font-weight:700 }
 
-/* ---- Container principal ---- */
-.container{ max-width:1100px; margin:22px auto; padding:0 16px }
-
-/* ---- Cards (caixas) ---- */
+/* ---- Container/cards ---- */
+.container{ max-width:1100px; margin:18px auto; padding:0 16px }
 .card{
   background:var(--card); border:1px solid var(--line); border-radius:16px;
-  box-shadow:var(--shadow); padding:18px; margin-bottom:18px;
+  box-shadow:var(--shadow); padding:16px; margin-bottom:14px;
 }
 
 /* ---- Filtros ---- */
-.filters .filters-title{
-  color:var(--green); font-weight:800; margin:4px 0 14px 2px; letter-spacing:.4px;
-}
-.grid{
-  display:grid; gap:14px;
-  grid-template-columns: repeat(12, minmax(0,1fr));
-}
+.filters .filters-title{ display:none } /* esconde o “LEO” debaixo do título */
+.grid{ display:grid; gap:12px; grid-template-columns:repeat(12,minmax(0,1fr)) }
 .field{ display:flex; flex-direction:column; gap:6px }
 .field label{ font-size:13px; color:var(--muted) }
-.field input, .field select, .field textarea{
+.field input,.field select,.field textarea{
   width:100%; background:#fff; color:var(--ink);
   border:1px solid var(--line); padding:12px 14px; border-radius:14px; outline:none;
-  box-shadow: 0 1px 0 #00000006 inset;
+  box-shadow:0 1px 0 #00000006 inset;
 }
-.field input:focus, .field select:focus, .field textarea:focus{
+.field input:focus,.field select:focus,.field textarea:focus{
   border-color:#b7dde0; box-shadow:0 0 0 4px #0ea5a616;
 }
 
-/* Mapa das colunas (>=720px vira 2 colunas, como você pediu) */
-.field[data-span="6"]{ grid-column: span 6 }
-.field[data-span="12"]{ grid-column: span 12 }
-@media (max-width: 719px){
-  .grid{ grid-template-columns: repeat(12,minmax(0,1fr)); }
-  .field[data-span="6"], .field[data-span="12"]{ grid-column: 1 / -1 }
-}
-
-/* Layout específico dos filtros */
-#fDataIni, #fDataFim, #fHoraIni, #fHoraFim{ }
+/* mapa das colunas */
 .filters .grid .field:nth-child(1),
 .filters .grid .field:nth-child(2),
 .filters .grid .field:nth-child(3),
-.filters .grid .field:nth-child(4){ grid-column: span 6 }
-.filters .grid .field:nth-child(5){ grid-column: 1 / -1 }         /* Cliente (linha única) */
+.filters .grid .field:nth-child(4){ grid-column:span 6 }
+.filters .grid .field:nth-child(5){ grid-column:1 / -1 }    /* Cliente em linha única */
 .filters .grid .field:nth-child(6),
-.filters .grid .field:nth-child(7){ grid-column: span 6 }          /* Tipo | Formato */
+.filters .grid .field:nth-child(7){ grid-column:span 6 }
+@media (max-width:719px){
+  .filters .grid .field{ grid-column:1 / -1 }
+}
 
-/* ---- Ações (2 por linha) ---- */
+/* Ações – 2 por linha */
 .actions{
-  margin-top:10px;
-  display:grid; gap:12px;
-  grid-template-columns:1fr 1fr;
+  margin-top:8px; display:grid; gap:10px; grid-template-columns:1fr 1fr;
 }
 .btn{
   display:inline-flex; justify-content:center; align-items:center; gap:8px;
   padding:12px 16px; border-radius:16px; border:1px solid transparent;
-  font-weight:700; cursor:pointer; text-decoration:none; user-select:none;
-  min-height:48px;
-  transition: transform .02s ease, filter .15s ease;
+  font-weight:700; cursor:pointer; text-decoration:none; user-select:none; min-height:46px;
+  transition:transform .02s ease, filter .15s ease;
 }
-.btn:active{ transform: translateY(1px) }
+.btn:active{ transform:translateY(1px) }
 .btn-primary{ background:var(--green); color:#fff }
 .btn-primary:hover{ filter:brightness(.96) }
 .btn-outline{ background:#fff; border-color:#cfe6d9; color:var(--green) }
@@ -126,46 +109,42 @@ tbody tr:nth-child(even){ background:var(--zebra2) }
 tbody tr:hover{ background:#eef6f7 }
 .center{ text-align:center }
 .muted{ color:var(--muted) }
+/* números à direita (Total, Frete) */
+.table-wrap table td:nth-child(5), .table-wrap table td:nth-child(8){ text-align:right }
 
-/* Números à direita (Total e Frete) */
-.table-wrap table td:nth-child(5),
-.table-wrap table td:nth-child(8){ text-align:right }
-
-/* Links/ações na tabela */
+/* Ações/links */
 .cell-client{ color:var(--green); font-weight:800; cursor:pointer; text-decoration:underline }
 .btn.icon{
   background:#f3f4f6; border:1px solid #e5e7eb; border-radius:12px; padding:8px 10px;
   font-size:18px; line-height:0; cursor:pointer;
 }
 .btn.icon:hover{ filter:brightness(.97) }
-/* X em vermelho (mantendo o confirm no JS) */
+/* X vermelho (somente cor) */
 .btn-cancel{ background:#fff; border-color:#f5c7c7; color:#c0392b }
 .btn-cancel:hover{ background:#fdecec }
 
-/* ---- Rodapé de totais (com títulos acima) ---- */
+/* ---- Rodapé fixo de totais (cabem 4 colunas) ---- */
 .footer-totals{
-  display:grid; grid-template-columns: repeat(4, 1fr);
-  gap:12px; padding:14px 12px; border:1px solid var(--line);
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:8px; padding:10px 8px; border:1px solid var(--line);
   border-radius:14px; background:#fff; margin-top:12px;
-  position:sticky; bottom:10px; box-shadow:var(--shadow);
+  position:sticky; bottom:8px; box-shadow:var(--shadow);
 }
-.footer-totals > div{ text-align:center; font-weight:800; font-size:20px }
-.footer-totals > div small{
-  display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px;
+.footer-totals > div{
+  text-align:center; font-weight:800; font-size:16px; /* menor, cabe em 4 colunas */
 }
-/* Sem mexer no seu JS: criamos títulos via ::before */
-#ftCount::before { content:"PEDIDOS"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
-#ftItens::before  { content:"ITENS"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
-#ftTotal::before  { content:"TOTAL R$"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
-#ftFrete::before  { content:"TOTAL FRETE"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
+#ftCount::before, #ftItens::before, #ftTotal::before, #ftFrete::before{
+  display:block; font-size:11px; color:var(--muted); margin-bottom:3px; letter-spacing:.35px;
+}
+#ftCount::before{ content:"PEDIDOS" }
+#ftItens::before{ content:"ITENS" }
+#ftTotal::before{ content:"TOTAL R$" }
+#ftFrete::before{ content:"TOTAL FRETE" }
 
-/* ---- Modal (edição de pedido) – só correção visual e z-index ---- */
-.modal{
-  position:fixed; inset:0; display:none;
-  z-index: 9999; /* <— garantia de ficar acima de tudo */
-}
+/* ---- Modal (acima de tudo) ---- */
+.modal{ position:fixed; inset:0; display:none; z-index:9999 }
 .modal:not(.hidden){ display:block }
-.modal-backdrop{ position:absolute; inset:0; background:rgba(15, 23, 42, .45) }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.45) }
 .modal-card{
   position:relative; margin:40px auto; background:#fff; border-radius:16px;
   max-width:860px; padding:18px; box-shadow:var(--shadow);
@@ -183,5 +162,5 @@ tbody tr:hover{ background:#eef6f7 }
   .modal .grid{ grid-template-columns:1fr }
 }
 
-/* ---- Utilitários ---- */
+/* util */
 .hide{ display:none !important }
