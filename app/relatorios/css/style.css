@@ -1,257 +1,187 @@
-/* =========================================================
-   UNIKOR – RELATÓRIOS  (style.css ÚNICO)
-   Visual clássico restaurado + ajustes mobile
-   ========================================================= */
+/* ===========================
+   UNIKOR – RELATÓRIOS (clássico)
+   ÚNICO ARQUIVO DE ESTILOS
+   =========================== */
 
-/* ---------- Paleta ---------- */
+/* ---- Reset/BASE suave ---- */
 :root{
-  --green: #1e7f46;        /* botão/ações */
-  --green-600:#166c3a;
-  --green-700:#115c32;
-  --ink:#111827;
-  --muted:#6b7280;
-
-  --gray-50:#f9fafb;
-  --gray-75:#f8fafc;
-  --gray-100:#f3f4f6;
-  --gray-200:#e5e7eb;
-  --gray-300:#d1d5db;
-  --gray-400:#9ca3af;
-
-  --white:#fff;
-  --shadow: 0 6px 20px rgba(0,0,0,.06);
+  --teal: #0ea5a6;           /* topo */
+  --teal-dark:#0b7f80;       /* botões */
+  --green:#1b7a3f;           /* títulos/links */
+  --ink:#0f172a;             /* texto principal */
+  --muted:#6b7280;           /* texto secundário */
+  --bg:#f5f7fb;              /* fundo app */
+  --card:#ffffff;            /* cartões */
+  --line:#e7edf3;            /* linhas suaves */
+  --zebra1:#ffffff;
+  --zebra2:#f6fafb;
+  --shadow: 0 10px 30px rgba(16,24,40,.06), 0 4px 8px rgba(16,24,40,.06);
 }
 
-/* ---------- Base ---------- */
-*{ box-sizing: border-box; }
-html, body{ height:100%; }
+*{ box-sizing:border-box }
+html,body{ height:100% }
 body{
-  margin:0;
-  font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-  color:var(--ink);
-  background:#fff;
+  margin:0; font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color:var(--ink); background:var(--bg);
 }
-.muted{ color:var(--muted); }
 
-/* ---------- Topo (igual ao antigo) ---------- */
+/* ---- Topbar ---- */
 .topbar{
-  position:sticky; top:0; z-index:10;
-  background: var(--green);
+  background:var(--teal);
   color:#fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  position:sticky; top:0; z-index:200; /* abaixo do modal */
+  box-shadow: 0 1px 0 #00000014;
 }
 .topbar .wrap{
-  max-width:1120px; margin:0 auto;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:14px 16px;
+  max-width:1100px; margin:0 auto; padding:14px 16px;
+  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px;
 }
+.topbar .logo{
+  display:inline-flex; align-items:center; gap:10px; text-decoration:none;
+}
+.topbar .logo img{ height:28px; width:auto; display:block }
 .topbar h1{
-  margin:0;
-  font-weight:800;
-  letter-spacing:.2px;
-  font-size: clamp(22px, 3vw, 32px);
+  margin:0; text-align:center; letter-spacing:.5px;
+  font-size:28px; font-weight:800; text-transform:uppercase;
 }
-.topbar .user{ font-weight:700; }
+.topbar .user{ font-weight:600 }
 
-/* ---------- Container/card ---------- */
-.container{
-  max-width:1120px; margin:18px auto 32px; padding:0 16px;
-}
+/* ---- Container principal ---- */
+.container{ max-width:1100px; margin:22px auto; padding:0 16px }
+
+/* ---- Cards (caixas) ---- */
 .card{
-  background:#fff;
-  border:1px solid var(--gray-200);
-  border-radius:12px;
-  box-shadow: var(--shadow);
-  padding:16px;
-  margin-bottom:16px;
+  background:var(--card); border:1px solid var(--line); border-radius:16px;
+  box-shadow:var(--shadow); padding:18px; margin-bottom:18px;
 }
 
-/* ---------- Filtros ---------- */
-.filters-title{ font-weight:800; margin:0 0 6px; }
+/* ---- Filtros ---- */
+.filters .filters-title{
+  color:var(--green); font-weight:800; margin:4px 0 14px 2px; letter-spacing:.4px;
+}
 .grid{
-  display:grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap:12px;
+  display:grid; gap:14px;
+  grid-template-columns: repeat(12, minmax(0,1fr));
 }
-.field{ display:flex; flex-direction:column; gap:6px; }
-.field-wide{ grid-column: span 2; }
-
-label{ font-size:14px; color:#111827; }
-input, select, textarea{
-  height:38px;
-  padding:8px 10px;
-  border-radius:10px;
-  border:1px solid var(--gray-300);
-  background:#fff; color:var(--ink);
-  outline:none; font:inherit;
+.field{ display:flex; flex-direction:column; gap:6px }
+.field label{ font-size:13px; color:var(--muted) }
+.field input, .field select, .field textarea{
+  width:100%; background:#fff; color:var(--ink);
+  border:1px solid var(--line); padding:12px 14px; border-radius:14px; outline:none;
+  box-shadow: 0 1px 0 #00000006 inset;
 }
-textarea{ height:auto; min-height:90px; resize:vertical; }
-input:focus, select:focus, textarea:focus{
-  border-color:var(--green);
-  box-shadow:0 0 0 3px rgba(30,127,70,.12);
+.field input:focus, .field select:focus, .field textarea:focus{
+  border-color:#b7dde0; box-shadow:0 0 0 4px #0ea5a616;
 }
 
+/* Mapa das colunas (>=720px vira 2 colunas, como você pediu) */
+.field[data-span="6"]{ grid-column: span 6 }
+.field[data-span="12"]{ grid-column: span 12 }
+@media (max-width: 719px){
+  .grid{ grid-template-columns: repeat(12,minmax(0,1fr)); }
+  .field[data-span="6"], .field[data-span="12"]{ grid-column: 1 / -1 }
+}
+
+/* Layout específico dos filtros */
+#fDataIni, #fDataFim, #fHoraIni, #fHoraFim{ }
+.filters .grid .field:nth-child(1),
+.filters .grid .field:nth-child(2),
+.filters .grid .field:nth-child(3),
+.filters .grid .field:nth-child(4){ grid-column: span 6 }
+.filters .grid .field:nth-child(5){ grid-column: 1 / -1 }         /* Cliente (linha única) */
+.filters .grid .field:nth-child(6),
+.filters .grid .field:nth-child(7){ grid-column: span 6 }          /* Tipo | Formato */
+
+/* ---- Ações (2 por linha) ---- */
 .actions{
-  display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;
+  margin-top:10px;
+  display:grid; gap:12px;
+  grid-template-columns:1fr 1fr;
 }
-
-/* ---------- Botões (modelo antigo) ---------- */
 .btn{
-  appearance:none;
-  border:1px solid transparent;
-  border-radius:12px;
-  padding:10px 18px;
-  font-weight:800;
-  cursor:pointer;
-  transition: transform .02s ease, box-shadow .15s ease, background .15s ease, filter .15s ease;
-  user-select:none;
+  display:inline-flex; justify-content:center; align-items:center; gap:8px;
+  padding:12px 16px; border-radius:16px; border:1px solid transparent;
+  font-weight:700; cursor:pointer; text-decoration:none; user-select:none;
+  min-height:48px;
+  transition: transform .02s ease, filter .15s ease;
 }
-.btn:active{ transform: translateY(1px); }
-.btn:focus{ outline:2px solid #0000; box-shadow: 0 0 0 3px rgba(0,0,0,.08); }
+.btn:active{ transform: translateY(1px) }
+.btn-primary{ background:var(--green); color:#fff }
+.btn-primary:hover{ filter:brightness(.96) }
+.btn-outline{ background:#fff; border-color:#cfe6d9; color:var(--green) }
+.btn-outline:hover{ background:#f7fbf8 }
+.btn-gray{ background:#374151; color:#fff }
+.btn-gray:hover{ filter:brightness(1.06) }
 
-.btn-primary{
-  background:var(--green); color:#fff; border-color:var(--green);
-  box-shadow:0 6px 15px rgba(30,127,70,.25);
-}
-.btn-primary:hover{ background:var(--green-600); }
-
-.btn-outline{
-  background:#fff; color:var(--green); border-color:var(--green);
-}
-.btn-outline:hover{ background:#effcf3; }
-
-.btn-gray{
-  background:#334155; color:#fff; border-color:#334155;
-}
-.btn-gray:hover{ filter:brightness(.95); }
-
-/* ícones pequenos na tabela */
-.btn.icon{
-  padding:6px 10px; border-radius:8px; font-size:16px; line-height:1;
-  background:#f3f4f6; border-color:#e5e7eb; color:#111827;
-}
-.btn.icon:hover,
-.btn.icon:focus{
-  filter:brightness(.95);
-  box-shadow:0 0 0 3px #00000010;
-}
-
-/* ---------- Tabela principal ---------- */
-.table-wrap{ padding:0; }
-.table-scroll{ width:100%; overflow:auto; border-radius:12px; }
-
-table{
-  width:100%;
-  min-width:920px;                    /* preserva layout clássico */
-  border-collapse:separate;
-  border-spacing:0;
-}
+/* ---- Tabela ---- */
+.table-wrap .table-scroll{ overflow:auto; border-radius:14px; border:1px solid var(--line) }
+table{ width:100%; border-collapse:separate; border-spacing:0 }
 thead th{
-  position:sticky; top:0; z-index:1;
-  background:#fff;
-  color:#0f172a;
-  font-weight:900;
-  font-size:14px;
-  padding:12px 14px;
-  text-align:left;
-  white-space:nowrap;
-  border-bottom:1px solid var(--gray-200);
+  position:sticky; top:0; background:#f0f7f8; color:#0b4350; z-index:1;
+  font-weight:800; text-align:left; padding:12px 16px; border-bottom:1px solid var(--line);
 }
-thead th small{ font-weight:600; color:var(--muted); }
+tbody td{ padding:16px; border-bottom:1px solid var(--line) }
+tbody tr:nth-child(odd){ background:var(--zebra1) }
+tbody tr:nth-child(even){ background:var(--zebra2) }
+tbody tr:hover{ background:#eef6f7 }
+.center{ text-align:center }
+.muted{ color:var(--muted) }
 
-tbody td{
-  padding:12px 14px;
-  border-bottom:1px solid var(--gray-100);
-  vertical-align:middle;
+/* Números à direita (Total e Frete) */
+.table-wrap table td:nth-child(5),
+.table-wrap table td:nth-child(8){ text-align:right }
+
+/* Links/ações na tabela */
+.cell-client{ color:var(--green); font-weight:800; cursor:pointer; text-decoration:underline }
+.btn.icon{
+  background:#f3f4f6; border:1px solid #e5e7eb; border-radius:12px; padding:8px 10px;
+  font-size:18px; line-height:0; cursor:pointer;
 }
+.btn.icon:hover{ filter:brightness(.97) }
+/* X em vermelho (mantendo o confirm no JS) */
+.btn-cancel{ background:#fff; border-color:#f5c7c7; color:#c0392b }
+.btn-cancel:hover{ background:#fdecec }
 
-/* Zebra + hover (como antes) */
-tbody tr:nth-child(even){ background:var(--gray-75); }
-tbody tr:hover{ background:#eef2f7; }
-
-/* Números à direita: Total e Frete */
-tbody td:nth-child(5),
-tbody td:nth-child(8){ text-align:right; }
-
-td.center, th.center{ text-align:center; }
-
-/* Cliente clicável (verde sublinhado) */
-.cell-client{
-  color:var(--green-700);
-  text-decoration:underline;
-  cursor:pointer;
-  font-weight:700;
-}
-
-/* ---------- Rodapé de totais ---------- */
+/* ---- Rodapé de totais (com títulos acima) ---- */
 .footer-totals{
-  display:grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap:8px;
-  padding:12px 14px;
-  border-top:1px solid var(--gray-200);
-  background:#fff;
-  border-radius:0 0 12px 12px;
-  font-weight:800;
+  display:grid; grid-template-columns: repeat(4, 1fr);
+  gap:12px; padding:14px 12px; border:1px solid var(--line);
+  border-radius:14px; background:#fff; margin-top:12px;
+  position:sticky; bottom:10px; box-shadow:var(--shadow);
 }
-.footer-totals > div{ color:#0f172a; }
+.footer-totals > div{ text-align:center; font-weight:800; font-size:20px }
+.footer-totals > div small{
+  display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px;
+}
+/* Sem mexer no seu JS: criamos títulos via ::before */
+#ftCount::before { content:"PEDIDOS"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
+#ftItens::before  { content:"ITENS"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
+#ftTotal::before  { content:"TOTAL R$"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
+#ftFrete::before  { content:"TOTAL FRETE"; display:block; font-size:12px; color:var(--muted); margin-bottom:4px; letter-spacing:.4px; }
 
-/* ---------- Modal de edição ---------- */
-.modal{ position:fixed; inset:0; display:none; }
-.modal.open{ display:block; }
-.modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); }
+/* ---- Modal (edição de pedido) – só correção visual e z-index ---- */
+.modal{
+  position:fixed; inset:0; display:none;
+  z-index: 9999; /* <— garantia de ficar acima de tudo */
+}
+.modal:not(.hidden){ display:block }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(15, 23, 42, .45) }
 .modal-card{
-  position:relative; z-index:2; background:#fff;
-  width:min(920px, 92vw); margin:5vh auto;
-  border-radius:14px; border:1px solid var(--gray-200);
-  box-shadow: var(--shadow);
-  display:flex; flex-direction:column; max-height:90vh;
+  position:relative; margin:40px auto; background:#fff; border-radius:16px;
+  max-width:860px; padding:18px; box-shadow:var(--shadow);
 }
-.modal-header{
-  padding:14px 16px; border-bottom:1px solid var(--gray-200);
-  display:flex; align-items:center; justify-content:space-between;
-}
-.modal-header h3{ margin:0; font-size:18px; }
-.modal-body{ padding:14px 16px; overflow:auto; }
-.modal-footer{
-  padding:12px 16px; border-top:1px solid var(--gray-200);
-  display:flex; gap:10px; justify-content:flex-end;
+.modal-header{ display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px }
+.modal-header h3{ margin:0; font-size:20px; font-weight:800 }
+.modal-close{ border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:6px 10px; font-size:18px; cursor:pointer }
+.items-table{ width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--line); border-radius:12px; overflow:hidden }
+.items-table th{ background:#f6fafb; text-align:left; padding:10px 12px; border-bottom:1px solid var(--line) }
+.items-table td{ padding:10px 12px; border-bottom:1px solid var(--line) }
+.items-table tbody tr:nth-child(even){ background:#f8fafc }
+.modal .grid{ display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)) }
+@media (max-width:560px){
+  .modal-card{ margin:18px 10px; padding:14px }
+  .modal .grid{ grid-template-columns:1fr }
 }
 
-/* Campos dentro do modal */
-.modal .grid{
-  display:grid; gap:10px;
-  grid-template-columns: repeat(3, minmax(0,1fr));
-}
-.modal .field{ display:flex; flex-direction:column; gap:6px; }
-
-/* Tabela de itens no modal */
-.items-table{
-  width:100%; border-collapse:separate; border-spacing:0; margin-top:10px;
-  border:1px solid var(--gray-200); border-radius:10px; overflow:hidden;
-}
-.items-table th{
-  background:#fff; border-bottom:1px solid var(--gray-200);
-  text-align:left; padding:10px 12px; font-weight:800; font-size:14px;
-}
-.items-table td{
-  padding:10px 12px; border-bottom:1px solid var(--gray-100);
-}
-.items-table tbody tr:nth-child(even){ background:#f8fafc; }
-.items-table tbody tr:hover{ background:#eef2f7; }
-
-/* ---------- Responsividade ---------- */
-@media (max-width: 920px){
-  .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-  .field-wide{ grid-column: span 2; }
-  .modal .grid{ grid-template-columns: repeat(2, minmax(0,1fr)); }
-}
-@media (max-width: 560px){
-  body{ font-size:15px; }
-  .grid{ grid-template-columns: 1fr; }
-  .field-wide{ grid-column: auto; }
-  .btn{ padding:10px 14px; }
-  thead th{ font-size:13px; }
-  tbody td{ font-size:15px; }
-  .items-table th, .items-table td{ padding:6px 8px; }
-}
+/* ---- Utilitários ---- */
+.hide{ display:none !important }
