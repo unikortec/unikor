@@ -1,15 +1,15 @@
 // app/pedidos/js/db.js
 // Salva pedido de forma idempotente (via API do tenant).
 // Se a API não responder, tenta fallback direto no Firestore (id fixo por hash da idemKey).
-
 import {
-  db, TENANT_ID,
+  db, TENANT_ID, auth,
   collection, doc, setDoc, serverTimestamp
 } from './firebase.js';
 import { up } from './utils.js';
 
 /* ============== Helpers ============== */
 function normalizeEnderecoForKey(str){ return up(str).replace(/\s+/g,' ').trim(); }
+
 function itemsSig(items){
   if (!Array.isArray(items)) return '';
   return items.map(i=>[
@@ -72,7 +72,6 @@ export async function savePedidoIdempotente(payload){
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
     }, 4000);
-
     if (!r.ok) throw new Error(`API ${r.status}`);
     const j = await r.json();
     if (!j?.ok) throw new Error("API retornou erro lógico");
@@ -85,21 +84,20 @@ export async function savePedidoIdempotente(payload){
   try{
     const docId = "idem_" + hash32(idempotencyKey);
     const col = collection(db, "tenants", TENANT_ID, "pedidos");
-
     const toSave = {
       ...payload,
       idempotencyKey,
       tenantId: TENANT_ID,
       createdAt: serverTimestamp(),
+      createdBy: auth.currentUser.uid, // <-- ALTERAÇÃO APLICADA AQUI
       dataEntregaDia: payload?.dataEntregaISO
         ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
         : null,
     };
-
     await setDoc(doc(col, docId), toSave, { merge: true });
     return { ok:true, reused:false, id: docId, local:true };
   }catch(e2){
-    console.warn("[DB] Fallback Firestore falhou (não bloqueia PDF):", e2?.message || e2);
+    console.error("[DB] Fallback Firestore falhou:", e2); // Mudei para .error para dar mais destaque ao erro
     return { ok:false, localOnly:true, id:"local-"+Date.now() };
   }
 }
