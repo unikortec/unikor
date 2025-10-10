@@ -1,99 +1,232 @@
-/* ===== Modal: tamanho/rolagem responsiva ===== */
-.modal{ position:fixed; inset:0; display:none; z-index:9999 }
-.modal[aria-hidden="false"]{ display:flex; align-items:flex-start; justify-content:center }
-.modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.45) }
-
+:root{
+  --brand: #1e7f46;
+  --brand-600: #166c3a;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --bg: #f1f5f9;
+  --line: #e2e8f0;
+  --danger:#dc2626;
+  --gray:#475569;
+}
+*{ box-sizing:border-box }
+body{
+  margin:0;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
+  background:var(--bg);
+  color:var(--ink);
+}
+/* HEADER */
+.hero{
+  background:var(--brand);
+  color:#fff;
+}
+.hero-inner{
+  max-width:1200px;
+  margin:0 auto;
+  padding:16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.hero-logo.big{
+  height:50px;
+  width:auto;
+  display:block;
+}
+.btn-report{
+  background:#fff;
+  color:var(--brand);
+  font-weight:700;
+  text-decoration:none;
+  padding:10px 18px;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:2px solid #ffffff;
+  box-shadow:0 1px 0 rgba(0,0,0,.06);
+}
+.btn-report:active{ transform:translateY(1px); }
+/* Botão redondo “+” */
+.btn-add{
+  background:var(--brand);
+  color:#fff;
+  font-size:22px;
+  font-weight:700;
+  width:42px; height:42px;
+  border-radius:50%;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-right:12px;
+  box-shadow:0 1px 0 rgba(0,0,0,.06);
+  border:2px solid #ffffff;
+  cursor:pointer;
+}
+.btn-add:active{ transform:translateY(1px); }
+/* MAIN */
+#appMain{ max-width: 1100px; margin: 14px auto 40px; padding: 0 12px; }
+/* MOBILE */
+@media (max-width: 560px){
+  .hero-inner{ padding:14px 12px; }
+  .hero-logo.big{ height:40px; }
+  .btn-report{ padding:8px 14px; font-size:14px; }
+}
+/* Banners */
+.offline-banner{ background:#fbbf24; color:#000; text-align:center; padding:6px; font-size:14px }
+/* FORM */
+.field-group{ margin-bottom:12px }
+.grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
+@media (max-width: 740px){ .grid-2{ grid-template-columns:1fr } }
+.switch-box{ display:flex; align-items:center; gap:8px }
+.frete-row{ display:flex; align-items:center; gap:12px }
+.muted{ color:var(--muted); font-size:12px }
+.inline-help{ font-size:11px; color:var(--muted) }
+input, select, textarea{
+  width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; outline:0; background:#fff
+}
+button{
+  width:100%; padding:10px 14px; border-radius:8px; border:none; cursor:pointer; font:inherit
+}
+.pdf-btn{ background:#0ea5a6; color:#fff; margin:4px 0 }
+.pdf-btn.salvar{ background:var(--brand) }
+.pdf-btn.compartilhar{ background:#475569 }
+/* ITENS */
+.item{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:10px;
+}
+.total{ font-weight:700; font-size:1.05rem }
+/* BOTÕES ADICIONAR/REMOVER */
+#adicionarItemBtn{
+  background:#16a34a; /* verde */
+  color:#fff;
+  font-weight:700;
+  margin:8px 0 16px;
+}
+#adicionarItemBtn:hover{ filter:brightness(0.95); }
+.item .remove{
+  background:var(--danger); /* vermelho */
+  color:#fff;
+  font-weight:700;
+  margin-top:8px;
+}
+.item .remove:hover{ filter:brightness(0.95); }
+/* ===== Modal de Cliente ===== */
+.modal.hidden{ display:none; }
+.modal{
+  position:fixed; inset:0; z-index:1000;
+}
+.modal-backdrop{
+  position:absolute; inset:0; background:rgba(0,0,0,.45);
+}
 .modal-card{
   position:relative;
-  margin:28px 12px;          /* respiro nas bordas */
-  background:#fff; border-radius:16px;
-  max-width:980px; width:100%;
-  box-shadow:0 10px 30px rgba(16,24,40,.18);
+  width:min(640px, 92vw);
+  margin:6vh auto 0;
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
+  overflow:hidden;
 }
-
-/* cabeçalho/rodapé fixos dentro do card */
-.modal-header, .modal-footer{
-  position:sticky; top:0;
-  background:#fff; z-index:2;
-  display:flex; align-items:center; gap:10px;
+.modal-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; border-bottom:1px solid var(--line);
 }
-.modal-header{ justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e7edf3; border-radius:16px 16px 0 0 }
+.modal-header h3{ margin:0; font-size:18px; }
+.modal-close{
+  background:transparent; border:none; font-size:22px; line-height:1; cursor:pointer;
+  width:36px; height:36px; border-radius:8px;
+}
+.modal-close:hover{ background:#f1f5f9; }
+.modal-body{ padding:14px; }
 .modal-footer{
-  bottom:0; top:auto; padding:12px 16px; border-top:1px solid #e7edf3; border-radius:0 0 16px 16px;
-  gap:10px; justify-content:flex-end;
+  display:flex; gap:10px; justify-content:flex-end;
+  padding:12px 14px; border-top:1px solid var(--line);
 }
-
-/* conteúdo rola, mantendo header/footer visíveis */
-.modal-body{
-  max-height: calc(100vh - 180px);
-  overflow:auto;
-  padding:16px;
+.btn-secondary{
+  background:#e2e8f0; color:#111827; font-weight:700;
 }
-
-/* grid dos campos do topo do modal */
-.modal .grid{ display:grid; gap:12px; grid-template-columns:repeat(12, minmax(0,1fr)) }
-.modal .grid > div{ grid-column:span 6 }         /* 2 colunas padrão */
-.modal .grid > div[style*="grid-column:1/-1"]{ grid-column:1 / -1 } /* Observações já vem full */
-
-@media (max-width: 720px){
-  .modal-card{ margin:14px 8px; }
-  .modal .grid > div{ grid-column:1 / -1 }       /* 1 coluna no mobile */
-  .modal-body{ max-height: calc(100vh - 140px); }
+.btn-primary{
+  background:var(--brand); color:#fff; font-weight:700;
 }
-
-/* ===== Tabela de itens ===== */
-.items-table{
-  width:100%;
-  border:1px solid #e7edf3; border-radius:12px; overflow:auto; /* rolagem horizontal se faltar espaço */
-  border-collapse:separate; border-spacing:0;
-  background:#fff;
+.btn-secondary:hover, .btn-primary:hover{ filter:brightness(0.97); }
+/* Botão de consulta (lupa) */
+.btn-consultar {
+  background: #e2e8f0;
+  color: #111827;
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
 }
-
-/* layout fixo + larguras por coluna
-   1) Descrição = ~50% mais comprida
-   2) Qtd = ~65% menor que era (fica compacta)
-   3) Un = dobro do tamanho anterior
-*/
-.items-table table{ width:100%; table-layout:fixed } /* caso você use um <div> wrapper; se não, ignore */
-
-/* Aplica nas TH e TD para a mesma largura */
-.items-table thead th:nth-child(1), .items-table tbody td:nth-child(1){ width:52% } /* Descrição */
-.items-table thead th:nth-child(2), .items-table tbody td:nth-child(2){ width:10% } /* Qtd */
-.items-table thead th:nth-child(3), .items-table tbody td:nth-child(3){ width:12% } /* Un (dobrado) */
-.items-table thead th:nth-child(4), .items-table tbody td:nth-child(4){ width:13% } /* Preço */
-.items-table thead th:nth-child(5), .items-table tbody td:nth-child(5){ width:13% } /* Subtotal */
-.items-table thead th:nth-child(6), .items-table tbody td:nth-child(6){ width:10ch } /* Del. (botão) */
-
-.items-table thead th{
-  background:#f6fafb; text-align:left; padding:10px 12px; border-bottom:1px solid #e7edf3;
-  font-weight:700; color:#475569;
+.btn-consultar:hover {
+  filter: brightness(0.97);
 }
-.items-table tbody td{ padding:8px 10px; border-bottom:1px solid #eef2f6; background:#fff }
-.items-table tbody tr:nth-child(even){ background:#f8fafc }
-
-.items-table input[type="text"],
-.items-table input[type="number"],
-.items-table select{
-  width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; outline:none;
-  background:#fff;
+.btn-consultar:active {
+  transform: translateY(1px);
 }
-.items-table input:focus, .items-table select:focus{
-  border-color:#b7dde0; box-shadow:0 0 0 3px #0ea5a616;
+.btn-consultar:hover {
+  filter: brightness(0.95);
 }
-
-/* números alinhados à direita nas colunas numéricas */
-.items-table td:nth-child(2) input,
-.items-table td:nth-child(4) input,
-.items-table td:nth-child(5) input{ text-align:right }
-
-/* botão remover (X) */
-.items-table .btn.danger{
-  background:#fff; border:1px solid #f5c7c7; color:#c0392b; border-radius:10px; padding:6px 10px;
+.btn-consultar:active {
+  transform: translateY(1px);
 }
-.items-table .btn.danger:hover{ background:#fdecec }
-
-/* No mobile, garanta que a tabela não “quebre” — rola na horizontal se precisar */
-@media (max-width: 560px){
-  .items-table{ overflow-x:auto }
-  .items-table table{ min-width: 620px } /* mantém colunas úteis; usuário arrasta se faltar espaço */
+/* Layout do frete */
+.frete-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+.frete-row label {
+  font-weight: 500;
+  min-width: fit-content;
+}
+.frete-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+.switch-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.switch-box input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.switch-box label {
+  margin: 0;
+  font-weight: normal;
+  cursor: pointer;
+}
+/* ----- feedback de loading / bloqueio ----- */
+.app-disabled { pointer-events: none; opacity: .6; }
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 2000;
+}
+.overlay.hidden { display: none; }
+.spinner {
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 6px solid #fff; border-top-color: var(--brand);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* toasts */
+.toast-box { position: fixed; right: 12px; bottom: 12px; z-index: 2500; }
+.toast { background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; margin-top: 8px; box-shadow: 0 5px 20px rgba(0,0,0,.25); }
+.toast.ok { background: var(--brand); }
+.toast.warn { background: #f59e0b; color:#111; }
+.toast.err { background: #ef4444; }
