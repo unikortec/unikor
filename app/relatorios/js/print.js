@@ -36,89 +36,187 @@ function subtotalItem(it){
   return qtd * pu;
 }
 
-// Ticket 80mm (o mesmo “look” do app Pedidos)
+// === SUBSTITUA SOMENTE ESTA FUNÇÃO NO relatorios/js/print.js ===
 function drawPedido80mm(p){
   if (!jsPDF) throw new Error('jsPDF não carregado');
-  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[72,297] });
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[72, 297] });
 
-  const W = 68, X = 2;
-  let y = 8;
+  // ---------- helpers compatíveis com o pdf do app Pedidos ----------
+  const margemX = 2, larguraCaixa = 68, SAFE_BOTTOM = 280;
+  let y = 10;
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('PEDIDO SERRA NOBRE', 36, y, {align:'center'});
-  y += 3; doc.setLineWidth(.3); doc.line(2, y, 70, y); y += 4;
+  const splitToWidth = (t, w)=> doc.splitTextToSize(t||"", w);
+  const formatarData = (iso)=> { if(!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; };
+  const diaDaSemanaExtenso = (iso)=> { if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); };
 
-  const kv = (label, value)=> {
-    doc.setFont('helvetica','bold'); doc.setFontSize(8);
-    doc.text(label, X+3, y);
-    const w = doc.getTextWidth(label)+4;
-    doc.setFont('helvetica','normal');
-    doc.text(String(value||'-').toUpperCase(), X+3+w, y);
-    y += 6;
-  };
+  const ensureSpace = (h)=>{ if (y+h > SAFE_BOTTOM){ doc.addPage([72,297],'portrait'); y = 10; } };
 
-  kv('CLIENTE:', p.cliente);
-  kv('ENDEREÇO:', p.endereco);
-  kv('CONTATO:', p.contato || '');
-  kv('CEP:', p.cep || '');
+  function drawCenteredKeyValueBox(x,y0,w,label,value,{rowH=10,titleSize=7,valueSize=8}={}){
+    doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x,y0,w,rowH,"S");
+    const cy = y0 + rowH/2 + .5;
+    doc.setFont("helvetica","bold"); doc.setFontSize(titleSize);
+    doc.text(String(label||"").toUpperCase(), x+w/2, cy-3, {align:"center"});
+    doc.setFont("helvetica","normal"); doc.setFontSize(valueSize);
+    doc.text(String(value||"").toUpperCase(), x+w/2, cy+2, {align:"center"});
+    return rowH;
+  }
+  function drawKeyValueBox(x,y0,w,label,value,{rowH=10,titleSize=7,valueSize=8}={}){
+    doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(x,y0,w,rowH,"S");
+    const cy = y0 + rowH/2 + .5;
+    const ltxt = (String(label||"").toUpperCase()+": ");
+    doc.setFont("helvetica","bold"); doc.setFontSize(titleSize);
+    doc.text(ltxt, x+3, cy);
+    doc.setFont("helvetica","normal"); doc.setFontSize(valueSize);
+    doc.text(String(value||"").toUpperCase(), x+3 + doc.getTextWidth(ltxt), cy);
+    return rowH;
+  }
 
-  // Data/hora
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('DATA ENTREGA', X+W*0.25, y);
-  doc.text('HORÁRIO ENTREGA', X+W*0.75, y, {align:'center'});
-  y += 5;
-  doc.setFont('helvetica','normal'); doc.setFontSize(9);
-  doc.text(toBR(p.dataEntregaISO||p.entregaISO||''), X+W*0.25, y);
-  doc.text(String(p.horaEntrega||p.hora||''), X+W*0.75, y, {align:'center'});
-  y += 7;
+  // ---------- Cabeçalho ----------
+  doc.setFont("helvetica","bold"); doc.setFontSize(11);
+  doc.text("PEDIDO SERRA NOBRE", 36, 7, { align:"center" });
+  doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
-  // Itens
-  doc.setFont('helvetica','bold'); doc.setFontSize(8);
-  doc.text('ITENS', X+3, y); y+=4; doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  // Normalização leve de campos (o relatório não tem CNPJ/IE; deixamos “—”)
+  const dataEntregaISO = p.dataEntregaISO || p.entregaISO || "";
+  const horaEntrega    = p.horaEntrega || p.hora || "";
+  const pagamento      = (p.pagamento || "").toUpperCase();
+
+  // ---------- Cliente ----------
+  ensureSpace(14);
+  y += drawKeyValueBox(margemX, y, larguraCaixa, "CLIENTE", (p.cliente||"").toUpperCase(), {rowH:12}) + 1;
+
+  // CNPJ / IE (placeholders)
+  const gap1=1, halfW=(larguraCaixa-gap1)/2;
+  ensureSpace(10);
+  drawCenteredKeyValueBox(margemX, y, halfW, "CNPJ", "—");
+  drawCenteredKeyValueBox(margemX+halfW+gap1, y, halfW, "I.E.", "—");
+  y += 11;
+
+  // ---------- Endereço ----------
+  const pad=3, innerW=larguraCaixa - pad*2;
+  const linhasEnd = splitToWidth((p.endereco||"").toUpperCase(), innerW);
+  const rowH = Math.max(12, 6 + linhasEnd.length*5 + 4);
+  ensureSpace(rowH);
+  doc.setDrawColor(0); doc.setLineWidth(0.2); doc.rect(margemX,y,larguraCaixa,rowH,"S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.text("ENDEREÇO", margemX+pad, y+5);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8);
+  let baseY = y+9; linhasEnd.forEach((ln,i)=> doc.text(ln, margemX+pad, baseY+i*5));
+  y += rowH + 1;
+
+  // ---------- Contato / CEP (se vierem vazios mostra “—”) ----------
+  ensureSpace(10);
+  drawCenteredKeyValueBox(margemX, y, halfW, "CONTATO", (p.contato||"").toString()||"—");
+  drawCenteredKeyValueBox(margemX+halfW+gap1, y, halfW, "CEP", (p.cep||"").toString()||"—");
+  y += 11;
+
+  // ---------- Dia / Data / Hora ----------
+  ensureSpace(22);
+  doc.rect(margemX, y, larguraCaixa, 10, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(9);
+  doc.text("DIA DA SEMANA:", margemX+3, y+6);
+  doc.text(diaDaSemanaExtenso(dataEntregaISO), margemX+larguraCaixa/2+12, y+6, {align:"center"});
+  y += 11;
+
+  const halfW2 = (larguraCaixa-1)/2;
+  doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  doc.rect(margemX, y, halfW2, 10, "S");
+  doc.rect(margemX+halfW2+1, y, halfW2, 10, "S");
+  doc.text("DATA ENTREGA", margemX+halfW2/2, y+4, {align:"center"});
+  doc.text("HORÁRIO ENTREGA", margemX+halfW2+1+halfW2/2, y+4, {align:"center"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text(formatarData(dataEntregaISO), margemX+halfW2/2, y+8, {align:"center"});
+  doc.text(horaEntrega || "—", margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
+  y += 12;
+
+  // ---------- Forma de pagamento ----------
+  ensureSpace(10);
+  doc.rect(margemX, y, larguraCaixa, 10, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8);
+  doc.text("FORMA DE PAGAMENTO", margemX+3, y+6);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text(pagamento || "—", margemX+larguraCaixa-3, y+6, {align:"right"});
+  y += 12;
+
+  // ---------- Tabela de itens (4 colunas) ----------
+  const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
+  ensureSpace(12);
+  doc.setFont("helvetica","bold"); doc.setFontSize(7);
+  doc.rect(margemX, y, W_PROD, 10, "S");
+  doc.rect(margemX+W_PROD, y, W_QDE, 10, "S");
+  doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, 10, "S");
+  doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, 10, "S");
+  doc.text("PRODUTO", margemX+W_PROD/2, y+6, {align:"center"});
+  doc.text("QDE", margemX+W_PROD+W_QDE/2, y+6, {align:"center"});
+  doc.text("R$ UNIT.", margemX+W_PROD+W_QDE+W_UNIT/2, y+6, {align:"center"});
+  const valorX = margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2;
+  doc.text("VALOR", valorX, y+4, {align:"center"});
+  doc.text("PRODUTO", valorX, y+8.5, {align:"center"});
+  y += 12;
 
   let subtotal = 0;
-  (Array.isArray(p.itens)?p.itens:[]).forEach((it)=>{
-    const desc = String(it.descricao || it.produto || '').toUpperCase();
-    const qtd  = Number(it.qtd ?? it.quantidade ?? 0);
-    const un   = (it.un || it.unidade || it.tipo || 'UN').toString().toUpperCase();
-    const pu   = Number(it.precoUnit ?? it.preco ?? 0);
-    const sub  = (typeof it.subtotal === 'number') ? Number(it.subtotal)
-                  : subtotalItem(it);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
-    const line = `${desc}`;
-    const tw = doc.splitTextToSize(line, W-6);
-    tw.forEach((ln,i)=>doc.text(ln, X+3, y + i*4));
-    y += Math.max(6, tw.length*4+2);
+  (Array.isArray(p.itens)?p.itens:[]).forEach((it, idx)=>{
+    const produto = String(it.descricao || it.produto || "");
+    const qtd     = Number(it.qtd ?? it.quantidade ?? 0);
+    const tipo    = (it.un || it.unidade || it.tipo || "UN").toUpperCase();
+    const pu      = Number(it.precoUnit ?? it.preco ?? 0);
+    const sub     = (typeof it.subtotal === 'number') ? Number(it.subtotal) : subtotalItem(it);
 
-    doc.setFontSize(8);
-    doc.text(`${qtd} ${un}  •  R$ ${pu.toFixed(2).replace('.',',')}  •  ${moneyBR(sub)}`, X+3, y);
-    doc.setFontSize(9);
-    y += 5;
+    const prodLines = splitToWidth(produto.toUpperCase(), W_PROD-2).slice(0,3);
+    const rowHi = Math.max(14, 6 + prodLines.length*5);
+    ensureSpace(rowHi);
 
+    // caixas
+    doc.rect(margemX, y, W_PROD, rowHi, "S");
+    doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
+    doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
+    doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, rowHi, "S");
+
+    const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
+    center(margemX+W_PROD/2, prodLines);
+    center(margemX+W_PROD+W_QDE/2, [String(qtd), tipo]);
+    center(margemX+W_PROD+W_QDE+W_UNIT/2, pu ? ["R$", pu.toFixed(2).replace('.',',')] : ["—"]);
+    center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2, sub ? ["R$", moneyBR(sub)] : ["—"]);
+
+    y += rowHi;
     subtotal += sub;
+    if (idx < (p.itens.length||0)-1) y += 2;
   });
 
-  y += 2;
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text('SOMA PRODUTOS:', X+3, y);
-  doc.text(moneyBR(subtotal), X+W-3, y, {align:'right'});
-  y += 6;
+  // ---------- Soma produtos ----------
+  const w2tercos = Math.round(larguraCaixa*(2/3));
+  const somaX = margemX + larguraCaixa - w2tercos;
+  ensureSpace(11);
+  drawKeyValueBox(doc, somaX, y, w2tercos, "SOMA PRODUTOS", "R$ " + moneyBR(subtotal), {rowH:10});
+  y += 12;
 
-  // Entrega / Frete
+  // ---------- Entrega / Frete ----------
   const tipo = (p?.entrega?.tipo || p.tipoEnt || 'ENTREGA').toUpperCase();
-  const freteCobr = Number(
-    p?.frete?.isento ? 0 : (p?.frete?.valorCobravel ?? p?.frete?.valorBase ?? p.freteValor ?? 0)
-  );
-  doc.setFont('helvetica','bold'); doc.setFontSize(9);
-  doc.text(`TIPO: ${tipo}`, X+3, y); y += 5;
-  doc.text('FRETE:', X+3, y);
-  doc.text(freteCobr ? moneyBR(freteCobr) : 'ISENTO', X+W-3, y, {align:'right'});
-  y += 6;
+  const freteCobr = Number(p?.frete?.isento ? 0 : (p?.frete?.valorCobravel ?? p?.frete?.valorBase ?? p.freteValor ?? 0));
+  const gap2=2; const entregaW=Math.round(larguraCaixa*(2/3)); const freteW=larguraCaixa-entregaW-gap2;
 
-  // Total
-  const total = subtotal + freteCobr;
-  doc.text('TOTAL DO PEDIDO:', X+3, y);
-  doc.text(moneyBR(total), X+W-3, y, {align:'right'});
+  ensureSpace(12); doc.setLineWidth(1.1);
+  doc.rect(margemX, y, entregaW, 10, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(10);
+  doc.text(tipo, margemX+entregaW/2, y+6.5, {align:"center"});
+
+  const freteX = margemX + entregaW + gap2;
+  doc.rect(freteX, y, freteW, 10, "S");
+  doc.text("FRETE", freteX+freteW/2, y+4, {align:"center"});
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  doc.text(freteCobr ? moneyBR(freteCobr) : "ISENTO", freteX+freteW/2, y+8.2, {align:"center"});
+  doc.setLineWidth(0.2);
+  y += 12;
+
+  // ---------- TOTAL ----------
+  const total = subtotal + (freteCobr || 0);
+  ensureSpace(11);
+  doc.rect(margemX, y, larguraCaixa, 10, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(9);
+  doc.text("TOTAL DO PEDIDO:", margemX+3, y+5.5);
+  doc.text("R$ " + moneyBR(total), margemX+larguraCaixa-3, y+5.5, {align:"right"});
+  y += 12;
 
   return doc;
 }
