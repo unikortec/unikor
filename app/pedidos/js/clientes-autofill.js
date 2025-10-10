@@ -1,99 +1,63 @@
-// Escuta o input #cliente e preenche os dados do cadastro na tela principal.
-import { waitForLogin } from './firebase.js';
-import { up, digitsOnly } from './utils.js';
-import { buscarClienteInfo, clientesMaisUsados } from './clientes.js';
+// Arquivo: /app/pedidos/js/clientes-autofill.js
+// Este arquivo escuta a seleção de um cliente e preenche os dados do formulário.
 
-function $(sel){ return document.querySelector(sel); }
-function setIfEmpty(id, val){
-  const el = document.getElementById(id);
-  if (!el) return;
-  if (!el.value || el.value.trim() === '') el.value = val || '';
-}
+import { buscarClienteInfo } from './clientes.js';
 
-async function hydrateDatalist(){
-  const list = document.getElementById('listaClientes');
-  if (!list) return;
-  list.innerHTML = '';
-  try{
-    const nomes = await clientesMaisUsados(80);
-    nomes.forEach(n=>{
-      const opt = document.createElement('option');
-      opt.value = n; list.appendChild(opt);
-    });
-  }catch(e){
-    console.warn('[clientes-autofill] Falha ao carregar datalist:', e?.message||e);
+document.addEventListener('DOMContentLoaded', () => {
+  const clienteInput = document.getElementById('cliente');
+
+  // Verifica se o campo de cliente realmente existe na página
+  if (!clienteInput) {
+    console.error('ERRO CRÍTICO: O campo de input com id="cliente" não foi encontrado.');
+    return;
   }
-}
 
-let lastFilledFor = ''; // evita re-buscar o mesmo nome
-async function preencherCamposDoCliente(nomeRaw){
-  const nome = up(nomeRaw || '').trim();
-  if (!nome) return;
-  if (lastFilledFor === nome) return;
-  lastFilledFor = nome;
+  // Usamos o evento 'change' que é mais confiável para datalists.
+  // Ele dispara quando o usuário seleciona um item e o campo perde o foco.
+  clienteInput.addEventListener('change', async (event) => {
+    const nomeSelecionado = event.target.value;
 
-  try{
-    const info = await buscarClienteInfo(nome); // { endereco, cnpj, ie, cep, contato, frete, isentoFrete }
-    if (!info) return;
-
-    setIfEmpty('endereco', info.endereco || '');
-    setIfEmpty('cnpj', info.cnpj || '');
-    setIfEmpty('ie', info.ie || '');
-    setIfEmpty('cep', info.cep || '');
-    setIfEmpty('contato', info.contato || '');
-
-    // Frete do cadastro -> UI principal
-    const isentar = document.getElementById('isentarFrete');
-    const freteManualGroup = document.getElementById('freteManualGroup');
-    const freteManual = document.getElementById('freteManual');
-
-    if (isentar) {
-      isentar.checked = !!info.isentoFrete;
+    // Se o campo for limpo, não faz nada
+    if (!nomeSelecionado) {
+      console.log('Campo de cliente foi limpo.');
+      return;
     }
-    if (freteManual && freteManualGroup) {
-      if (info.isentoFrete) {
-        freteManual.value = '';
-        freteManualGroup.style.display = 'none';
-      } else if (info.frete) {
-        // aceita “12,34” ou “12.34”
-        const s = String(info.frete).replace(/\./g, ',');
-        freteManual.value = s;
-        freteManualGroup.style.display = '';
+
+    // --- PONTO DE TESTE 1 ---
+    // Verifica se o evento está funcionando e qual nome ele pegou.
+    console.log(`Evento 'change' disparado. Buscando dados para: "${nomeSelecionado}"`);
+
+    // Mostra um spinner/overlay para o usuário saber que algo está acontecendo
+    const overlay = document.getElementById('appOverlay');
+    if (overlay) overlay.classList.remove('hidden');
+
+    try {
+      const info = await buscarClienteInfo(nomeSelecionado);
+
+      // --- PONTO DE TESTE 2 ---
+      // Verifica o que a função buscarClienteInfo retornou.
+      console.log('Dados recebidos do Firebase:', info);
+
+      if (info) {
+        // --- PONTO DE TESTE 3 ---
+        // Se recebemos dados, vamos tentar preencher os campos.
+        console.log('Dados encontrados. Preenchendo os campos do formulário.');
+        document.getElementById('endereco').value = info.endereco || '';
+        document.getElementById('cnpj').value = info.cnpj || '';
+        document.getElementById('ie').value = info.ie || '';
+        document.getElementById('cep').value = info.cep || '';
+        document.getElementById('contato').value = info.contato || '';
+        // Adicione aqui outros campos se necessário, sempre com `|| ''` para segurança.
+      } else {
+        // --- PONTO DE TESTE 4 ---
+        // Se não recebemos dados, saberemos aqui.
+        console.warn(`AVISO: Nenhum dado encontrado para o cliente "${nomeSelecionado}". Verifique se o nome corresponde exatamente ao ID do documento no Firebase (maiúsculas, sem espaços extras).`);
       }
-    }
-  }catch(e){
-    console.warn('[clientes-autofill] Erro ao buscar cliente:', e?.message||e);
-  }
-}
-
-function debounce(fn, ms=250){
-  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
-}
-
-document.addEventListener('DOMContentLoaded', async ()=>{
-  await waitForLogin();
-
-  // 1) Hidrata o datalist principal com clientes frequentes
-  hydrateDatalist();
-
-  // 2) Instala listeners no #cliente
-  const inp = document.getElementById('cliente');
-  if (!inp) return;
-
-  const handler = debounce(()=> preencherCamposDoCliente(inp.value), 250);
-  inp.addEventListener('change', handler);
-  inp.addEventListener('blur', handler);
-  inp.addEventListener('input', (e)=>{
-    // sempre manter UPPER durante a digitação, preservando espaços
-    const cur = inp.selectionStart;
-    const before = inp.value;
-    const upVal = up(before.replace(/_/g,' ').replace(/\s{2,}/g,' '));
-    if (upVal !== before){
-      inp.value = upVal;
-      try{ inp.setSelectionRange(cur, cur); }catch{}
+    } catch (error) {
+      console.error("Ocorreu um erro ao buscar as informações do cliente:", error);
+    } finally {
+      // Esconde o spinner/overlay
+      if (overlay) overlay.classList.add('hidden');
     }
   });
-
-  // 3) Se a página abrir já com um nome no campo, tenta preencher
-  if (inp.value && inp.value.trim()) preencherCamposDoCliente(inp.value);
 });
