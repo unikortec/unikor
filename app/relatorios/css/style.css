@@ -1,204 +1,99 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Unikor – Relatórios</title>
-  <meta name="theme-color" content="#0ea5a6" />
-  <base href="./">
-  <link rel="icon" href="/assets/logo/favicon.ico" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
-  <link rel="stylesheet" href="./css/style.css" />
-</head>
-<body>
-  <!-- Topo -->
-  <header class="topbar">
-    <div class="wrap">
-      <a class="logo" href="/app/">
-        <img src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
-      </a>
-      <h1>Relatórios</h1>
-      <div class="user">Usuário: <span id="userTag">—</span></div>
-    </div>
-  </header>
+/* ===== Modal: tamanho/rolagem responsiva ===== */
+.modal{ position:fixed; inset:0; display:none; z-index:9999 }
+.modal[aria-hidden="false"]{ display:flex; align-items:flex-start; justify-content:center }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.45) }
 
-  <!-- ===== Modal de Edição de Pedido (único) ===== -->
-  <div id="modalBackdrop" class="modal" aria-hidden="true">
-    <div class="modal-backdrop"></div>
+.modal-card{
+  position:relative;
+  margin:28px 12px;          /* respiro nas bordas */
+  background:#fff; border-radius:16px;
+  max-width:980px; width:100%;
+  box-shadow:0 10px 30px rgba(16,24,40,.18);
+}
 
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mTitulo">
-      <div class="modal-header">
-        <h3 id="mTitulo">Editar Pedido</h3>
-        <button id="btnFecharModal" class="modal-close" aria-label="Fechar">×</button>
-      </div>
+/* cabeçalho/rodapé fixos dentro do card */
+.modal-header, .modal-footer{
+  position:sticky; top:0;
+  background:#fff; z-index:2;
+  display:flex; align-items:center; gap:10px;
+}
+.modal-header{ justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e7edf3; border-radius:16px 16px 0 0 }
+.modal-footer{
+  bottom:0; top:auto; padding:12px 16px; border-top:1px solid #e7edf3; border-radius:0 0 16px 16px;
+  gap:10px; justify-content:flex-end;
+}
 
-      <div class="modal-body">
-        <div class="grid">
-          <div>
-            <label>ID do Pedido</label>
-            <input id="mId" type="text" readonly />
-          </div>
-          <div>
-            <label>Cliente</label>
-            <input id="mCliente" type="text" />
-          </div>
-          <div>
-            <label>Data Entrega (ISO)</label>
-            <input id="mDataEntregaISO" type="date" />
-          </div>
-          <div>
-            <label>Hora Entrega</label>
-            <input id="mHoraEntrega" type="time" />
-          </div>
-          <div>
-            <label>Tipo</label>
-            <select id="mTipo">
-              <option value="ENTREGA">ENTREGA</option>
-              <option value="RETIRADA">RETIRADA</option>
-            </select>
-          </div>
-          <div>
-            <label>Pagamento</label>
-            <input id="mPagamento" type="text" placeholder="ex.: PIX, DINHEIRO…" />
-          </div>
-          <div>
-            <label>Nº do Cupom Fiscal</label>
-            <input id="mCupomFiscal" type="text" />
-          </div>
-          <div>
-            <label>Frete (R$)</label>
-            <input id="mFrete" type="text" inputmode="decimal" placeholder="0,00" />
-          </div>
-          <div style="grid-column:1/-1">
-            <label>Observações</label>
-            <textarea id="mObs" rows="2"></textarea>
-          </div>
-        </div>
+/* conteúdo rola, mantendo header/footer visíveis */
+.modal-body{
+  max-height: calc(100vh - 180px);
+  overflow:auto;
+  padding:16px;
+}
 
-        <h4 style="margin:12px 0 8px">Itens</h4>
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th>Descrição</th>
-              <th>Qtd</th>
-              <th>Un</th>
-              <th>Preço</th>
-              <th>Subtotal</th>
-              <th class="right">Del.</th>
-            </tr>
-          </thead>
-          <tbody id="itemsBody"></tbody>
-        </table>
+/* grid dos campos do topo do modal */
+.modal .grid{ display:grid; gap:12px; grid-template-columns:repeat(12, minmax(0,1fr)) }
+.modal .grid > div{ grid-column:span 6 }         /* 2 colunas padrão */
+.modal .grid > div[style*="grid-column:1/-1"]{ grid-column:1 / -1 } /* Observações já vem full */
 
-        <div class="grid" style="margin-top:10px">
-          <div>
-            <label>Total (itens)</label>
-            <input id="mTotal" type="text" readonly />
-          </div>
-        </div>
-      </div>
+@media (max-width: 720px){
+  .modal-card{ margin:14px 8px; }
+  .modal .grid > div{ grid-column:1 / -1 }       /* 1 coluna no mobile */
+  .modal-body{ max-height: calc(100vh - 140px); }
+}
 
-      <div class="modal-footer" style="display:flex; gap:10px; justify-content:flex-end; margin-top:12px">
-        <button id="btnAddItem" class="btn btn-outline" type="button">Adicionar Item</button>
-        <button id="btnPDFPedido" class="btn btn-gray" type="button" title="Reimprimir cupom">Gerar PDF</button>
-        <button id="btnSalvar" class="btn btn-primary" type="button">Salvar</button>
-      </div>
-    </div>
-  </div>
-  <!-- ===== /Modal ===== -->
+/* ===== Tabela de itens ===== */
+.items-table{
+  width:100%;
+  border:1px solid #e7edf3; border-radius:12px; overflow:auto; /* rolagem horizontal se faltar espaço */
+  border-collapse:separate; border-spacing:0;
+  background:#fff;
+}
 
-  <main class="container">
-    <!-- Filtros -->
-    <section class="card filters">
-      <div class="grid">
-        <div class="field" data-span="6">
-          <label for="fDataIni">Data entrega — de</label>
-          <input type="date" id="fDataIni" />
-        </div>
-        <div class="field" data-span="6">
-          <label for="fDataFim">Data entrega — até</label>
-          <input type="date" id="fDataFim" />
-        </div>
+/* layout fixo + larguras por coluna
+   1) Descrição = ~50% mais comprida
+   2) Qtd = ~65% menor que era (fica compacta)
+   3) Un = dobro do tamanho anterior
+*/
+.items-table table{ width:100%; table-layout:fixed } /* caso você use um <div> wrapper; se não, ignore */
 
-        <div class="field" data-span="6">
-          <label for="fHoraIni">Horário — de</label>
-          <input type="time" id="fHoraIni" />
-        </div>
-        <div class="field" data-span="6">
-          <label for="fHoraFim">Horário — até</label>
-          <input type="time" id="fHoraFim" />
-        </div>
+/* Aplica nas TH e TD para a mesma largura */
+.items-table thead th:nth-child(1), .items-table tbody td:nth-child(1){ width:52% } /* Descrição */
+.items-table thead th:nth-child(2), .items-table tbody td:nth-child(2){ width:10% } /* Qtd */
+.items-table thead th:nth-child(3), .items-table tbody td:nth-child(3){ width:12% } /* Un (dobrado) */
+.items-table thead th:nth-child(4), .items-table tbody td:nth-child(4){ width:13% } /* Preço */
+.items-table thead th:nth-child(5), .items-table tbody td:nth-child(5){ width:13% } /* Subtotal */
+.items-table thead th:nth-child(6), .items-table tbody td:nth-child(6){ width:10ch } /* Del. (botão) */
 
-        <div class="field" data-span="12">
-          <label for="fCliente">Cliente (contém)</label>
-          <input type="text" id="fCliente" placeholder="ex.: mercado" />
-        </div>
+.items-table thead th{
+  background:#f6fafb; text-align:left; padding:10px 12px; border-bottom:1px solid #e7edf3;
+  font-weight:700; color:#475569;
+}
+.items-table tbody td{ padding:8px 10px; border-bottom:1px solid #eef2f6; background:#fff }
+.items-table tbody tr:nth-child(even){ background:#f8fafc }
 
-        <div class="field" data-span="6">
-          <label for="fTipo">Tipo (Entrega/Retirada)</label>
-          <select id="fTipo">
-            <option value="">Todos</option>
-            <option value="ENTREGA">ENTREGA</option>
-            <option value="RETIRADA">RETIRADA</option>
-          </select>
-        </div>
+.items-table input[type="text"],
+.items-table input[type="number"],
+.items-table select{
+  width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; outline:none;
+  background:#fff;
+}
+.items-table input:focus, .items-table select:focus{
+  border-color:#b7dde0; box-shadow:0 0 0 3px #0ea5a616;
+}
 
-        <div class="field" data-span="6">
-          <label for="fFormato">Formato</label>
-          <select id="fFormato" disabled>
-            <option>Reduzido</option>
-          </select>
-        </div>
-      </div>
+/* números alinhados à direita nas colunas numéricas */
+.items-table td:nth-child(2) input,
+.items-table td:nth-child(4) input,
+.items-table td:nth-child(5) input{ text-align:right }
 
-      <div class="actions">
-        <button id="btnBuscar" class="btn btn-primary">Buscar</button>
-        <button id="btnLimpar" class="btn btn-outline">Limpar</button>
-        <button id="btnXLSX" class="btn btn-primary">Exportar XLSX</button>
-        <button id="btnPDF"  class="btn btn-gray">Gerar PDF</button>
-      </div>
-    </section>
+/* botão remover (X) */
+.items-table .btn.danger{
+  background:#fff; border:1px solid #f5c7c7; color:#c0392b; border-radius:10px; padding:6px 10px;
+}
+.items-table .btn.danger:hover{ background:#fdecec }
 
-    <!-- Tabela -->
-    <section class="card table-wrap">
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Hora</th>
-              <th>Cliente <small>(clique para editar)</small></th>
-              <th>Itens</th>
-              <th>Total (R$)</th>
-              <th>Tipo</th>
-              <th>Pagamento</th>
-              <th>Frete</th>
-              <th>Nº Cupom</th>
-              <th class="center">Imp.</th>
-              <th class="center">Del.</th>
-            </tr>
-          </thead>
-          <tbody id="tbody">
-            <tr><td colspan="11" class="muted">Carregue um filtro…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Totais -->
-      <div class="footer-totals">
-        <div class="ft-box"><div class="ft-label">PEDIDOS</div><div id="ftCount">0</div></div>
-        <div class="ft-box"><div class="ft-label">ITENS</div><div id="ftItens">0</div></div>
-        <div class="ft-box"><div class="ft-label">TOTAL R$</div><div id="ftTotal">R$ 0,00</div></div>
-        <div class="ft-box"><div class="ft-label">TOTAL FRETE</div><div id="ftFrete">R$ 0,00</div></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- jsPDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-  <!-- App JS -->
-  <script type="module" src="./js/firebase.js"></script>
-  <script type="module" src="./js/app.js"></script>
-</body>
-</html>
+/* No mobile, garanta que a tabela não “quebre” — rola na horizontal se precisar */
+@media (max-width: 560px){
+  .items-table{ overflow-x:auto }
+  .items-table table{ min-width: 620px } /* mantém colunas úteis; usuário arrasta se faltar espaço */
+}
