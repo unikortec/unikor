@@ -269,3 +269,26 @@ tbody tr:hover{ background:#eef6f7 }
   .items-table{ overflow-x:auto }
   .items-table table{ min-width: 620px }        /* usuário arrasta se faltar espaço */
 }
+/* ===== Complementos PWA/iOS e refinamentos ===== */
+
+/* Rolagem suave em iOS dentro de containers com overflow */
+.table-wrap .table-scroll,
+.modal-body { -webkit-overflow-scrolling: touch; }
+
+/* Evita “scroll bleed” no fundo quando o modal está aberto */
+.modal[aria-hidden="false"] { overflow: hidden; }
+.modal-backdrop { touch-action: none; }
+
+/* Garantir que o botão de fechar e ícones não “saltem” em telas retina */
+.modal-close,
+.btn.icon { -webkit-font-smoothing: antialiased; }
+
+/* Pequeno acerto de contraste do cabeçalho da tabela principal
+   (mantém o verde sutil do tema) */
+thead th { background: #e9f6ec; }
+
+/* Segurança para telas muito altas: o card nunca encosta nos cantos
+   (mantém o mesmo respiro em desktop e mobile) */
+@media (min-height: 920px){
+  .modal-card { margin-top: 40px; margin-bottom: 24px; }
+}
