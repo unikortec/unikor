@@ -1,233 +1,99 @@
-/* ===========================
-   UNIKOR – RELATÓRIOS (clássico)
-   =========================== */
-
-/* ---- Paleta/vars ---- */
-:root{
-  /* Mesma paleta do app Pedidos */
-  --brand: #1e7f46;
-  --brand-600:#166c3a;
-
-  --green:#1b7a3f;      /* botões/links */
-  --ink:#0f172a;
-  --muted:#6b7280;
-  --bg:#f5f7fb;
-  --card:#ffffff;
-  --line:#e7edf3;
-  --zebra1:#ffffff;
-  --zebra2:#f6fafb;
-
-  --danger:#dc2626;
-  --gray:#475569;
-
-  --shadow: 0 10px 30px rgba(16,24,40,.06), 0 4px 8px rgba(16,24,40,.06);
-}
-
-*{ box-sizing:border-box }
-html,body{ height:100% }
-body{
-  margin:0; font: 15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-  color:var(--ink); background:var(--bg);
-}
-
-/* ======================
-   Topbar
-   ======================*/
-.topbar{
-  background:var(--brand);
-  color:#fff;
-  position:sticky; top:0; z-index:200;
-  box-shadow: 0 1px 0 #00000014;
-}
-.topbar .wrap{
-  max-width:1100px; margin:0 auto; padding:12px 16px;
-  display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:12px;
-}
-.topbar .logo{ display:inline-flex; align-items:center; gap:10px; text-decoration:none }
-.topbar .logo img{ height:60px; width:auto; display:block } /* LOGO maior, como pediu */
-.topbar h1{
-  margin:0; text-align:center; letter-spacing:.5px;
-  font-size:18px; font-weight:800; text-transform:uppercase; /* menor que antes */
-}
-.topbar .user{ font-weight:700 }
-
-/* ======================
-   Containers / Cards
-   ======================*/
-.container{ max-width:1100px; margin:18px auto; padding:0 16px }
-.card{
-  background:var(--card); border:1px solid var(--line); border-radius:16px;
-  box-shadow:var(--shadow); padding:16px; margin-bottom:14px;
-}
-
-/* ======================
-   Filtros
-   ======================*/
-.filters .filters-title{ display:none } /* esconde “LEO” abaixo do título */
-.grid{ display:grid; gap:12px; grid-template-columns:repeat(12,minmax(0,1fr)) }
-.field{ display:flex; flex-direction:column; gap:6px }
-.field label{ font-size:13px; color:var(--muted) }
-.field input,.field select,.field textarea{
-  width:100%; background:#fff; color:var(--ink);
-  border:1px solid var(--line); padding:12px 14px; border-radius:14px; outline:none;
-  box-shadow:0 1px 0 #00000006 inset;
-}
-.field input:focus,.field select:focus,.field textarea:focus{
-  border-color:#b7dde0; box-shadow:0 0 0 4px #22c55e22;
-}
-
-/* mapa das colunas (desktop) */
-.filters .grid .field:nth-child(1),
-.filters .grid .field:nth-child(2),
-.filters .grid .field:nth-child(3),
-.filters .grid .field:nth-child(4){ grid-column:span 6 }
-.filters .grid .field:nth-child(5){ grid-column:1 / -1 } /* Cliente 1 linha */
-.filters .grid .field:nth-child(6),
-.filters .grid .field:nth-child(7){ grid-column:span 6 }
-
-/* Mobile: 1 coluna */
-@media (max-width:719px){
-  .filters .grid .field{ grid-column:1 / -1 }
-}
-
-/* Ações – 2 por linha */
-.actions{
-  margin-top:8px; display:grid; gap:10px; grid-template-columns:1fr 1fr;
-}
-.btn{
-  display:inline-flex; justify-content:center; align-items:center; gap:8px;
-  padding:12px 16px; border-radius:16px; border:1px solid transparent;
-  font-weight:700; cursor:pointer; text-decoration:none; user-select:none; min-height:46px;
-  transition:transform .02s ease, filter .15s ease;
-}
-.btn:active{ transform:translateY(1px) }
-.btn-primary{ background:var(--green); color:#fff }
-.btn-primary:hover{ filter:brightness(.96) }
-.btn-outline{ background:#fff; border-color:#cfe6d9; color:var(--green) }
-.btn-outline:hover{ background:#f7fbf8 }
-.btn-gray{ background:#374151; color:#fff }
-.btn-gray:hover{ filter:brightness(1.06) }
-
-/* ======================
-   Tabela
-   ======================*/
-.table-wrap .table-scroll{ overflow:auto; border-radius:14px; border:1px solid var(--line) }
-table{ width:100%; border-collapse:separate; border-spacing:0 }
-thead th{
-  position:sticky; top:0; background:#f0f7f8; color:#0b4350; z-index:1;
-  font-weight:800; text-align:left; padding:12px 16px; border-bottom:1px solid var(--line);
-}
-tbody td{ padding:16px; border-bottom:1px solid var(--line) }
-tbody tr:nth-child(odd){ background:var(--zebra1) }
-tbody tr:nth-child(even){ background:var(--zebra2) }
-tbody tr:hover{ background:#eef6f7 }
-.center{ text-align:center }
-.muted{ color:var(--muted) }
-/* números à direita (Total, Frete) */
-.table-wrap table td:nth-child(5), .table-wrap table td:nth-child(8){ text-align:right }
-
-/* Ações / links */
-.cell-client{
-  color:var(--green); font-weight:800; cursor:pointer; text-decoration:underline
-}
-.btn.icon{
-  background:#f3f4f6; border:1px solid #e5e7eb; border-radius:12px; padding:8px 10px;
-  font-size:18px; line-height:0; cursor:pointer;
-}
-.btn.icon:hover{ filter:brightness(.97) }
-/* “X” vermelho somente cor */
-.btn-cancel{ background:#fff; border-color:#f5c7c7; color:#c0392b }
-.btn-cancel:hover{ background:#fdecec }
-
-/* ======================
-   Rodapé fixo dos totais
-   ======================*/
-.footer-totals{
-  display:grid; grid-template-columns:repeat(4,1fr);
-  gap:8px; padding:10px 8px calc(10px + env(safe-area-inset-bottom));
-  border:1px solid var(--line);
-  border-radius:14px; background:#fff; margin-top:12px;
-  position:sticky; bottom:8px; box-shadow:var(--shadow);
-}
-.ft-box{ text-align:center }
-.ft-box .ft-label{
-  font-size:11px; color:var(--muted); letter-spacing:.35px; margin-bottom:2px;
-}
-.footer-totals > .ft-box > div:last-child{
-  font-weight:800; font-size:16px; white-space:nowrap;
-}
-
-/* ======================
-   Modal (visual iOS card)
-   ======================*/
-/* contêiner + backdrop */
+/* ===== Modal: tamanho/rolagem responsiva ===== */
 .modal{ position:fixed; inset:0; display:none; z-index:9999 }
-.modal[aria-hidden="false"]{ display:flex }
-.modal-backdrop{
-  position:fixed; inset:0; background:rgba(15,23,42,.40); backdrop-filter:blur(2px);
-}
+.modal[aria-hidden="false"]{ display:flex; align-items:flex-start; justify-content:center }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.45) }
 
-/* cartão */
 .modal-card{
-  position:relative; margin:24px auto; background:#fff;
-  border-radius:20px; box-shadow:0 30px 60px rgba(2,6,23,.20), 0 6px 20px rgba(2,6,23,.12);
-  max-width:940px; width:min(940px, calc(100% - 20px));
-  padding:18px;
+  position:relative;
+  margin:28px 12px;          /* respiro nas bordas */
+  background:#fff; border-radius:16px;
+  max-width:980px; width:100%;
+  box-shadow:0 10px 30px rgba(16,24,40,.18);
 }
 
-/* header */
-.modal-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px }
-.modal-header h3{ margin:0; font-size:22px; font-weight:800 }
-.modal-close{
-  border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:6px 12px;
-  font-size:20px; cursor:pointer; line-height:1;
+/* cabeçalho/rodapé fixos dentro do card */
+.modal-header, .modal-footer{
+  position:sticky; top:0;
+  background:#fff; z-index:2;
+  display:flex; align-items:center; gap:10px;
 }
-
-/* corpo */
-.modal-body .grid{ display:grid; gap:12px; grid-template-columns:repeat(12,minmax(0,1fr)) }
-.modal-body .grid > div{ grid-column:span 6 }
-.modal-body .grid > div[style*="grid-column:1/-1"]{ grid-column:1 / -1 }
-.modal-body label{ font-size:13px; color:var(--muted) }
-.modal-body input, .modal-body select, .modal-body textarea{
-  width:100%; background:#fff; color:var(--ink);
-  border:1px solid var(--line); padding:12px 14px; border-radius:14px; outline:none;
-  box-shadow:0 1px 0 #00000006 inset;
-}
-.modal-body input:focus, .modal-body select:focus, .modal-body textarea:focus{
-  border-color:#b7dde0; box-shadow:0 0 0 4px #22c55e22;
-}
-
-/* tabela dos itens */
-.items-table{
-  width:100%; border-collapse:separate; border-spacing:0;
-  border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-top:6px;
-}
-.items-table thead th{
-  background:#f6fafb; text-align:left; padding:12px 12px; border-bottom:1px solid var(--line); font-weight:800
-}
-.items-table td{ padding:10px 12px; border-bottom:1px solid var(--line) }
-.items-table tbody tr:nth-child(even){ background:#f8fafc }
-.items-actions{ display:flex; align-items:center; gap:12px; margin-top:10px }
-.items-actions .total-box{ margin-left:auto; display:flex; align-items:center; gap:8px }
-.items-actions .total-box input{ width:160px; text-align:right; font-weight:700 }
-
-/* botões do modal */
+.modal-header{ justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e7edf3; border-radius:16px 16px 0 0 }
 .modal-footer{
-  display:flex; align-items:center; gap:10px; justify-content:flex-end;
-  margin-top:12px;
-}
-.btn.danger{ background:#fff; border:1px solid #fbcaca; color:var(--danger) }
-.btn.danger:hover{ background:#fff3f3 }
-
-/* Responsivo */
-@media (max-width:860px){
-  .modal-card{ margin:14px 10px; border-radius:18px; padding:14px }
-  .modal-body .grid{ grid-template-columns:1fr }
-  .modal-body .grid > div{ grid-column:1 / -1 }
-  .items-actions{ flex-wrap:wrap }
+  bottom:0; top:auto; padding:12px 16px; border-top:1px solid #e7edf3; border-radius:0 0 16px 16px;
+  gap:10px; justify-content:flex-end;
 }
 
-/* ======================
-   Util
-   ======================*/
-.hide{ display:none !important }
+/* conteúdo rola, mantendo header/footer visíveis */
+.modal-body{
+  max-height: calc(100vh - 180px);
+  overflow:auto;
+  padding:16px;
+}
+
+/* grid dos campos do topo do modal */
+.modal .grid{ display:grid; gap:12px; grid-template-columns:repeat(12, minmax(0,1fr)) }
+.modal .grid > div{ grid-column:span 6 }         /* 2 colunas padrão */
+.modal .grid > div[style*="grid-column:1/-1"]{ grid-column:1 / -1 } /* Observações já vem full */
+
+@media (max-width: 720px){
+  .modal-card{ margin:14px 8px; }
+  .modal .grid > div{ grid-column:1 / -1 }       /* 1 coluna no mobile */
+  .modal-body{ max-height: calc(100vh - 140px); }
+}
+
+/* ===== Tabela de itens ===== */
+.items-table{
+  width:100%;
+  border:1px solid #e7edf3; border-radius:12px; overflow:auto; /* rolagem horizontal se faltar espaço */
+  border-collapse:separate; border-spacing:0;
+  background:#fff;
+}
+
+/* layout fixo + larguras por coluna
+   1) Descrição = ~50% mais comprida
+   2) Qtd = ~65% menor que era (fica compacta)
+   3) Un = dobro do tamanho anterior
+*/
+.items-table table{ width:100%; table-layout:fixed } /* caso você use um <div> wrapper; se não, ignore */
+
+/* Aplica nas TH e TD para a mesma largura */
+.items-table thead th:nth-child(1), .items-table tbody td:nth-child(1){ width:52% } /* Descrição */
+.items-table thead th:nth-child(2), .items-table tbody td:nth-child(2){ width:10% } /* Qtd */
+.items-table thead th:nth-child(3), .items-table tbody td:nth-child(3){ width:12% } /* Un (dobrado) */
+.items-table thead th:nth-child(4), .items-table tbody td:nth-child(4){ width:13% } /* Preço */
+.items-table thead th:nth-child(5), .items-table tbody td:nth-child(5){ width:13% } /* Subtotal */
+.items-table thead th:nth-child(6), .items-table tbody td:nth-child(6){ width:10ch } /* Del. (botão) */
+
+.items-table thead th{
+  background:#f6fafb; text-align:left; padding:10px 12px; border-bottom:1px solid #e7edf3;
+  font-weight:700; color:#475569;
+}
+.items-table tbody td{ padding:8px 10px; border-bottom:1px solid #eef2f6; background:#fff }
+.items-table tbody tr:nth-child(even){ background:#f8fafc }
+
+.items-table input[type="text"],
+.items-table input[type="number"],
+.items-table select{
+  width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; outline:none;
+  background:#fff;
+}
+.items-table input:focus, .items-table select:focus{
+  border-color:#b7dde0; box-shadow:0 0 0 3px #0ea5a616;
+}
+
+/* números alinhados à direita nas colunas numéricas */
+.items-table td:nth-child(2) input,
+.items-table td:nth-child(4) input,
+.items-table td:nth-child(5) input{ text-align:right }
+
+/* botão remover (X) */
+.items-table .btn.danger{
+  background:#fff; border:1px solid #f5c7c7; color:#c0392b; border-radius:10px; padding:6px 10px;
+}
+.items-table .btn.danger:hover{ background:#fdecec }
+
+/* No mobile, garanta que a tabela não “quebre” — rola na horizontal se precisar */
+@media (max-width: 560px){
+  .items-table{ overflow-x:auto }
+  .items-table table{ min-width: 620px } /* mantém colunas úteis; usuário arrasta se faltar espaço */
+}
