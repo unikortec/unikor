@@ -21,96 +21,95 @@
       <div class="user">Usuário: <span id="userTag">—</span></div>
     </div>
   </header>
-  
-  <!-- ===== Modal de Edição de Pedido ===== -->
-<div id="modalBackdrop" class="modal" aria-hidden="true">
-  <div class="modal-backdrop"></div>
 
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mTitulo">
-    <div class="modal-header">
-      <h3 id="mTitulo">Editar Pedido</h3>
-      <button id="btnFecharModal" class="modal-close" aria-label="Fechar">×</button>
-    </div>
+  <!-- ===== Modal de Edição de Pedido (único) ===== -->
+  <div id="modalBackdrop" class="modal" aria-hidden="true">
+    <div class="modal-backdrop"></div>
 
-    <div class="modal-body">
-      <div class="grid">
-        <div>
-          <label>ID do Pedido</label>
-          <input id="mId" type="text" readonly />
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mTitulo">
+      <div class="modal-header">
+        <h3 id="mTitulo">Editar Pedido</h3>
+        <button id="btnFecharModal" class="modal-close" aria-label="Fechar">×</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="grid">
+          <div>
+            <label>ID do Pedido</label>
+            <input id="mId" type="text" readonly />
+          </div>
+          <div>
+            <label>Cliente</label>
+            <input id="mCliente" type="text" />
+          </div>
+          <div>
+            <label>Data Entrega (ISO)</label>
+            <input id="mDataEntregaISO" type="date" />
+          </div>
+          <div>
+            <label>Hora Entrega</label>
+            <input id="mHoraEntrega" type="time" />
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select id="mTipo">
+              <option value="ENTREGA">ENTREGA</option>
+              <option value="RETIRADA">RETIRADA</option>
+            </select>
+          </div>
+          <div>
+            <label>Pagamento</label>
+            <input id="mPagamento" type="text" placeholder="ex.: PIX, DINHEIRO…" />
+          </div>
+          <div>
+            <label>Nº do Cupom Fiscal</label>
+            <input id="mCupomFiscal" type="text" />
+          </div>
+          <div>
+            <label>Frete (R$)</label>
+            <input id="mFrete" type="text" inputmode="decimal" placeholder="0,00" />
+          </div>
+          <div style="grid-column:1/-1">
+            <label>Observações</label>
+            <textarea id="mObs" rows="2"></textarea>
+          </div>
         </div>
-        <div>
-          <label>Cliente</label>
-          <input id="mCliente" type="text" />
-        </div>
-        <div>
-          <label>Data Entrega (ISO)</label>
-          <input id="mDataEntregaISO" type="date" />
-        </div>
-        <div>
-          <label>Hora Entrega</label>
-          <input id="mHoraEntrega" type="time" />
-        </div>
-        <div>
-          <label>Tipo</label>
-          <select id="mTipo">
-            <option value="ENTREGA">ENTREGA</option>
-            <option value="RETIRADA">RETIRADA</option>
-          </select>
-        </div>
-        <div>
-          <label>Pagamento</label>
-          <input id="mPagamento" type="text" placeholder="ex.: PIX, DINHEIRO…" />
-        </div>
-        <div>
-          <label>Nº do Cupom Fiscal</label>
-          <input id="mCupomFiscal" type="text" />
-        </div>
-        <div>
-          <label>Frete (R$)</label>
-          <input id="mFrete" type="text" inputmode="decimal" placeholder="0,00" />
-        </div>
-        <div style="grid-column:1/-1">
-          <label>Observações</label>
-          <textarea id="mObs" rows="2"></textarea>
+
+        <h4 style="margin:12px 0 8px">Itens</h4>
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Descrição</th>
+              <th>Qtd</th>
+              <th>Un</th>
+              <th>Preço</th>
+              <th>Subtotal</th>
+              <th class="right">Del.</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+
+        <div class="grid" style="margin-top:10px">
+          <div>
+            <label>Total (itens)</label>
+            <input id="mTotal" type="text" readonly />
+          </div>
         </div>
       </div>
 
-      <h4 style="margin:12px 0 8px">Itens</h4>
-      <table class="items-table">
-        <thead>
-          <tr>
-            <th>Descrição</th>
-            <th>Qtd</th>
-            <th>Un</th>
-            <th>Preço</th>
-            <th>Subtotal</th>
-            <th class="right">Del.</th>
-          </tr>
-        </thead>
-        <tbody id="itemsBody"></tbody>
-      </table>
-
-      <div class="grid" style="margin-top:10px">
-        <div>
-          <label>Total (itens)</label>
-          <input id="mTotal" type="text" readonly />
-        </div>
+      <div class="modal-footer" style="display:flex; gap:10px; justify-content:flex-end; margin-top:12px">
+        <button id="btnAddItem" class="btn btn-outline" type="button">Adicionar Item</button>
+        <button id="btnPDFPedido" class="btn btn-gray" type="button" title="Reimprimir cupom">Gerar PDF</button>
+        <button id="btnSalvar" class="btn btn-primary" type="button">Salvar</button>
       </div>
-    </div>
-
-    <div class="modal-footer" style="display:flex; gap:10px; justify-content:flex-end; margin-top:12px">
-      <button id="btnAddItem" class="btn btn-outline" type="button">Adicionar Item</button>
-      <button id="btnPDFPedido" class="btn btn-gray" type="button" title="Reimprimir cupom">Gerar PDF</button>
-      <button id="btnSalvar" class="btn btn-primary" type="button">Salvar</button>
     </div>
   </div>
-</div>
+  <!-- ===== /Modal ===== -->
 
   <main class="container">
     <!-- Filtros -->
     <section class="card filters">
-      <!-- (removido o “LEO” aqui) -->
-
       <div class="grid">
         <div class="field" data-span="6">
           <label for="fDataIni">Data entrega — de</label>
@@ -185,7 +184,7 @@
         </table>
       </div>
 
-      <!-- Totais (labels vêm do CSS ::before) -->
+      <!-- Totais -->
       <div class="footer-totals">
         <div class="ft-box"><div class="ft-label">PEDIDOS</div><div id="ftCount">0</div></div>
         <div class="ft-box"><div class="ft-label">ITENS</div><div id="ftItens">0</div></div>
@@ -195,91 +194,7 @@
     </section>
   </main>
 
-  <!-- ===== Modal de Edição do Pedido ===== -->
-  <div id="modalBackdrop" class="modal-backdrop" aria-hidden="true" style="display:none;">
-    <div class="modal-card" role="dialog" aria-modal="true">
-      <div class="modal-header">
-        <h3>Editar Pedido</h3>
-        <button id="btnFecharModal" class="btn icon" aria-label="Fechar">×</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="grid">
-          <div class="field" data-span="6">
-            <label for="mId">ID do Pedido</label>
-            <input id="mId" type="text" readonly />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mCliente">Cliente</label>
-            <input id="mCliente" type="text" />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mDataEntregaISO">Data Entrega (ISO)</label>
-            <input id="mDataEntregaISO" type="date" />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mHoraEntrega">Hora Entrega</label>
-            <input id="mHoraEntrega" type="time" />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mTipo">Tipo</label>
-            <select id="mTipo">
-              <option value="ENTREGA">ENTREGA</option>
-              <option value="RETIRADA">RETIRADA</option>
-            </select>
-          </div>
-          <div class="field" data-span="6">
-            <label for="mPagamento">Pagamento</label>
-            <input id="mPagamento" type="text" placeholder="ex.: PIX, DINHEIRO, CRÉDITO" />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mCupomFiscal">Nº do Cupom Fiscal</label>
-            <input id="mCupomFiscal" type="text" placeholder="ex.: 123456-1/001" />
-          </div>
-          <div class="field" data-span="6">
-            <label for="mFrete">Frete (R$)</label>
-            <input id="mFrete" type="text" inputmode="decimal" placeholder="0,00" />
-          </div>
-          <div class="field" data-span="12">
-            <label for="mObs">Observações</label>
-            <textarea id="mObs" rows="2" placeholder="opcional"></textarea>
-          </div>
-        </div>
-
-        <div class="items">
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th>Descrição</th>
-                <th>Qtd</th>
-                <th>Un</th>
-                <th>R$ Unit.</th>
-                <th>Subtotal</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="itemsBody"></tbody>
-          </table>
-          <div class="items-actions">
-            <button id="btnAddItem" class="btn">Adicionar item</button>
-            <div class="total-box">
-              <label>Total itens:</label>
-              <input id="mTotal" type="text" readonly value="R$ 0,00"/>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button id="btnPDFPedido" class="btn btn-gray">Gerar PDF</button>
-        <div class="spacer"></div>
-        <button id="btnSalvar" class="btn btn-primary">Salvar</button>
-      </div>
-    </div>
-  </div>
-  <!-- ===== /Modal ===== -->
-
-  <!-- jsPDF (para export) -->
+  <!-- jsPDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
   <!-- App JS -->
