@@ -8,7 +8,7 @@ import { db, doc, getDoc, requireTenantContext } from './firebase.js';
 const { jsPDF } = window.jspdf || {};
 
 function moneyBR(n){
-  return (Number(n||0)).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+  return Number(n||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
 }
 function toBR(iso){ if(!iso) return ""; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
 
@@ -228,17 +228,21 @@ export async function printPedido80mm(pedidoId){
   if (!snap.exists()){ alert('Pedido não encontrado.'); return; }
 
   const data = snap.data();
-  const pdf = drawPedido80mm({
-    cliente: data.cliente || data.clienteUpper || '',
-    endereco: data?.entrega?.endereco || data.endereco || '',
-    dataEntregaISO: data.dataEntregaISO || '',
-    horaEntrega: data.horaEntrega || '',
-    contato: (data?.clienteFiscal?.contato || '').replace(/\D/g,''),
-    cep: (data?.clienteFiscal?.cep || '').replace(/\D/g,''),
-    itens: data.itens || [],
-    frete: data.frete || {},
-    freteValor: data.freteValor
-  });
+  // relatorios/js/print.js (dentro de printPedido80mm)
+const pdf = drawPedido80mm({
+  cliente: data.cliente || data.clienteUpper || '',
+  endereco: data?.entrega?.endereco || data.endereco || '',
+  dataEntregaISO: data.dataEntregaISO || '',
+  horaEntrega: data.horaEntrega || '',
+  pagamento: (data.pagamento || ''),                // <— NOVO
+  tipoEnt: (data?.entrega?.tipo || ''),             // <— NOVO (usa se houver)
+  entrega: { tipo: data?.entrega?.tipo || '' },     // <— opcional: mantém compat com fallback
+  contato: (data?.clienteFiscal?.contato || '').replace(/\D/g,''),
+  cep: (data?.clienteFiscal?.cep || '').replace(/\D/g,''),
+  itens: data.itens || [],
+  frete: data.frete || {},
+  freteValor: data.freteValor
+});
 
   pdf.save(`Pedido_${toBR(data.dataEntregaISO||'')}_${(data.cliente||'').replace(/\s+/g,'_')}.pdf`);
 }
