@@ -1,27 +1,30 @@
 // =========================
-// UNIKOR RELATÓRIOS - render.js (pt-BR com milhar)
+// UNIKOR RELATÓRIOS - render.js
+// (milhares com Intl, "R$" inline e rodapé só números p/ count/itens)
 // =========================
 
 export const $ = (id)=>document.getElementById(id);
 
+// R$ 119.116,76
 export const moneyBR = (n)=>{
   const v = Number(n || 0);
-  try {
+  try{
     return new Intl.NumberFormat("pt-BR", {
+      style: "decimal",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(v);
-  } catch {
-    const s = (Math.round(v * 100) / 100).toFixed(2);
+  }catch{
+    const s = (Math.round(v*100)/100).toFixed(2);
     const [int, dec] = s.split(".");
     return int.replace(/\B(?=(\d{3})+(?!\d))/g,".") + "," + dec;
   }
 };
 
-export const toBR = (iso)=> { 
-  if(!iso) return ""; 
-  const [y,m,d] = iso.split("-"); 
-  return `${d}/${m}/${y}`; 
+export const toBR = (iso)=>{ 
+  if(!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 };
 
 export const userPrefix = (emailOrUid="") => String(emailOrUid).split("@")[0] || "—";
@@ -37,12 +40,10 @@ function freteFromRow(r){
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.').replace(/\s+/g,' ');
   const re = /(\d{1,3}(?:[.\s]\d{3})*(?:\.\d+)?)\s*(kg|kgs?|quilo|quilos|g|gr|grama|gramas)\b\.?/g;
-  let m,last=null; 
-  while((m=re.exec(s))!==null) last=m;
+  let m,last=null; while((m=re.exec(s))!==null) last=m;
   if (!last) return 0;
   const raw = String(last[1]).replace(/\s/g,'').replace(/\.(?=\d{3}\b)/g,'');
-  const val = parseFloat(raw); 
-  if (!isFinite(val)||val<=0) return 0;
+  const val = parseFloat(raw); if (!isFinite(val)||val<=0) return 0;
   const unit = last[2].toLowerCase();
   return (unit.startsWith('kg') || unit.startsWith('quilo')) ? val : (val/1000);
 }
@@ -109,6 +110,7 @@ export function renderRows(docs){
   }
 
   tbody.innerHTML = rows.join("");
+  // rodapé (somente números em pedidos/itens)
   $("ftCount").textContent = `${seen.size}`;
   $("ftItens").textContent = `${totalQtdeItens}`;
   $("ftTotal").textContent = `R$ ${moneyBR(totalItensValor)}`;
