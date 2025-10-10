@@ -1,6 +1,8 @@
+// relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
 
+// trava/destrava o scroll em mobile (iOS/Android)
 function lockBodyScroll(lock){
   try{ document.body.style.overflow = lock ? 'hidden' : ''; }catch{}
 }
@@ -24,7 +26,7 @@ export function closeModal(){
   lockBodyScroll(false);
 }
 
-// ===== helpers numéricos BR (aceita vírgula)
+// ===== helpers numéricos BR =====
 const parseBRNumber = (val) => {
   if (typeof val === "number") return val;
   const s = String(val ?? "")
@@ -55,7 +57,6 @@ function calcSubtotal({ desc, qtd, un, preco }){
   }
   return Number((qtd * preco).toFixed(2));
 }
-
 function recalcRow(tr){
   const desc = (tr.querySelector(".it-desc").value||"").trim();
   const qtd  = parseBRNumber(tr.querySelector(".it-qtd").value);
@@ -65,8 +66,6 @@ function recalcRow(tr){
   const calc = calcSubtotal({ desc, qtd, un, preco: pu });
   if (!subInput.dataset.dirty){ subInput.value = toMoney(calc); }
 }
-
-// Soma respeitando edição manual (dataset.dirty === "1")
 function recalcTotal(){
   let total = 0;
   $("itemsBody").querySelectorAll("tr").forEach(tr=>{
@@ -198,12 +197,11 @@ export async function salvarEdicao(atualizarLista){
   }
 }
 
-/* ===== PDF do pedido (usa o mesmo layout do app Pedidos) ===== */
+/* ===== PDF do pedido ==== */
 export async function gerarPDFDoModal(){
   const { jsPDF } = window.jspdf || {};
   if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
   if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
-  // importa a função correta (evita erro 'printFromModal')
   const { printPedido80mm } = await import("./print.js");
   await printPedido80mm(window.__currentDocId);
 }
