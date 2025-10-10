@@ -1,7 +1,6 @@
 // app/pedidos/js/clientes.js
 // CRUD simplificado de clientes por TENANT, em coleção própria.
 // Doc-id = clienteUpper (UPPERCASE), para busca direta e consistente com pedidos.
-
 import {
   db, getTenantId,
   collection, doc, setDoc, getDoc, getDocs,
@@ -9,6 +8,7 @@ import {
 } from './firebase.js';
 import { up } from './utils.js';
 
+// Retorna a referência para a subcoleção de clientes do tenant.
 const colPath = (tenantId) => collection(db, 'tenants', tenantId, 'clientes');
 
 /** Normaliza payload do cliente antes de salvar */
@@ -47,7 +47,7 @@ export async function salvarCliente(nome, endereco, isentoFrete, extra = {}) {
   const ref = doc(colPath(tenantId), nomeUpper);
   const data = normalizeCliente(nomeUpper, endereco, isentoFrete, extra);
 
-  // merge:true preserva createdAt anterior; updatedAt recebe novo valor
+  // merge:true preserva o campo 'createdAt' se o documento já existir.
   await setDoc(ref, data, { merge: true });
   return { ok: true, id: nomeUpper };
 }
@@ -57,15 +57,33 @@ export async function salvarCliente(nome, endereco, isentoFrete, extra = {}) {
  * Retorna { endereco, cnpj, ie, cep, contato, isentoFrete, frete } ou null.
  */
 export async function buscarClienteInfo(nome) {
+  console.log(`[clientes.js] Iniciando busca por: "${nome}"`);
   const tenantId = await getTenantId();
   const nomeUpper = up(nome || '').trim();
-  if (!nomeUpper) return null;
 
-  const ref = doc(colPath(tenantId), nomeUpper);
+  if (!tenantId) {
+    console.error('[clientes.js] ERRO: Tenant ID não encontrado. O usuário está logado?');
+    return null;
+  }
+  if (!nomeUpper) {
+    console.warn('[clientes.js] AVISO: Nome do cliente está vazio.');
+    return null;
+  }
+
+  const docPath = `tenants/${tenantId}/clientes/${nomeUpper}`;
+  console.log(`[clientes.js] Consultando Firestore em: "${docPath}"`);
+
+  const ref = doc(db, docPath);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
+
+  if (!snap.exists()) {
+    console.warn(`[clientes.js] Cliente "${nomeUpper}" não encontrado no banco de dados.`);
+    return null;
+  }
 
   const d = snap.data() || {};
+  console.log('[clientes.js] Cliente encontrado! Dados:', d);
+
   return {
     endereco    : d.endereco || '',
     cnpj        : d.cnpj || '',
@@ -79,33 +97,47 @@ export async function buscarClienteInfo(nome) {
 
 /**
  * Lista até N clientes “mais usados”.
- * Estratégia simples: varre últimos pedidos e coleta nomes únicos.
- * (sem precisar manter uma coleção auxiliar)
+ * Estratégia: varre últimos pedidos e coleta nomes únicos.
  */
 export async function clientesMaisUsados(max = 80) {
   try {
     const tenantId = await getTenantId();
-    const pedidos = collection(db, 'tenants', tenantId, 'pedidos');
-    const q = query(pedidos, orderBy('createdAt', 'desc'), limit(Math.max(20, max)));
+    if (!tenantId) {
+        console.error('[clientes.js] ERRO em clientesMaisUsados: Tenant ID não encontrado.');
+        return [];
+    }
 
-    const snap = await getDocs(q);
+    // 1. Tenta buscar clientes a partir dos pedidos recentes
+    const pedidosCol = collection(db, 'tenants', tenantId, 'pedidos');
+    const qPedidos = query(pedidosCol, orderBy('createdAt', 'desc'), limit(Math.max(20, max)));
+    const snapPedidos = await getDocs(qPedidos);
+
     const uniq = new Set();
-
-    snap.forEach(docSnap => {
+    snapPedidos.forEach(docSnap => {
       const d = docSnap.data() || {};
       const nome = String(d.clienteUpper || d.cliente || '').trim().toUpperCase();
       if (nome) uniq.add(nome);
     });
 
-    // Se não houver nenhum pedido ainda, opcionalmente podemos cair para a coleção clientes
+    // 2. Se não houver pedidos, busca da própria coleção de clientes como fallback
     if (uniq.size === 0) {
-      const clsnap = await getDocs(query(colPath(tenantId), orderBy('createdAt', 'desc'), limit(max)));
-      clsnap.forEach(ds => { const n = String((ds.data() || {}).clienteUpper || '').trim(); if (n) uniq.add(n); });
+      console.log('[clientes.js] Nenhum pedido recente encontrado, buscando na coleção de clientes.');
+      const qClientes = query(colPath(tenantId), orderBy('createdAt', 'desc'), limit(max));
+      const snapClientes = await getDocs(qClientes);
+      snapClientes.forEach(ds => {
+        const n = String((ds.data() || {}).clienteUpper || '').trim();
+        if (n) uniq.add(n);
+      });
     }
 
-    return Array.from(uniq).slice(0, max);
+    const result = Array.from(uniq).slice(0, max);
+    console.log(`[clientes.js] Lista de clientes para datalist carregada: ${result.length} nomes.`);
+    return result;
+
   } catch (e) {
-    console.warn('[clientes.js] clientesMaisUsados falhou:', e?.message || e);
+    console.error('[clientes.js] Falha crítica ao buscar clientesMaisUsados:', e);
+    // Verifique no console do navegador se há um erro de "Missing index".
+    // O Firestore pode exigir um índice para a consulta `orderBy('createdAt')`.
     return [];
   }
 }
