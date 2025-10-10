@@ -139,53 +139,88 @@ tbody tr:hover{ background:#eef6f7 }
 .footer-totals #ftFrete{
   font-weight:800; font-size:16px; white-space:nowrap;
 }
+/* ===========================
+   MODAL — Edição de Pedido
+   =========================== */
 
-/* ================= Modal ================= */
-/* Estrutura/rolagem responsiva (como você enviou) */
-.modal{ position:fixed; inset:0; display:none; z-index:9999 }
-.modal[aria-hidden="false"]{ display:flex; align-items:flex-start; justify-content:center }
-.modal-backdrop{ position:absolute; inset:0; background:rgba(15,23,42,.45) }
+/* camada e backdrop */
+.modal{ position:fixed; inset:0; z-index:9999; display:none }
+.modal[aria-hidden="false"]{
+  display:flex; align-items:flex-start; justify-content:center;
+}
+.modal-backdrop{
+  position:absolute; inset:0; background:rgba(15,23,42,.45); backdrop-filter:saturate(110%) blur(2px);
+}
 
+/* cartão */
 .modal-card{
-  position:relative; margin:28px 12px; background:#fff; border-radius:16px;
-  max-width:980px; width:100%; box-shadow:0 10px 30px rgba(16,24,40,.18);
+  position:relative;
+  margin:28px 12px;            /* respiro nas bordas */
+  max-width:960px; width:100%;
+  background:#fff; border-radius:18px;
+  box-shadow:0 20px 50px rgba(2,6,23,.18), 0 4px 10px rgba(2,6,23,.08);
+  overflow:hidden;             /* para o radius aparar o conteúdo */
 }
 
-/* header/foot “grudados” */
+/* header / footer fixos dentro do card */
 .modal-header, .modal-footer{
-  position:sticky; background:#fff; z-index:2; display:flex; align-items:center; gap:10px;
+  position:sticky; z-index:2; background:#fff;
+  display:flex; align-items:center; gap:12px;
 }
-.modal-header{ top:0; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e7edf3; border-radius:16px 16px 0 0 }
-.modal-footer{
-  bottom:0; top:auto; padding:12px 16px; border-top:1px solid #e7edf3; border-radius:0 0 16px 16px;
-  gap:10px; justify-content:flex-end;
+.modal-header{
+  top:0; padding:16px 18px; border-bottom:1px solid #e7edf3;
+}
+.modal-header h3{
+  margin:0; font-size:22px; font-weight:800; letter-spacing:.2px; color:#0f172a;
 }
 .modal-close{
-  border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:6px 10px; font-size:18px; cursor:pointer;
+  margin-left:auto; border:1px solid #e5e7eb; background:#fff;
+  border-radius:12px; padding:6px 12px; font-size:22px; line-height:1;
+  cursor:pointer; color:#475569;
+}
+.modal-close:hover{ background:#f8fafc }
+
+.modal-footer{
+  bottom:0; top:auto;
+  padding:12px 16px; border-top:1px solid #e7edf3;
+  justify-content:flex-end; gap:10px;
 }
 
-/* conteúdo rolável */
-.modal-body{ max-height: calc(100vh - 180px); overflow:auto; padding:16px }
+/* corpo com rolagem, mantendo header/footer visíveis */
+.modal-body{
+  max-height:calc(100vh - 180px);
+  overflow:auto; padding:16px 18px;
+}
 
-/* grid topo modal */
-.modal .grid{ display:grid; gap:12px; grid-template-columns:repeat(12, minmax(0,1fr)) }
-.modal .grid > div{ grid-column:span 6 }
+/* grid dos campos (topo do modal) */
+.modal .grid{
+  display:grid; gap:12px; grid-template-columns:repeat(12,minmax(0,1fr));
+}
+.modal .grid > div{ grid-column:span 6 }          /* 2 colunas */
 .modal .grid > div[style*="grid-column:1/-1"]{ grid-column:1 / -1 } /* Observações full */
 
-@media (max-width: 720px){
-  .modal-card{ margin:14px 8px }
-  .modal .grid > div{ grid-column:1 / -1 }       /* 1 coluna no mobile */
-  .modal-body{ max-height: calc(100vh - 140px) }
+/* inputs do modal – igual ao formulário principal */
+.modal input,.modal select,.modal textarea{
+  width:100%; background:#fff; color:#0f172a;
+  border:1px solid #e7edf3; border-radius:14px;
+  padding:12px 14px; outline:none; box-shadow:0 1px 0 #00000006 inset;
 }
+.modal input:focus,.modal select:focus,.modal textarea:focus{
+  border-color:#b7dde0; box-shadow:0 0 0 4px #0ea5a616;
+}
+.modal label{ display:block; font-size:13px; color:#6b7280; margin:2px 0 6px }
 
-/* =============== Tabela de itens (modal) =============== */
+/* ===== Tabela de Itens ===== */
 .items-table{
-  width:100%;
-  border:1px solid #e7edf3; border-radius:12px; overflow:auto;
-  border-collapse:separate; border-spacing:0; background:#fff;
+  width:100%; border:1px solid #e7edf3; border-radius:12px;
+  overflow:auto; background:#fff; border-collapse:separate; border-spacing:0;
 }
 
-/* Larguras por coluna — descrição 50%+; qtd compacta; un dobrada */
+/* larguras por coluna:
+   1) Descrição = ~50% mais comprida
+   2) Qtd = ~65% menor que era (compacta)
+   3) Un = dobro do tamanho anterior */
+.items-table table{ width:100%; table-layout:fixed }
 .items-table thead th:nth-child(1), .items-table tbody td:nth-child(1){ width:52% } /* Descrição */
 .items-table thead th:nth-child(2), .items-table tbody td:nth-child(2){ width:10% } /* Qtd */
 .items-table thead th:nth-child(3), .items-table tbody td:nth-child(3){ width:12% } /* Un */
@@ -193,38 +228,44 @@ tbody tr:hover{ background:#eef6f7 }
 .items-table thead th:nth-child(5), .items-table tbody td:nth-child(5){ width:13% } /* Subtotal */
 .items-table thead th:nth-child(6), .items-table tbody td:nth-child(6){ width:10ch } /* Del. */
 
+/* visual da tabela */
 .items-table thead th{
-  background:#f6fafb; text-align:left; padding:10px 12px; border-bottom:1px solid #e7edf3;
-  font-weight:700; color:#475569;
+  background:#f6fafb; text-align:left; padding:10px 12px;
+  border-bottom:1px solid #e7edf3; font-weight:700; color:#475569;
 }
 .items-table tbody td{ padding:8px 10px; border-bottom:1px solid #eef2f6; background:#fff }
 .items-table tbody tr:nth-child(even){ background:#f8fafc }
 
+/* campos */
 .items-table input[type="text"],
 .items-table input[type="number"],
 .items-table select{
-  width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; outline:none; background:#fff;
+  width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; background:#fff;
 }
 .items-table input:focus, .items-table select:focus{
   border-color:#b7dde0; box-shadow:0 0 0 3px #0ea5a616;
 }
-/* números à direita nas colunas numéricas */
+
+/* alinhamento numérico */
 .items-table td:nth-child(2) input,
 .items-table td:nth-child(4) input,
 .items-table td:nth-child(5) input{ text-align:right }
 
-/* botão remover (X) */
+/* botão “X” vermelho */
 .items-table .btn.danger{
-  background:#fff; border:1px solid #f5c7c7; color:#c0392b; border-radius:10px; padding:6px 10px;
+  display:inline-flex; align-items:center; justify-content:center;
+  background:#fff; border:1px solid #f5c7c7; color:#c0392b;
+  border-radius:10px; padding:6px 10px; min-width:38px;
 }
 .items-table .btn.danger:hover{ background:#fdecec }
 
-/* rolagem horizontal em telas estreitas */
-@media (max-width: 560px){
-  .items-table{ overflow-x:auto }
-  .items-table table{ min-width:620px }
+/* mobile: rolagem horizontal da tabela, card mais justo */
+@media (max-width:720px){
+  .modal-card{ margin:14px 8px }
+  .modal .grid > div{ grid-column:1 / -1 }      /* 1 coluna no mobile */
+  .modal-body{ max-height:calc(100vh - 140px) }
 }
-
-/* Utils */
-.right{ text-align:right }
-.hide{ display:none !important }
+@media (max-width:560px){
+  .items-table{ overflow-x:auto }
+  .items-table table{ min-width: 620px }        /* usuário arrasta se faltar espaço */
+}
