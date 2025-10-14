@@ -210,3 +210,22 @@ h1,h2 {
     flex-direction: column;
   }
 }
+.hidden { display: none !important; }
+
+.ocr-preview-wrap {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.img-preview {
+  display: block;
+  width: 100%;
+  max-height: 360px;   /* segura em mobile */
+  object-fit: contain; /* sem cortar */
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fafafa;
+}
