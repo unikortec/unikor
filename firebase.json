@@ -6,5 +6,11 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs18"
+  },
+  "hosting": {
+    "rewrites": [
+      { "source": "/api/frete", "function": "frete" },
+      { "source": "/api/calcular-entrega", "function": "calcularEntrega" }
+    ]
   }
 }
