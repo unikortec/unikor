@@ -1,7 +1,9 @@
 // relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
-import { auth, serverTimestamp } from './firebase.js'; // ← NOVO (carimbos para regras)
+import { auth, serverTimestamp } from './firebase.js';
+import { exportarPDF } from './export.js';
+import { printPedido80mm } from './print.js';
 
 // trava/destrava o scroll em mobile (iOS/Android)
 function lockBodyScroll(lock){
@@ -27,14 +29,29 @@ export function closeModal(){
   lockBodyScroll(false);
 }
 
-// ===== helpers numéricos BR =====
+/* ================================
+   PARSER NUMÉRICO – corrige ponto/vírgula
+================================== */
 const parseBRNumber = (val) => {
   if (typeof val === "number") return val;
-  const s = String(val ?? "")
-    .trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
+  let s = String(val ?? "").trim();
+  if (!s) return 0;
+
+  const hasComma = s.includes(",");
+  const hasDot   = s.includes(".");
+
+  if (hasComma && hasDot) {
+    // Ex.: "1.234,56" → "1234.56"
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma) {
+    // Ex.: "6,09" → "6.09"
+    s = s.replace(",", ".");
+  } // se só ponto, mantém
+
   const n = Number(s);
-  return isNaN(n) ? 0 : n;
+  return Number.isFinite(n) ? n : 0;
 };
+
 const toMoney = (n)=> moneyBR(Number(n||0));
 
 function kgPorUnFromDesc(desc=""){
@@ -125,12 +142,18 @@ export function addItemRow(item={}){
   recalcTotal();
 }
 
+/* ===============================
+   CARREGAR PEDIDO NO MODAL
+=============================== */
 export async function carregarPedidoEmModal(id){
   window.__currentDocId = id;
   const r = await pedidos_get(id);
   if (!r){ alert("Pedido não encontrado."); return; }
 
-  $("mId").value = r.id || "";
+  // Mostra usuário criador no lugar do ID
+  const userName = r.usuarioNome || r.userNome || r.userName || r.createdBy || "—";
+  $("mId").value = userName.toUpperCase();
+
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
   $("mHoraEntrega").value = r.horaEntrega || "";
@@ -153,6 +176,9 @@ export async function carregarPedidoEmModal(id){
   openModal();
 }
 
+/* ===============================
+   SALVAR EDIÇÃO
+=============================== */
 export async function salvarEdicao(atualizarLista){
   if (!window.__currentDocId){ closeModal(); return; }
 
@@ -185,7 +211,6 @@ export async function salvarEdicao(atualizarLista){
     totalPedido: Number(totalItens.toFixed(2)),
     freteValor: Number(freteNum.toFixed(2)),
     frete: { valorCobravel: Number(freteNum.toFixed(2)), valorBase: Number(freteNum.toFixed(2)) },
-    // ==== carimbos para compatibilizar com as regras ====
     updatedBy: auth?.currentUser?.uid || null,
     updatedAt: serverTimestamp()
   };
@@ -201,11 +226,16 @@ export async function salvarEdicao(atualizarLista){
   }
 }
 
-/* ===== PDF do pedido ==== */
+/* ===============================
+   GERAR PDF DO MODAL
+=============================== */
 export async function gerarPDFDoModal(){
-  const { jsPDF } = window.jspdf || {};
-  if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
-  if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
-  const { printPedido80mm } = await import("./print.js");
-  await printPedido80mm(window.__currentDocId);
+  try {
+    if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
+    // Mesmo PDF da listagem (usando print.js)
+    await printPedido80mm(window.__currentDocId);
+  } catch(e){
+    console.error("Erro ao gerar PDF:", e);
+    alert("Falha ao gerar PDF.");
+  }
 }
