@@ -13,11 +13,10 @@
 <body>
   <header class="topbar">
     <button id="btnVoltar" class="btn-back" title="Voltar">&larr;</button>
-    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR"
-         style="height:56px; cursor:pointer" />
-    <div style="margin-left:auto; text-align:right">
-      <div style="font-size:24px; font-weight:800">Despesa</div>
-      <div id="usuarioLogado" style="font-size:12px; opacity:0.9">Usuário: —</div>
+    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" style="height:56px;cursor:pointer"/>
+    <div style="margin-left:auto;text-align:right">
+      <div class="title-strong">Despesas</div>
+      <div id="usuarioLogado" class="user-mini">Usuário: —</div>
     </div>
   </header>
 
@@ -26,22 +25,41 @@
     <!-- Despesa Manual -->
     <div class="card">
       <h2>Despesa Manual</h2>
-
       <div class="row">
         <label>Categoria:</label>
         <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte" />
         <datalist id="listaCategorias"></datalist>
       </div>
-
       <div class="row">
         <label>Estabelecimento:</label>
         <input id="estabelecimento" placeholder="Nome do local da compra" />
       </div>
+      <div class="row">
+        <label>Forma de pagamento:</label>
+        <select id="formaPagamento">
+          <option value="DINHEIRO">Dinheiro</option>
+          <option value="PIX">PIX</option>
+          <option value="DEBITO">Débito</option>
+          <option value="CREDITO">Crédito</option>
+          <option value="BOLETO">Boleto</option>
+          <option value="OUTROS">Outros</option>
+        </select>
+      </div>
 
       <div id="linhasProdutos"></div>
 
-      <div style="display:flex; justify-content:flex-end; margin-top:8px">
+      <div class="actions-right">
         <button id="btnSalvarManual" class="btn primary">Salvar despesa manual</button>
+      </div>
+    </div>
+
+    <!-- OCR por Foto -->
+    <div class="card">
+      <h2>Foto da Nota (OCR)</h2>
+      <input type="file" id="fotoNota" accept="image/*" capture="environment" />
+      <small class="muted">Dica: use boa iluminação. Se falhar, edite manualmente acima.</small>
+      <div class="actions-right">
+        <button id="btnOcr" class="btn">Reconhecer (OCR)</button>
       </div>
     </div>
 
@@ -52,22 +70,18 @@
         <label>Categoria:</label>
         <input id="categoriaNfce" value="GERAL" />
       </div>
-
       <input id="qrUrl" placeholder="Cole a URL do QR da NFC-e" style="margin-bottom:8px" />
       <div class="grid2">
         <button id="btnProcessarNfce" class="btn">Processar URL</button>
-        <div></div>
+        <button id="btnAbrirCamera" class="btn">Usar câmera</button>
       </div>
-
       <div class="scan-area">
-        <video id="video" class="qr" autoplay playsinline style="width:100%; max-width:420px; background:#000; border-radius:10px"></video>
+        <video id="video" class="qr" autoplay playsinline style="width:100%;max-width:420px;background:#000;border-radius:10px"></video>
         <div class="grid2" style="margin-top:8px">
-          <button id="btnAbrirCamera" class="btn">Usar câmera</button>
           <button id="btnFecharCamera" class="btn outline" disabled>Fechar câmera</button>
+          <label class="btn outline" for="fotoNota" style="text-align:center">Foto da nota (fallback)</label>
         </div>
-        <small style="display:block; margin-top:6px; color:#64748b">
-          Dica: a câmera só funciona via <b>HTTPS</b> (ou localhost). Autorize o uso quando solicitado.
-        </small>
+        <small class="muted">Câmera precisa de <b>HTTPS</b> (ou localhost). No iPhone PWA, prefira “Foto da nota”.</small>
       </div>
     </div>
 
@@ -87,7 +101,7 @@
     </div>
   </div>
 
-  <!-- módulos -->
+  <script src="https://apis.google.com/js/api.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
