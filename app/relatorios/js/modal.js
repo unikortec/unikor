@@ -1,6 +1,7 @@
 // relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
+import { auth, serverTimestamp } from './firebase.js'; // ← NOVO (carimbos para regras)
 
 // trava/destrava o scroll em mobile (iOS/Android)
 function lockBodyScroll(lock){
@@ -183,7 +184,10 @@ export async function salvarEdicao(atualizarLista){
     itens,
     totalPedido: Number(totalItens.toFixed(2)),
     freteValor: Number(freteNum.toFixed(2)),
-    frete: { valorCobravel: Number(freteNum.toFixed(2)), valorBase: Number(freteNum.toFixed(2)) }
+    frete: { valorCobravel: Number(freteNum.toFixed(2)), valorBase: Number(freteNum.toFixed(2)) },
+    // ==== carimbos para compatibilizar com as regras ====
+    updatedBy: auth?.currentUser?.uid || null,
+    updatedAt: serverTimestamp()
   };
 
   try{
