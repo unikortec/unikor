@@ -96,7 +96,11 @@ body{
 .btn-gray:hover{ filter:brightness(1.06) }
 
 /* =============== Tabela =============== */
-.table-wrap .table-scroll{ overflow:auto; border-radius:14px; border:1px solid var(--line) }
+.table-wrap .table-scroll{
+  overflow:auto; border-radius:14px; border:1px solid var(--line);
+  /* ↓↓↓ ajuste p/ desktop ver todas as colunas e permitir rolar */
+  max-height: calc(100vh - 320px);
+}
 table{ width:100%; border-collapse:separate; border-spacing:0 }
 thead th{
   position:sticky; top:0; background:#eefaf1; color:#0b4350; z-index:1;
@@ -139,6 +143,7 @@ tbody tr:hover{ background:#eef6f7 }
 .footer-totals #ftFrete{
   font-weight:800; font-size:16px; white-space:nowrap;
 }
+
 /* ===========================
    MODAL — Edição de Pedido
    =========================== */
@@ -268,27 +273,4 @@ tbody tr:hover{ background:#eef6f7 }
 @media (max-width:560px){
   .items-table{ overflow-x:auto }
   .items-table table{ min-width: 620px }        /* usuário arrasta se faltar espaço */
-}
-/* ===== Complementos PWA/iOS e refinamentos ===== */
-
-/* Rolagem suave em iOS dentro de containers com overflow */
-.table-wrap .table-scroll,
-.modal-body { -webkit-overflow-scrolling: touch; }
-
-/* Evita “scroll bleed” no fundo quando o modal está aberto */
-.modal[aria-hidden="false"] { overflow: hidden; }
-.modal-backdrop { touch-action: none; }
-
-/* Garantir que o botão de fechar e ícones não “saltem” em telas retina */
-.modal-close,
-.btn.icon { -webkit-font-smoothing: antialiased; }
-
-/* Pequeno acerto de contraste do cabeçalho da tabela principal
-   (mantém o verde sutil do tema) */
-thead th { background: #e9f6ec; }
-
-/* Segurança para telas muito altas: o card nunca encosta nos cantos
-   (mantém o mesmo respiro em desktop e mobile) */
-@media (min-height: 920px){
-  .modal-card { margin-top: 40px; margin-bottom: 24px; }
 }
