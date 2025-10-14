@@ -1,14 +1,17 @@
 // app/pedidos/js/clientes-autofill.js
-// Página principal: sugere clientes conforme digitação (datalist)
-// e só preenche o cadastro quando o usuário escolhe um cliente.
-// Mantém upsert do cadastro quando campos mudam.
+// Sugestões com <datalist> (sem auto-preencher enquanto digita).
+// Busca top clientes uma vez (GET /api/tenant-clientes/top?tenantId=...&n=...)
+// e filtra localmente por prefixo. Só preenche após seleção (change/blur).
+// Mantém upsert do cadastro em alterações dos campos.
 
 import { getTenantId } from './firebase.js';
 
 const DEBOUNCE_MS = 250;
+const TOP_CACHE_N = 300; // quantidade de nomes pré-carregados para sugerir
 
 /* ===================== Utils ===================== */
 const up = (s) => String(s || '').trim().toUpperCase();
+const normalize = (s) => up(s).normalize('NFD').replace(/[\u0300-\u036f]/g,''); // sem acentos
 const digitsOnly = (v) => String(v || '').replace(/\D/g, '');
 const debounce = (fn, ms = DEBOUNCE_MS) => {
   let t = null;
@@ -58,33 +61,25 @@ function getRefs() {
 
 /* ===================== Estado ===================== */
 const state = {
-  // último conjunto de sugestões mostradas ({ id, nome })
-  suggestions: [],
-  // último snapshot aplicado (para autosave)
-  lastLoaded: null,
+  topNames: [],        // nomes em UPPER já normalizados para comparação
+  topNamesRaw: [],     // nomes exibíveis (como vieram)
+  lastLoaded: null,    // snapshot do cadastro aplicado
   loading: false,
 };
 
 /* ===================== API ===================== */
-// /api/tenant-clientes/top  → POST { tenantId, q, limit } -> { ok, items:[{id, nome}] }
-async function apiTopClientes(q, limit = 8) {
-  if (!q) return [];
-  try {
-    const tenantId = await getTenantId();
-    const r = await fetch('/api/tenant-clientes/top', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, q, limit }),
-    });
-    if (!r.ok) return [];
-    const j = await r.json();
-    return Array.isArray(j?.items) ? j.items : [];
-  } catch {
-    return [];
-  }
+// GET /api/tenant-clientes/top?tenantId=...&n=...
+async function apiLoadTopNames(n = TOP_CACHE_N) {
+  const tenantId = await getTenantId();
+  const url = `/api/tenant-clientes/top?tenantId=${encodeURIComponent(tenantId)}&n=${encodeURIComponent(n)}`;
+  const r = await fetch(url, { method: 'GET' });
+  if (!r.ok) return [];
+  const j = await r.json();
+  // retorno esperado: { ok:true, itens:[ 'NOME1', 'NOME2', ... ] }
+  return Array.isArray(j?.itens) ? j.itens : [];
 }
 
-// /api/tenant-clientes/find → POST { tenantId, nome } -> { ok, found, id, data }
+// POST /api/tenant-clientes/find → { ok, found, id, data }
 async function apiFindByName(nome) {
   if (!nome) return null;
   try {
@@ -103,7 +98,7 @@ async function apiFindByName(nome) {
   }
 }
 
-// /api/tenant-clientes/create → POST { tenantId, cliente } -> { ok, id }
+// POST /api/tenant-clientes/create → { ok, id }
 async function apiUpsertCliente(payload) {
   try {
     const tenantId = await getTenantId();
@@ -122,20 +117,25 @@ async function apiUpsertCliente(payload) {
 }
 
 /* ===================== UI helpers ===================== */
-function fillDatalist(items) {
+function fillDatalistFrom(namesRaw) {
   const { datalist } = getRefs();
-  datalist.innerHTML = ''; // limpa
-  for (const it of items) {
+  datalist.innerHTML = '';
+  for (const name of namesRaw) {
     const opt = document.createElement('option');
-    // value é o que vai para o input quando selecionado
-    opt.value = up(it.nome || '');
+    opt.value = up(name || '');
     datalist.appendChild(opt);
   }
-  state.suggestions = items.map((i) => ({ id: i.id, nome: up(i.nome || '') }));
 }
 
-function findSuggestionByName(nomeUp) {
-  return state.suggestions.find((s) => s.nome === up(nomeUp));
+function filterTopByPrefix(q) {
+  if (!q) return [];
+  const nq = normalize(q);
+  const out = [];
+  for (let i = 0; i < state.topNames.length; i++) {
+    if (state.topNames[i].startsWith(nq)) out.push(state.topNamesRaw[i]);
+    if (out.length >= 20) break; // limita opções no datalist
+  }
+  return out;
 }
 
 /* ===================== Aplicar cliente no formulário ===================== */
@@ -163,26 +163,15 @@ async function aplicarCliente(info) {
 }
 
 /* ===================== Fluxos ===================== */
-// 1) Enquanto digita: só sugere (não preenche)
-const onTypeSuggest = debounce(async () => {
-  const { cliente, overlay } = getRefs();
+// Sugestões (apenas lista; não preenche)
+const onTypeSuggest = debounce(() => {
+  const { cliente } = getRefs();
   const q = up(cliente?.value || '');
-  if (!q) {
-    fillDatalist([]);
-    return;
-  }
-  try {
-    state.loading = true;
-    overlay && overlay.classList.remove('hidden');
-    const items = await apiTopClientes(q, 8);
-    fillDatalist(items);
-  } finally {
-    state.loading = false;
-    overlay && overlay.classList.add('hidden');
-  }
+  const list = filterTopByPrefix(q);
+  fillDatalistFrom(list);
 }, DEBOUNCE_MS);
 
-// 2) Quando o usuário ESCOLHE (change): preenche
+// Seleção/confirmar nome → preenche
 async function onChooseCliente() {
   const refs = getRefs();
   const nomeEscolhido = up(refs.cliente?.value || '');
@@ -191,28 +180,12 @@ async function onChooseCliente() {
     return;
   }
 
-  // tenta casar com uma sugestão visível (nome exato)
-  const sug = findSuggestionByName(nomeEscolhido);
-
-  // se casou com sugestão, preenche pelo id; senão tenta um find exato no servidor
-  let info = null;
   try {
     refs.overlay && refs.overlay.classList.remove('hidden');
-    if (sug?.id) {
-      // como não temos endpoint "get by id", chamamos o find por nome mesmo (nome veio da sugestão)
-      info = await apiFindByName(nomeEscolhido);
-      if (!info && sug.id) {
-        // fallback: pelo menos garanta o id
-        info = { id: sug.id, nome: nomeEscolhido };
-      }
-    } else {
-      // usuário digitou inteiro sem abrir a lista -> tenta find exato
-      info = await apiFindByName(nomeEscolhido);
-    }
-
+    const info = await apiFindByName(nomeEscolhido);
     if (info) await aplicarCliente(info);
     else {
-      // não existe cadastro exato — apenas zera o id, deixa usuário seguir
+      // não existe cadastro exato — apenas zera o id; usuário pode continuar
       refs.clienteId.value = '';
       state.lastLoaded = null;
     }
@@ -221,7 +194,7 @@ async function onChooseCliente() {
   }
 }
 
-// 3) Autosave do cadastro quando campos mudam
+// Autosave quando campos mudam
 async function salvarSeMudou() {
   const refs = getRefs();
   const nome = up(refs.cliente?.value || '');
@@ -256,19 +229,33 @@ async function salvarSeMudou() {
 }
 
 /* ===================== Inicialização ===================== */
+async function initTopCache() {
+  try {
+    const names = await apiLoadTopNames(TOP_CACHE_N);
+    state.topNamesRaw = names.map(n => String(n || ''));
+    state.topNames = state.topNamesRaw.map(n => normalize(n));
+  } catch {
+    state.topNames = [];
+    state.topNamesRaw = [];
+  }
+}
+
 function wire() {
   const refs = getRefs();
   if (!refs.cliente) return;
 
-  // Se já existir clienteId (ex.: pedido carregado), preenche; caso contrário, não auto-preenche.
+  // Prefetch dos top nomes (uma vez)
+  initTopCache();
+
+  // Se já existir clienteId (ex.: reabertura), preenche; caso contrário, não auto-preenche.
   if (refs.clienteId.value) {
     apiFindByName(up(refs.cliente.value || '')).then((info) => { if (info) aplicarCliente(info); });
   }
 
-  // Enquanto digita: só sugestões
+  // Enquanto digita: só sugestões (filtradas localmente)
   refs.cliente.addEventListener('input', onTypeSuggest);
 
-  // Quando confirma (seleciona no datalist ou sai do campo): preenche
+  // Quando confirma (seleciona no datalist / sai do campo): preenche
   refs.cliente.addEventListener('change', onChooseCliente);
   refs.cliente.addEventListener('blur', onChooseCliente);
 
