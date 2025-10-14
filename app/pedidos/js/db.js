@@ -70,7 +70,17 @@ export async function savePedidoIdempotente(payload){
     const r = await fetchWithTimeout("/api/tenant-pedidos/salvar", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ tenantId: TENANT_ID, payload, idempotencyKey })
+      body: JSON.stringify({
+        tenantId: TENANT_ID,
+        payload,
+        idempotencyKey,
+        // >>> NOVO: enviamos também o usuário autenticado
+        user: {
+          uid: auth.currentUser?.uid || null,
+          email: auth.currentUser?.email || null,
+          name: auth.currentUser?.displayName || null
+        }
+      })
     }, 4000);
     if (!r.ok) throw new Error(`API ${r.status}`);
     const j = await r.json();
@@ -89,7 +99,7 @@ export async function savePedidoIdempotente(payload){
       idempotencyKey,
       tenantId: TENANT_ID,
       createdAt: serverTimestamp(),
-      createdBy: auth.currentUser.uid, // <-- ALTERAÇÃO APLICADA AQUI
+      createdBy: auth.currentUser.uid, // já existia
       dataEntregaDia: payload?.dataEntregaISO
         ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
         : null,
@@ -97,7 +107,7 @@ export async function savePedidoIdempotente(payload){
     await setDoc(doc(col, docId), toSave, { merge: true });
     return { ok:true, reused:false, id: docId, local:true };
   }catch(e2){
-    console.error("[DB] Fallback Firestore falhou:", e2); // Mudei para .error para dar mais destaque ao erro
+    console.error("[DB] Fallback Firestore falhou:", e2);
     return { ok:false, localOnly:true, id:"local-"+Date.now() };
   }
 }
