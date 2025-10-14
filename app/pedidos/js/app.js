@@ -171,7 +171,7 @@ async function uploadPdfParaStorage(blob, filename){
     const lastUp = localStorage.getItem('unikor:lastUploadedId');
     if (lastUp === docId) return;
 
-    const storage = getStorage(app);
+    const storage = getStorage(app, "gs://unikorapp.firebasestorage.app");
     const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
 
     await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
