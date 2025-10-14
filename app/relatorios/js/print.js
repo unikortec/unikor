@@ -3,14 +3,18 @@
 
 import { db, doc, getDoc, requireTenantContext } from './firebase.js';
 
-// Pequena cópia local do montador do PDF (mesma lógica visual do app Pedidos):
-// Para evitar dependência cruzada entre pastas, usamos um miolo mínimo.
+// jsPDF do CDN já carregado em index.html
 const { jsPDF } = window.jspdf || {};
 
+// --------- helpers básicos ---------
 function moneyBR(n){
-  return Number(n||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+  return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function toBR(iso){ if(!iso) return ""; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function toBR(iso){
+  if (!iso) return "";
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
 
 // ===== cálculo igual ao app =====
 function kgPorUnFromDesc(desc=""){
@@ -36,19 +40,18 @@ function subtotalItem(it){
   return qtd * pu;
 }
 
-// === SUBSTITUA SOMENTE ESTA FUNÇÃO NO relatorios/js/print.js ===
+// ========= DESENHO DO TICKET 80mm =========
 function drawPedido80mm(p){
   if (!jsPDF) throw new Error('jsPDF não carregado');
   const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:[72, 297] });
 
-  // ---------- helpers compatíveis com o pdf do app Pedidos ----------
+  // helpers locais
   const margemX = 2, larguraCaixa = 68, SAFE_BOTTOM = 280;
   let y = 10;
 
   const splitToWidth = (t, w)=> doc.splitTextToSize(t||"", w);
   const formatarData = (iso)=> { if(!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; };
   const diaDaSemanaExtenso = (iso)=> { if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); };
-
   const ensureSpace = (h)=>{ if (y+h > SAFE_BOTTOM){ doc.addPage([72,297],'portrait'); y = 10; } };
 
   function drawCenteredKeyValueBox(x,y0,w,label,value,{rowH=10,titleSize=7,valueSize=8}={}){
@@ -76,7 +79,7 @@ function drawPedido80mm(p){
   doc.text("PEDIDO SERRA NOBRE", 36, 7, { align:"center" });
   doc.setLineWidth(0.3); doc.line(2,9,70,9);
 
-  // Normalização leve de campos (o relatório não tem CNPJ/IE; deixamos “—”)
+  // Normalização leve de campos
   const dataEntregaISO = p.dataEntregaISO || p.entregaISO || "";
   const horaEntrega    = p.horaEntrega || p.hora || "";
   const pagamento      = (p.pagamento || "").toUpperCase();
@@ -85,7 +88,7 @@ function drawPedido80mm(p){
   ensureSpace(14);
   y += drawKeyValueBox(margemX, y, larguraCaixa, "CLIENTE", (p.cliente||"").toUpperCase(), {rowH:12}) + 1;
 
-  // CNPJ / IE (placeholders)
+  // CNPJ / IE (placeholders neste relatório)
   const gap1=1, halfW=(larguraCaixa-gap1)/2;
   ensureSpace(10);
   drawCenteredKeyValueBox(margemX, y, halfW, "CNPJ", "—");
@@ -103,7 +106,7 @@ function drawPedido80mm(p){
   let baseY = y+9; linhasEnd.forEach((ln,i)=> doc.text(ln, margemX+pad, baseY+i*5));
   y += rowH + 1;
 
-  // ---------- Contato / CEP (se vierem vazios mostra “—”) ----------
+  // ---------- Contato / CEP ----------
   ensureSpace(10);
   drawCenteredKeyValueBox(margemX, y, halfW, "CONTATO", (p.contato||"").toString()||"—");
   drawCenteredKeyValueBox(margemX+halfW+gap1, y, halfW, "CEP", (p.cep||"").toString()||"—");
@@ -128,7 +131,7 @@ function drawPedido80mm(p){
   doc.text(horaEntrega || "—", margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // ---------- Forma de pagamento ----------
+  // ---------- Pagamento ----------
   ensureSpace(10);
   doc.rect(margemX, y, larguraCaixa, 10, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
@@ -137,7 +140,7 @@ function drawPedido80mm(p){
   doc.text(pagamento || "—", margemX+larguraCaixa-3, y+6, {align:"right"});
   y += 12;
 
-  // ---------- Tabela de itens (4 colunas) ----------
+  // ---------- Tabela de itens ----------
   const W_PROD=23.5, W_QDE=13, W_UNIT=13, W_TOTAL=18.5;
   ensureSpace(12);
   doc.setFont("helvetica","bold"); doc.setFontSize(7);
@@ -188,7 +191,8 @@ function drawPedido80mm(p){
   const w2tercos = Math.round(larguraCaixa*(2/3));
   const somaX = margemX + larguraCaixa - w2tercos;
   ensureSpace(11);
-  drawKeyValueBox(doc, somaX, y, w2tercos, "SOMA PRODUTOS", "R$ " + moneyBR(subtotal), {rowH:10});
+  // (corrigido: sem passar 'doc' como 1º parâmetro)
+  drawKeyValueBox(somaX, y, w2tercos, "SOMA PRODUTOS", "R$ " + moneyBR(subtotal), {rowH:10});
   y += 12;
 
   // ---------- Entrega / Frete ----------
@@ -205,7 +209,7 @@ function drawPedido80mm(p){
   doc.rect(freteX, y, freteW, 10, "S");
   doc.text("FRETE", freteX+freteW/2, y+4, {align:"center"});
   doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text(freteCobr ? moneyBR(freteCobr) : "ISENTO", freteX+freteW/2, y+8.2, {align:"center"});
+  doc.text(freteCobr ? ("R$ " + moneyBR(freteCobr)) : "ISENTO", freteX+freteW/2, y+8.2, {align:"center"});
   doc.setLineWidth(0.2);
   y += 12;
 
@@ -221,6 +225,7 @@ function drawPedido80mm(p){
   return doc;
 }
 
+// ========= API =========
 export async function printPedido80mm(pedidoId){
   const { tenantId } = await requireTenantContext();
   const ref = doc(db, 'tenants', tenantId, 'pedidos', pedidoId);
@@ -228,21 +233,20 @@ export async function printPedido80mm(pedidoId){
   if (!snap.exists()){ alert('Pedido não encontrado.'); return; }
 
   const data = snap.data();
-  // relatorios/js/print.js (dentro de printPedido80mm)
-const pdf = drawPedido80mm({
-  cliente: data.cliente || data.clienteUpper || '',
-  endereco: data?.entrega?.endereco || data.endereco || '',
-  dataEntregaISO: data.dataEntregaISO || '',
-  horaEntrega: data.horaEntrega || '',
-  pagamento: (data.pagamento || ''),                // <— NOVO
-  tipoEnt: (data?.entrega?.tipo || ''),             // <— NOVO (usa se houver)
-  entrega: { tipo: data?.entrega?.tipo || '' },     // <— opcional: mantém compat com fallback
-  contato: (data?.clienteFiscal?.contato || '').replace(/\D/g,''),
-  cep: (data?.clienteFiscal?.cep || '').replace(/\D/g,''),
-  itens: data.itens || [],
-  frete: data.frete || {},
-  freteValor: data.freteValor
-});
+  const pdf = drawPedido80mm({
+    cliente: data.cliente || data.clienteUpper || '',
+    endereco: data?.entrega?.endereco || data.endereco || '',
+    dataEntregaISO: data.dataEntregaISO || '',
+    horaEntrega: data.horaEntrega || '',
+    pagamento: (data.pagamento || ''),           // mostra no PDF
+    tipoEnt: (data?.entrega?.tipo || ''),        // fallback no cabeçalho de tipo
+    entrega: { tipo: data?.entrega?.tipo || '' },
+    contato: (data?.clienteFiscal?.contato || '').replace(/\D/g,''),
+    cep: (data?.clienteFiscal?.cep || '').replace(/\D/g,''),
+    itens: data.itens || [],
+    frete: data.frete || {},
+    freteValor: data.freteValor
+  });
 
   pdf.save(`Pedido_${toBR(data.dataEntregaISO||'')}_${(data.cliente||'').replace(/\s+/g,'_')}.pdf`);
 }
