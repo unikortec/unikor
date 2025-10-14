@@ -1,18 +1,23 @@
+/* ===== UNIKOR • Despesas ===== */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 :root {
   --brand:#1e7f46;
+  --brand-dark:#166c3a;
   --ink:#163b27;
+  --muted:#64748b;
   --line:#e4efe8;
   --card:#fff;
+  --bg:#f6fbf8;
 }
 body {
   font-family: system-ui, Segoe UI, Roboto, Inter, Arial;
-  background: #f6fbf8;
+  background: var(--bg);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Topo verde */
+/* ===== Topo Verde ===== */
 .topbar {
   display: flex;
   align-items: center;
@@ -25,20 +30,16 @@ body {
   height: 84px; /* 3x maior que antes */
   cursor: pointer;
 }
-.topbar .titleBox {
-  margin-left: auto;
-  text-align: right;
-}
-.topbar .appTitle {
+.title-strong {
   font-size: 28px;
   font-weight: 700;
 }
-.topbar .userMini {
+.user-mini {
   font-size: 13px;
   opacity: 0.9;
 }
 
-/* Botão voltar */
+/* ===== Botão Voltar ===== */
 .btn-back {
   background: transparent;
   color: #fff;
@@ -50,11 +51,11 @@ body {
 }
 .btn-back:hover { filter: brightness(0.9); }
 
-/* Layout principal */
+/* ===== Layout Principal ===== */
 .wrap {
   max-width: 900px;
   margin: 16px auto;
-  padding: 0 12px;
+  padding: 0 12px 60px;
 }
 .card {
   background: var(--card);
@@ -62,10 +63,15 @@ body {
   border-radius: 12px;
   padding: 14px;
   margin-bottom: 16px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.04);
 }
-h1,h2 { margin: 6px 0; }
+h1,h2 {
+  margin: 8px 0;
+  color: var(--brand-dark);
+  font-weight: 700;
+}
 
-/* Campos */
+/* ===== Campos ===== */
 .row {
   display: grid;
   grid-template-columns: 140px 1fr;
@@ -73,11 +79,49 @@ h1,h2 { margin: 6px 0; }
   margin: 8px 0;
   gap: 6px;
 }
+.row label {
+  font-weight: 600;
+  color: var(--ink);
+}
 .row input, .row select {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   width: 100%;
+  background: #fff;
+  font-size: 15px;
+}
+.row input:focus, .row select:focus {
+  outline: 2px solid var(--brand);
+  border-color: var(--brand);
+}
+
+/* ===== Botões ===== */
+.btn {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #cfe7da;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+.btn.primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
+.btn.primary:hover { background: var(--brand-dark); }
+.btn.outline {
+  background: #fff;
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.btn.outline:hover { background: #eaf6f0; }
+.actions-right {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 .grid2 {
   display: grid;
@@ -86,29 +130,19 @@ h1,h2 { margin: 6px 0; }
   margin: 10px 0;
 }
 
-/* Botões */
-.btn {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #cfe7da;
-  background: #fff;
-  cursor: pointer;
-  font-weight: 600;
-}
-.btn.primary {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-}
-.btn.outline { background: #fff; }
-
-/* Linha de produto */
+/* ===== Linha de Produto ===== */
 .produto-linha {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
 }
-.produto-linha input { flex: 1; }
+.produto-linha input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 15px;
+}
 .produto-linha button {
   background: var(--brand);
   color: #fff;
@@ -117,12 +151,13 @@ h1,h2 { margin: 6px 0; }
   border-radius: 8px;
   padding: 6px 10px;
   cursor: pointer;
+  transition: all 0.1s ease;
 }
 .produto-linha button:hover {
   filter: brightness(0.9);
 }
 
-/* Área QR */
+/* ===== Área QR e OCR ===== */
 .scan-area {
   margin: 10px 0;
   padding: 10px;
@@ -134,6 +169,7 @@ h1,h2 { margin: 6px 0; }
   width: 100%;
   max-width: 420px;
   margin: auto;
+  display: block;
 }
 .preview {
   padding: 10px;
@@ -142,4 +178,35 @@ h1,h2 { margin: 6px 0; }
   background: #fff;
   white-space: pre-wrap;
   font-family: ui-monospace, Consolas, monospace;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  display: block;
+  margin-top: 4px;
+}
+
+/* ===== Responsividade ===== */
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+  .row label {
+    margin-bottom: 4px;
+  }
+  .topbar .logo {
+    height: 64px;
+  }
+  .title-strong {
+    font-size: 22px;
+  }
+  .btn {
+    width: 100%;
+  }
+  .grid2 {
+    grid-template-columns: 1fr;
+  }
+  .produto-linha {
+    flex-direction: column;
+  }
 }
