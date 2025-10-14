@@ -229,3 +229,19 @@ h1,h2 {
   border: 1px solid var(--line);
   background: #fafafa;
 }
+/* iOS: reduz “gloss” e setas do <select>/<number> */
+.row select, .produto-linha input[type="number"]{
+  -webkit-appearance: none;
+  appearance: none;
+}
+.produto-linha input[type="number"]::-webkit-outer-spin-button,
+.produto-linha input[type="number"]::-webkit-inner-spin-button{
+  -webkit-appearance: none; margin: 0;
+}
+
+/* Botões: estado desabilitado + foco acessível */
+.btn:disabled{ opacity: .55; cursor: not-allowed; }
+.btn:focus{ outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* Toque iOS: remove highlight azul */
+* { -webkit-tap-highlight-color: rgba(0,0,0,0); }
