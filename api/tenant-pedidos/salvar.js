@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { tenantId, payload, idempotencyKey } = req.body || {};
+    const { tenantId, payload, idempotencyKey, user } = req.body || {};
     const tenant = (tenantId || process.env.TENANT_DEFAULT || "").trim();
 
     if (!tenant) {
@@ -57,7 +57,11 @@ export default async function handler(req, res) {
       ...payload,
       idempotencyKey,
       tenantId: tenant,
-      createdAt: new Date(),
+      createdAt: new Date(), // simples e suficiente aqui
+      // >>> NOVO: registra quem criou
+      createdBy: user?.uid || payload?.createdBy || null,
+      createdByEmail: user?.email || null,
+      createdByName: user?.name || null,
       dataEntregaDia: payload?.dataEntregaISO
         ? Number(String(payload.dataEntregaISO).replaceAll("-", ""))
         : null,
