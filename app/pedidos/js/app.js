@@ -95,9 +95,13 @@ function montarPayloadPedido(){
 
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || 'ENTREGA';
 
+  // >>> NOVO: captura clienteId (se existir no formulário)
+  const clienteId = document.getElementById('clienteId')?.value || null;
+
   return {
     cliente: up(document.getElementById('cliente')?.value || ''),
     clienteUpper: up(document.getElementById('cliente')?.value || ''),
+    clienteId, // <<< adicionado para vincular com o cadastro do cliente
     dataEntregaISO: document.getElementById('entrega')?.value || null,
     horaEntrega: document.getElementById('horaEntrega')?.value || '',
     entrega: {
