@@ -7,13 +7,12 @@
   <meta name="theme-color" content="#1e7f46" />
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./css/style.css" />
-  <!-- Google API (Drive OAuth) -->
   <script src="https://apis.google.com/js/api.js"></script>
 </head>
 <body>
   <header class="topbar">
     <button id="btnVoltar" class="btn-back" title="Voltar">&larr;</button>
-    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" style="height:84px;cursor:pointer"/>
+    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
     <div style="margin-left:auto;text-align:right">
       <div class="title-strong">Despesas</div>
       <div id="usuarioLogado" class="user-mini">Usuário: —</div>
@@ -21,7 +20,6 @@
   </header>
 
   <div class="wrap">
-
     <!-- Despesa Manual -->
     <div class="card">
       <h2>Despesa Manual</h2>
@@ -63,7 +61,6 @@
       <input type="file" id="fotoNota" accept="image/*" capture="environment" />
       <small class="muted">Dica: use boa iluminação. Se falhar, edite manualmente acima.</small>
 
-      <!-- PREVIEW DA FOTO -->
       <div id="ocrPreviewWrap" class="ocr-preview-wrap hidden">
         <img id="ocrPreviewImg" alt="Pré-visualização da nota" class="img-preview" />
         <div class="grid2" style="margin-top:8px">
@@ -94,7 +91,7 @@
       </div>
 
       <div class="scan-area">
-        <video id="video" class="qr" autoplay playsinline style="width:100%;max-width:420px;background:#000;border-radius:10px"></video>
+        <video id="video" class="qr" autoplay playsinline style="background:#000;border-radius:10px"></video>
         <div class="grid2" style="margin-top:8px">
           <button id="btnFecharCamera" class="btn outline" disabled>Fechar câmera</button>
           <label class="btn outline" for="fotoNota" style="text-align:center">Foto da nota (fallback)</label>
@@ -102,7 +99,7 @@
         <small class="muted">Câmera precisa de <b>HTTPS</b> (ou localhost). No iPhone PWA, prefira “Foto da nota”.</small>
       </div>
 
-      <!-- Upload manual do PDF gerado pela página oficial -->
+      <!-- Upload manual do PDF gerado na página oficial -->
       <input type="file" id="pdfNfce" accept="application/pdf" style="margin-top:8px" />
       <div class="actions-right">
         <button id="btnUploadPdfNfce" class="btn">Enviar PDF da página ao Drive</button>
