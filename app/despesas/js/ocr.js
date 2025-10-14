@@ -14,9 +14,8 @@ async function ensureTesseract(){
 function parseLinesToExpense(text){
   const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
 
-  // Heurísticas simples:
-  const currency = /(\d{1,3}(\.\d{3})*,\d{2}|\d+,\d{2})/;
-  const totalRe = /(total(?:\s+geral)?|valor\s*total|total a pagar|importe total)/i;
+  const currency = /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/;
+  const totalRe  = /(total(?:\s+geral)?|valor\s*total|total a pagar|importe total)/i;
 
   let estabelecimento = lines[0] || '';
   let total = 0;
@@ -38,7 +37,7 @@ function parseLinesToExpense(text){
     }
   }
 
-  // Itens (linha com descrição + preço no fim)
+  // Itens (descrição + preço no fim)
   for (const s of lines){
     const m = s.match(new RegExp(`(.+?)\\s+${currency.source}$`));
     if (m){
