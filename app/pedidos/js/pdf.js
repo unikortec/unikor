@@ -8,7 +8,7 @@ const { jsPDF } = window.jspdf;
 function digitsOnly(v) { return String(v || "").replace(/\D/g, ""); }
 function formatarData(iso) { if (!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; }
 function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
-function splitToWidth(doc, t, w){ return doc.splitTextToSize(t||"", w); }
+function splitToWidth(doc, t, w){ return doc.splitTextToSize(String(t || ""), w); }
 function twoFirstNamesCamel(client){
   const tokens = String(client||'')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -26,16 +26,16 @@ function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
-/* ===== Precisão decimal (sem arredondar indevido) ===== */
+/* ===== Precisão decimal ===== */
 function strToCents(str){
-  const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
+  const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",";");
   if (!s) return 0;
-  return Math.round(Number(s) * 100);
+  return Math.round(Number(s.replace(";", ".")) * 100);
 }
 function strToThousandths(str){
-  const s = String(str ?? "").trim().replace(",",".");
+  const s = String(str ?? "").trim().replace(",",";");
   if (!s) return 0;
-  return Math.round(Number(s) * 1000);
+  return Math.round(Number(s.replace(";", ".")) * 1000);
 }
 function moneyBRfromCents(cents){
   const v = Math.round(cents);
@@ -89,14 +89,14 @@ export async function construirPDF(){
     obsGeralTxt : (document.getElementById("obsGeral")?.value || "").trim().toUpperCase(),
     tipoEnt     : (document.querySelector('input[name="tipoEntrega"]:checked')?.value || "ENTREGA").toUpperCase(),
     pagamento   : (()=>{ 
-      const sel = document.getElementById("pagamento");
-      const outro = document.getElementById("pagamentoOutro");
-      let p = (sel?.value || "").toUpperCase();
+      const sel = document.getElementById("pagamento") || document.getElementById("formaPagamento");
+      const outro = document.getElementById("pagamentoOutro") || document.getElementById("pagamento_outro");
+      let p = (sel?.value || "").trim().toUpperCase();
       if (p === "OUTRO") {
         const o = (outro?.value || "").trim();
         if (o) p = o.toUpperCase();
       }
-      return p;
+      return p || "NÃO INFORMADO";
     })(),
     itens: (() => {
       const itensContainer = document.getElementById('itens');
@@ -112,7 +112,6 @@ export async function construirPDF(){
         const produto = produtoInput?.value?.trim() || '';
         const tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
-        // preserva texto cru digitado
         const qtdTxt = (quantidadeInput?.value ?? '').trim();
         const precoTxt = (precoInput?.value ?? '').trim();
 
@@ -163,7 +162,7 @@ export async function construirPDF(){
   });
 }
 
-// 2) Constrói a partir de documento salvo
+// Constrói a partir de documento salvo (reimpressão)
 function normalizarPedidoSalvo(docData){
   const p = docData || {};
   const itens = Array.isArray(p.itens) ? p.itens.map(it=>{
@@ -197,7 +196,7 @@ function normalizarPedidoSalvo(docData){
     contato: digitsOnly(p.clienteFiscal?.contato || ''),
     obsGeralTxt: String(p.obs || p.obsGeral || '').toUpperCase(),
     tipoEnt: String(p.entrega?.tipo || 'ENTREGA').toUpperCase(),
-    pagamento: String(p.pagamento || '').toUpperCase(),
+    pagamento: String(p.pagamento || 'NÃO INFORMADO').toUpperCase(),
     itens,
     freteLabel: (p.frete?.isento ? "ISENTO" : ("R$ " + Number(p.frete?.valorBase||0).toFixed(2))),
     freteCobravel: Number(p.frete?.valorCobravel ?? p.frete?.valorBase ?? 0)
@@ -209,7 +208,7 @@ async function construirPDFDePedidoSalvo(pedidoDocData){
   return construirPDFBase(norm);
 }
 
-/* ===== Miolo de desenho compartilhado ===== */
+/* ===================== Desenho ===================== */
 function construirPDFBase(data){
   const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
 
@@ -270,31 +269,20 @@ function construirPDFBase(data){
   doc.text(data.hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // ======= FORMA DE PAGAMENTO (AGORA COM QUEBRA AUTOMÁTICA) =======
-  {
-    const padIn = 3;
-    const lineH = 5.5;               // altura de linha para este bloco
-    const contentMaxW = larguraCaixa - padIn*2;
-    const contentLines = splitToWidth(doc, (data.pagamento || "-").toUpperCase(), contentMaxW);
-    const blockH = Math.max(10, 6 + contentLines.length * lineH); // altura dinâmica
-
-    ensureSpace(blockH);
-    doc.rect(margemX, y, larguraCaixa, blockH, "S");
-
-    // título
-    doc.setFont("helvetica","bold"); doc.setFontSize(8);
-    doc.text("FORMA DE PAGAMENTO", margemX + padIn, y + 5.5);
-
-    // conteúdo (quebrado)
-    doc.setFont("helvetica","normal"); doc.setFontSize(9);
-    const startY = y + 5.5 + 2.8; // pequena distância após o título
-    contentLines.forEach((ln, i) => {
-      doc.text(ln, margemX + padIn, startY + i*lineH);
-    });
-
-    y += blockH + 2;
-  }
-  // ================================================================
+  // FORMA DE PAGAMENTO — sempre exibe, com quebra automática
+  ensureSpace(14);
+  const pagamentoTxt = (data.pagamento && String(data.pagamento).trim())
+    ? String(data.pagamento).toUpperCase()
+    : "NÃO INFORMADO";
+  const linhasPag = splitToWidth(doc, pagamentoTxt, larguraCaixa - 8);
+  const boxH = Math.max(10, 6 + linhasPag.length * 4);
+  doc.rect(margemX, y, larguraCaixa, boxH, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8);
+  doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 5);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+  let baseY2 = y + 9;
+  linhasPag.forEach((ln, i) => doc.text(ln, margemX + 3, baseY2 + i * 4));
+  y += boxH + 2;
 
   // Cabeçalho itens
   ensureSpace(14);
@@ -360,7 +348,7 @@ function construirPDFBase(data){
       const titulo="OBSERVAÇÕES:"; const tx=margemX+3, ty=y+6;
       doc.text(titulo, tx, ty); doc.line(tx, ty+.8, tx+doc.getTextWidth(titulo), ty+.8);
       doc.setFont("helvetica","normal");
-      let baseY2=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY2+ix*5));
+      let baseY3=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY3+ix*5));
       y += obsH;
     }
 
@@ -413,7 +401,7 @@ function construirPDFBase(data){
     const titulo="OBSERVAÇÕES GERAIS:"; const tx=margemX+3, ty=y+6;
     doc.text(titulo, tx, ty); doc.line(tx, ty+.8, tx+doc.getTextWidth(titulo), ty+.8);
     doc.setFont("helvetica","normal");
-    let baseY2=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY2+ix*5));
+    let baseY4=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY4+ix*5));
     y += obsH;
   }
 
@@ -454,11 +442,9 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
-// >>> NOVO: compartilhar com Blob mantendo user-activation (Android/WhatsApp)
+// Compartilhamento nativo (mantém user-activation)
 export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
   const file = new File([blob], nomeArq, { type: 'application/pdf' });
-
-  // 1) somente files
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file] });
@@ -467,8 +453,6 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
   } catch (e) {
     if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
   }
-
-  // 2) files + texto/título
   try {
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
@@ -477,15 +461,11 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
   } catch (e) {
     if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
   }
-
-  // 3) fallback preview
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 10000);
   return { compartilhado: false, fallback: true };
 }
-
-// (mantido para compatibilidade)
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
   return compartilharComBlob(blob, nomeArq);
