@@ -13,7 +13,7 @@
 <body>
   <header class="topbar">
     <button id="btnVoltar" class="btn-back" title="Voltar">&larr;</button>
-    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" style="height:56px;cursor:pointer"/>
+    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" style="height:84px;cursor:pointer"/>
     <div style="margin-left:auto;text-align:right">
       <div class="title-strong">Despesas</div>
       <div id="usuarioLogado" class="user-mini">Usuário: —</div>
@@ -25,15 +25,18 @@
     <!-- Despesa Manual -->
     <div class="card">
       <h2>Despesa Manual</h2>
+
       <div class="row">
         <label>Categoria:</label>
         <input id="categoriaManual" list="listaCategorias" placeholder="Ex: Alimentação, Transporte" />
         <datalist id="listaCategorias"></datalist>
       </div>
+
       <div class="row">
         <label>Estabelecimento:</label>
         <input id="estabelecimento" placeholder="Nome do local da compra" />
       </div>
+
       <div class="row">
         <label>Forma de pagamento:</label>
         <select id="formaPagamento">
@@ -53,11 +56,22 @@
       </div>
     </div>
 
-    <!-- OCR por Foto -->
+    <!-- Foto + OCR -->
     <div class="card">
       <h2>Foto da Nota (OCR)</h2>
+
       <input type="file" id="fotoNota" accept="image/*" capture="environment" />
       <small class="muted">Dica: use boa iluminação. Se falhar, edite manualmente acima.</small>
+
+      <!-- PREVIEW DA FOTO -->
+      <div id="ocrPreviewWrap" class="ocr-preview-wrap hidden">
+        <img id="ocrPreviewImg" alt="Pré-visualização da nota" class="img-preview" />
+        <div class="grid2" style="margin-top:8px">
+          <button id="btnOcrTrocar" class="btn outline">Trocar foto</button>
+          <button id="btnOcrLimpar" class="btn">Limpar</button>
+        </div>
+      </div>
+
       <div class="actions-right">
         <button id="btnOcr" class="btn">Reconhecer (OCR)</button>
       </div>
@@ -66,15 +80,19 @@
     <!-- NFC-e -->
     <div class="card">
       <h2>Capturar NFC-e (QR)</h2>
+
       <div class="row">
         <label>Categoria:</label>
         <input id="categoriaNfce" value="GERAL" />
       </div>
+
       <input id="qrUrl" placeholder="Cole a URL do QR da NFC-e" style="margin-bottom:8px" />
+
       <div class="grid2">
         <button id="btnProcessarNfce" class="btn">Processar URL</button>
         <button id="btnAbrirCamera" class="btn">Usar câmera</button>
       </div>
+
       <div class="scan-area">
         <video id="video" class="qr" autoplay playsinline style="width:100%;max-width:420px;background:#000;border-radius:10px"></video>
         <div class="grid2" style="margin-top:8px">
@@ -82,6 +100,12 @@
           <label class="btn outline" for="fotoNota" style="text-align:center">Foto da nota (fallback)</label>
         </div>
         <small class="muted">Câmera precisa de <b>HTTPS</b> (ou localhost). No iPhone PWA, prefira “Foto da nota”.</small>
+      </div>
+
+      <!-- Upload manual do PDF gerado pela página oficial -->
+      <input type="file" id="pdfNfce" accept="application/pdf" style="margin-top:8px" />
+      <div class="actions-right">
+        <button id="btnUploadPdfNfce" class="btn">Enviar PDF da página ao Drive</button>
       </div>
     </div>
 
@@ -101,7 +125,6 @@
     </div>
   </div>
 
-  <script src="https://apis.google.com/js/api.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
