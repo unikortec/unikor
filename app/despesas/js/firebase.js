@@ -73,3 +73,24 @@ export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser
 /* ========= Helpers convenientes de path (opcional) ========= */
 export const colTenants = (name, tenantId) => collection(db, "tenants", tenantId || cachedTenantId || TENANT_FALLBACK, name);
 export const docTenants = (name, id, tenantId) => doc(db, "tenants", tenantId || cachedTenantId || TENANT_FALLBACK, name, id);
+// /app/despesas/js/firebase.js (append)
+
+// Salvar no Firestore em tenants/{tenantId}/expenses
+export async function saveManualToFirestore({ categoria, estabelecimento, itens, total, formaPagamento='OUTROS', source='MANUAL' }){
+  const user = getCurrentUser();
+  const tenantId = await getTenantId();
+  const payload = {
+    tenantId,
+    categoria: (categoria||'GERAL').toUpperCase(),
+    estabelecimento: estabelecimento||'',
+    itens: (itens||[]).map(p=>({ nome:String(p.nome||'').slice(0,120), valor:Number(p.valor)||0 })),
+    total: Number(total)|| (itens||[]).reduce((s,i)=>s+(Number(i.valor)||0),0),
+    formaPagamento: (formaPagamento||'OUTROS').toUpperCase(),
+    source, // MANUAL | NFCe | NFe55 | OCR
+    createdBy: user?.uid || 'anon',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+  const col = colTenants('expenses', tenantId);
+  return addDoc(col, payload);
+}
