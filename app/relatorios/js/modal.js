@@ -5,11 +5,12 @@ import { auth, serverTimestamp } from './firebase.js';
 import { exportarPDF } from './export.js';
 import { printPedido80mm } from './print.js';
 
-// trava/destrava o scroll em mobile (iOS/Android)
+// ===== Scroll Lock =====
 function lockBodyScroll(lock){
   try{ document.body.style.overflow = lock ? 'hidden' : ''; }catch{}
 }
 
+// ===== Abertura / Fechamento =====
 export function openModal(){
   const m = $("modalBackdrop");
   if (!m) return;
@@ -41,13 +42,10 @@ const parseBRNumber = (val) => {
   const hasDot   = s.includes(".");
 
   if (hasComma && hasDot) {
-    // Ex.: "1.234,56" → "1234.56"
     s = s.replace(/\./g, "").replace(",", ".");
   } else if (hasComma) {
-    // Ex.: "6,09" → "6.09"
     s = s.replace(",", ".");
-  } // se só ponto, mantém
-
+  }
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 };
@@ -150,9 +148,15 @@ export async function carregarPedidoEmModal(id){
   const r = await pedidos_get(id);
   if (!r){ alert("Pedido não encontrado."); return; }
 
-  // Mostra usuário criador no lugar do ID
-  const userName = r.usuarioNome || r.userNome || r.userName || r.createdBy || "—";
-  $("mId").value = userName.toUpperCase();
+  // Mostra o usuário que lançou o pedido no lugar do ID
+  const launchedBy =
+    (r.usuarioNome || r.userName || r.createdByName || r.createdByEmail || r.createdBy || "—").toString();
+
+  $("mId").value = launchedBy.toUpperCase();
+
+  // troca o label de "ID do Pedido" para "Lançado por"
+  const idLabel = $("mId")?.closest("div")?.querySelector("label");
+  if (idLabel) idLabel.textContent = "Lançado por";
 
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
@@ -232,7 +236,6 @@ export async function salvarEdicao(atualizarLista){
 export async function gerarPDFDoModal(){
   try {
     if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
-    // Mesmo PDF da listagem (usando print.js)
     await printPedido80mm(window.__currentDocId);
   } catch(e){
     console.error("Erro ao gerar PDF:", e);
