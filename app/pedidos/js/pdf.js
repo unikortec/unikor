@@ -270,14 +270,31 @@ function construirPDFBase(data){
   doc.text(data.hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // FORMA DE PAGAMENTO
-  ensureSpace(12);
-  doc.rect(margemX, y, larguraCaixa, 10, "S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8);
-  doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 6);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  doc.text((data.pagamento || "-").toUpperCase(), margemX + larguraCaixa - 3, y + 6, { align: "right" });
-  y += 12;
+  // ======= FORMA DE PAGAMENTO (AGORA COM QUEBRA AUTOMÁTICA) =======
+  {
+    const padIn = 3;
+    const lineH = 5.5;               // altura de linha para este bloco
+    const contentMaxW = larguraCaixa - padIn*2;
+    const contentLines = splitToWidth(doc, (data.pagamento || "-").toUpperCase(), contentMaxW);
+    const blockH = Math.max(10, 6 + contentLines.length * lineH); // altura dinâmica
+
+    ensureSpace(blockH);
+    doc.rect(margemX, y, larguraCaixa, blockH, "S");
+
+    // título
+    doc.setFont("helvetica","bold"); doc.setFontSize(8);
+    doc.text("FORMA DE PAGAMENTO", margemX + padIn, y + 5.5);
+
+    // conteúdo (quebrado)
+    doc.setFont("helvetica","normal"); doc.setFontSize(9);
+    const startY = y + 5.5 + 2.8; // pequena distância após o título
+    contentLines.forEach((ln, i) => {
+      doc.text(ln, margemX + padIn, startY + i*lineH);
+    });
+
+    y += blockH + 2;
+  }
+  // ================================================================
 
   // Cabeçalho itens
   ensureSpace(14);
