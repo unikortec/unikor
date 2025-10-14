@@ -2,6 +2,8 @@
 // Página principal: preenche cadastro do cliente automaticamente e
 // mantém o cadastro atualizado quando os campos mudam. NÃO requer alterar o modal.
 
+import { getTenantId } from './firebase.js';
+
 const DEBOUNCE_MS = 300;
 
 /* ===================== Utils ===================== */
@@ -42,29 +44,44 @@ function getFormRefs(){
   };
 }
 
-/* ===================== API mínima ===================== */
+/* ===================== API (POST) ===================== */
+// find.js exige POST: { tenantId, nome } → { ok, found, id, data }
 async function apiFindClienteByName(nome){
   if (!nome) return null;
   try{
-    const r = await fetch(`/api/tenant-clientes/find?nome=${encodeURIComponent(nome)}`, { method:'GET' });
+    const tenantId = await getTenantId();
+    const r = await fetch(`/api/tenant-clientes/find`,{
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ tenantId, nome })
+    });
     if (!r.ok) return null;
     const j = await r.json();
-    return j?.cliente || null;
+    if (j?.ok && j.found && j.id && j.data) {
+      return { id: j.id, ...j.data };
+    }
+    return null;
   }catch{
     return null;
   }
 }
 
+// create.js exige POST: { tenantId, cliente:{...} } → { ok, id, reused? }
 async function apiUpsertCliente(payload){
   try{
+    const tenantId = await getTenantId();
     const r = await fetch(`/api/tenant-clientes/create`,{
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ tenantId, cliente: payload })
     });
     if (!r.ok) return null;
     const j = await r.json();
-    return j || null;
+    if (j?.ok) {
+      // normaliza retorno para termos sempre { ok, id, cliente }
+      return { ok:true, id: j.id, cliente: { ...payload, id: j.id } };
+    }
+    return null;
   }catch{
     return null;
   }
