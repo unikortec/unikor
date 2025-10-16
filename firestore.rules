@@ -32,20 +32,35 @@ service cloud.firestore {
              request.resource.data.tenantId == tenantId;
     }
 
-    // Valida autor/timestamps quando presentes (sem comparar com request.time)
+    // ======= CORRIGIDO: aceita createdBy/createdAt imutáveis em UPDATE =======
     function validAuthorFields() {
-      // aceita PT ou EN
+      // tipos válidos para timestamps quando enviados
       let hasCreated = ("criadoEm" in request.resource.data && request.resource.data.criadoEm is timestamp)
                     || ("createdAt" in request.resource.data && request.resource.data.createdAt is timestamp);
       let hasUpdated = ("atualizadoEm" in request.resource.data && request.resource.data.atualizadoEm is timestamp)
                     || ("updatedAt" in request.resource.data && request.resource.data.updatedAt is timestamp);
 
-      return (
-        (!("createdBy"  in request.resource.data) || request.resource.data.createdBy  == request.auth.uid) &&
-        (!("updatedBy"  in request.resource.data) || request.resource.data.updatedBy  == request.auth.uid) &&
-        ( !("criadoEm"    in request.resource.data) && !("createdAt"   in request.resource.data) || hasCreated ) &&
-        ( !("atualizadoEm" in request.resource.data) && !("updatedAt"  in request.resource.data) || hasUpdated )
-      );
+      // quais chaves mudaram do doc atual -> doc novo
+      let diff = request.resource.data.diff(resource.data);
+      let changed = diff.changedKeys();
+
+      // createdBy/createdAt:
+      //  - se NÃO mudarem: ok
+      //  - se mudarem: exigir createdBy == usuário e timestamps com tipo correto
+      let createdByOk = !changed.hasAny(['createdBy']) ||
+                        request.resource.data.createdBy == request.auth.uid;
+
+      let createdTsOk = !changed.hasAny(['criadoEm','createdAt']) || hasCreated;
+
+      // updatedBy deve bater com o usuário quando enviado
+      let updatedByOk = (!("updatedBy" in request.resource.data) ||
+                         request.resource.data.updatedBy == request.auth.uid);
+
+      // updatedAt/atualizadoEm, quando presentes, precisam ser timestamp
+      let updatedTsOk = ( !("atualizadoEm" in request.resource.data) && !("updatedAt" in request.resource.data) )
+                        || hasUpdated;
+
+      return createdByOk && createdTsOk && updatedByOk && updatedTsOk;
     }
 
     // ====== TUDO dentro de tenants ======
