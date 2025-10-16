@@ -100,9 +100,8 @@ export async function pedidos_list({ dataIniISO, dataFimISO, clienteLike, tipo, 
     list = list.filter(x => (x?.entrega?.tipo || "").toUpperCase() === t);
   }
 
-  // ===== ORDEM: mais novo -> mais antigo (sem índices extras)
+  // ORDEM: mais novo -> mais antigo
   list.sort((a,b)=>{
-    // tenta createdAt/updatedAt se existirem (timestamp), senão dataEntregaISO+horaEntrega
     const ta = (a.updatedAt?.toMillis?.() ? a.updatedAt.toMillis()
              : a.createdAt?.toMillis?.() ? a.createdAt.toMillis()
              : 0);
@@ -137,7 +136,16 @@ export async function pedidos_update(id, data){
   const patch = { ...(data || {}) };
   if (patch.cliente) patch.clientUpper = norm(patch.cliente);
   if (typeof patch.totalPedido !== "number") patch.totalPedido = calcTotalFromItens(patch.itens);
+
+  // garante que o tenantId do corpo bate com o do path
+  patch.tenantId = tenantId;
+
   const payload = withAuthorAndTenant(patch, { uid: user.uid, tenantId }, { isCreate:false });
+
+  // DEBUG
+  console.log("[pedidos_update] path:", ref.path);
+  console.log("[pedidos_update] payload keys:", Object.keys(payload));
+
   await setDoc(ref, payload, { merge:true });
 }
 
