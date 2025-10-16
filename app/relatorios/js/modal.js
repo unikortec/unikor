@@ -1,7 +1,7 @@
 // relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
-import { auth, serverTimestamp, requireTenantContext } from './firebase.js'; // ← inclui requireTenantContext
+import { auth, serverTimestamp, requireTenantContext } from './firebase.js'; // inclui requireTenantContext
 
 // trava/destrava o scroll em mobile (iOS/Android)
 function lockBodyScroll(lock){
@@ -147,10 +147,11 @@ export async function carregarPedidoEmModal(id){
   if (!r){ alert("Pedido não encontrado."); return; }
 
   // Mostra "Lançado por" (substitui o antigo ID do pedido na UI)
-  $("mId").value = autorLabel(r);  // ← aqui mostramos o autor no campo de topo
-const idInput = $("mId");
-const idLabel = idInput && idInput.previousElementSibling;
-if (idLabel && idLabel.tagName === "LABEL") idLabel.textContent = "Lançado por";
+  $("mId").value = autorLabel(r);
+  const idInput = $("mId");
+  const idLabel = idInput && idInput.previousElementSibling;
+  if (idLabel && idLabel.tagName === "LABEL") idLabel.textContent = "Lançado por";
+
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
   $("mHoraEntrega").value = r.horaEntrega || "";
@@ -177,7 +178,9 @@ export async function salvarEdicao(atualizarLista){
   if (!window.__currentDocId){ closeModal(); return; }
 
   // Garante tenantId e uid para satisfazer as regras
-  const { user, tenantId } = await requireTenantContext();
+  const { user, tenantId, role } = await requireTenantContext();
+  // DEBUG claims
+  console.log("[salvarEdicao] user.uid:", user?.uid, "tenantId:", tenantId, "role:", role);
 
   const itens = [];
   $("itemsBody").querySelectorAll("tr").forEach(tr=>{
@@ -213,18 +216,20 @@ export async function salvarEdicao(atualizarLista){
     frete: { valorCobravel: Number(freteNum.toFixed(2)), valorBase: Number(freteNum.toFixed(2)) },
 
     // carimbos exigidos/aceitos pelas regras
-    tenantId,                       // ← garante matchesTenantField
+    tenantId,                       // garante matchesTenantField
     updatedBy: user?.uid || auth?.currentUser?.uid || null,
     updatedAt: serverTimestamp()
   };
 
   try{
-    await pedidos_update(window.__currentDocId, payload);  // merge no db.js (ver seção 2)
+    // DEBUG payload
+    console.log("[salvarEdicao] docId:", window.__currentDocId, "payload:", JSON.parse(JSON.stringify(payload)));
+    await pedidos_update(window.__currentDocId, payload);
     closeModal();
     atualizarLista(window.__currentDocId, payload);
     alert("Pedido atualizado com sucesso.");
   }catch(e){
-    console.error("Falha ao salvar:", e);
+    console.error("Falha ao salvar:", e?.code, e?.message, e);
     alert("Falha ao salvar. Verifique sua conexão e permissões e tente novamente.");
   }
 }
