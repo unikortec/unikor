@@ -148,7 +148,8 @@ export async function carregarPedidoEmModal(id){
 
   // Mostra "Lançado por" (substitui o antigo ID do pedido na UI)
   $("mId").value = autorLabel(r);  // ← aqui mostramos o autor no campo de topo
-
+const idLabel = document.querySelector('label[for="mId"]');
+if (idLabel) idLabel.textContent = "Lançado por";
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
   $("mHoraEntrega").value = r.horaEntrega || "";
