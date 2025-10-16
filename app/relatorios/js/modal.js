@@ -1,16 +1,13 @@
 // relatorios/js/modal.js
 import { $, moneyBR } from './render.js';
 import { pedidos_get, pedidos_update } from './db.js';
-import { auth, serverTimestamp } from './firebase.js';
-import { exportarPDF } from './export.js';
-import { printPedido80mm } from './print.js';
+import { auth, serverTimestamp, requireTenantContext } from './firebase.js'; // ← inclui requireTenantContext
 
-// ===== Scroll Lock =====
+// trava/destrava o scroll em mobile (iOS/Android)
 function lockBodyScroll(lock){
   try{ document.body.style.overflow = lock ? 'hidden' : ''; }catch{}
 }
 
-// ===== Abertura / Fechamento =====
 export function openModal(){
   const m = $("modalBackdrop");
   if (!m) return;
@@ -30,26 +27,14 @@ export function closeModal(){
   lockBodyScroll(false);
 }
 
-/* ================================
-   PARSER NUMÉRICO – corrige ponto/vírgula
-================================== */
+// ===== helpers numéricos BR =====
 const parseBRNumber = (val) => {
   if (typeof val === "number") return val;
-  let s = String(val ?? "").trim();
-  if (!s) return 0;
-
-  const hasComma = s.includes(",");
-  const hasDot   = s.includes(".");
-
-  if (hasComma && hasDot) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (hasComma) {
-    s = s.replace(",", ".");
-  }
+  const s = String(val ?? "")
+    .trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",".");
   const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
+  return isNaN(n) ? 0 : n;
 };
-
 const toMoney = (n)=> moneyBR(Number(n||0));
 
 function kgPorUnFromDesc(desc=""){
@@ -140,23 +125,29 @@ export function addItemRow(item={}){
   recalcTotal();
 }
 
-/* ===============================
-   CARREGAR PEDIDO NO MODAL
-=============================== */
+// monta um label “bonito” pro autor
+function autorLabel(r){
+  const nome =
+    (r.usuarioNome) ||
+    (r.userName) ||
+    (r.createdByName) || "";
+  const email = r.createdByEmail || "";
+  const uid   = r.createdBy || "";
+
+  if (nome && email) return `${nome} — ${email}`.toUpperCase();
+  if (nome)          return String(nome).toUpperCase();
+  if (email)         return String(email).toUpperCase();
+  if (uid)           return String(uid).toUpperCase();
+  return "—";
+}
+
 export async function carregarPedidoEmModal(id){
   window.__currentDocId = id;
   const r = await pedidos_get(id);
   if (!r){ alert("Pedido não encontrado."); return; }
 
-  // Mostra o usuário que lançou o pedido no lugar do ID
-  const launchedBy =
-    (r.usuarioNome || r.userName || r.createdByName || r.createdByEmail || r.createdBy || "—").toString();
-
-  $("mId").value = launchedBy.toUpperCase();
-
-  // troca o label de "ID do Pedido" para "Lançado por"
-  const idLabel = $("mId")?.closest("div")?.querySelector("label");
-  if (idLabel) idLabel.textContent = "Lançado por";
+  // Mostra "Lançado por" (substitui o antigo ID do pedido na UI)
+  $("mId").value = autorLabel(r);  // ← aqui mostramos o autor no campo de topo
 
   $("mCliente").value = r.cliente || "";
   $("mDataEntregaISO").value = r.dataEntregaISO || "";
@@ -180,11 +171,11 @@ export async function carregarPedidoEmModal(id){
   openModal();
 }
 
-/* ===============================
-   SALVAR EDIÇÃO
-=============================== */
 export async function salvarEdicao(atualizarLista){
   if (!window.__currentDocId){ closeModal(); return; }
+
+  // Garante tenantId e uid para satisfazer as regras
+  const { user, tenantId } = await requireTenantContext();
 
   const itens = [];
   $("itemsBody").querySelectorAll("tr").forEach(tr=>{
@@ -204,6 +195,7 @@ export async function salvarEdicao(atualizarLista){
   const freteNum   = parseBRNumber($("mFrete").value);
 
   const payload = {
+    // campos editáveis
     cliente: $("mCliente").value.trim(),
     dataEntregaISO: $("mDataEntregaISO").value || null,
     horaEntrega: $("mHoraEntrega").value || "",
@@ -212,33 +204,36 @@ export async function salvarEdicao(atualizarLista){
     cupomFiscal: $("mCupomFiscal").value.trim() || "",
     obs: $("mObs").value.trim() || "",
     itens,
+
+    // totais
     totalPedido: Number(totalItens.toFixed(2)),
     freteValor: Number(freteNum.toFixed(2)),
     frete: { valorCobravel: Number(freteNum.toFixed(2)), valorBase: Number(freteNum.toFixed(2)) },
-    updatedBy: auth?.currentUser?.uid || null,
+
+    // carimbos exigidos/aceitos pelas regras
+    tenantId,                       // ← garante matchesTenantField
+    updatedBy: user?.uid || auth?.currentUser?.uid || null,
     updatedAt: serverTimestamp()
   };
 
   try{
-    await pedidos_update(window.__currentDocId, payload);
+    await pedidos_update(window.__currentDocId, payload);  // merge no db.js (ver seção 2)
     closeModal();
     atualizarLista(window.__currentDocId, payload);
     alert("Pedido atualizado com sucesso.");
   }catch(e){
-    console.error(e);
+    console.error("Falha ao salvar:", e);
     alert("Falha ao salvar. Verifique sua conexão e permissões e tente novamente.");
   }
 }
 
-/* ===============================
-   GERAR PDF DO MODAL
-=============================== */
+/* ===== PDF do pedido ==== */
+// Usa o MESMO gerador da lista (print.js)
 export async function gerarPDFDoModal(){
-  try {
-    if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
-    await printPedido80mm(window.__currentDocId);
-  } catch(e){
-    console.error("Erro ao gerar PDF:", e);
-    alert("Falha ao gerar PDF.");
-  }
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF){ alert("Biblioteca PDF não carregada."); return; }
+  if (!window.__currentDocId){ alert("Nenhum pedido carregado."); return; }
+
+  const { printPedido80mm } = await import("./print.js");
+  await printPedido80mm(window.__currentDocId);
 }
