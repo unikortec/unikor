@@ -35,7 +35,12 @@ const parseBRNumber = (val) => {
   const n = Number(s);
   return isNaN(n) ? 0 : n;
 };
-const toMoney = (n)=> moneyBR(Number(n||0));
+
+// <<< ALTERADO: formatação para inputs, sem milhar >>>
+const toMoney = (n) => {
+  const v = Number(n || 0);
+  return Number.isFinite(v) ? v.toFixed(2).replace('.', ',') : '0,00';
+};
 
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.');
