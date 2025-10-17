@@ -1,8 +1,8 @@
 // app/pedidos/js/clientes.js
-// CRUD simplificado de clientes por TENANT, em coleção própria.
-// Doc-id = clienteUpper (UPPERCASE), para busca direta e consistente com pedidos.
+// CRUD de clientes por TENANT, doc-id = clienteUpper (UPPERCASE).
+
 import {
-  db, getTenantId,
+  db, getTenantId, auth,
   collection, doc, setDoc, getDoc, getDocs,
   query, where, orderBy, limit, serverTimestamp
 } from './firebase.js';
@@ -10,47 +10,76 @@ import { up } from './utils.js';
 
 const colPath = (tenantId) => collection(db, 'tenants', tenantId, 'clientes');
 
-/** Normaliza payload do cliente antes de salvar */
-function normalizeCliente(nomeUpper, endereco, isentoFrete, extra = {}) {
-  const toDigits = (s) => String(s || '').replace(/\D/g, '');
-  const freteStr = String(extra.frete || '').trim().replace(',', '.');
-  const freteNum = freteStr ? Number(freteStr) : 0;
+/* ---------- helpers de normalização ---------- */
+function onlyDigits(s){ return String(s || '').replace(/\D/g, ''); }
+function toNumberBR(s){
+  const txt = String(s ?? '').trim().replace(/\./g,'').replace(',','.');
+  const n = Number(txt);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* ---------- monta payload base (sem created/updated) ---------- */
+function basePayload({ nomeUpper, endereco, isentoFrete, extra = {} }) {
+  const freteNum = isentoFrete ? 0 : toNumberBR(extra.frete);
   return {
-    clienteUpper : nomeUpper,            // chave canônica
-    nome         : nomeUpper,            // redundante p/ listagens
+    clienteUpper : nomeUpper,                       // chave canônica
+    nome         : nomeUpper,                       // redundante p/ listagens
     endereco     : String(endereco || '').trim().toUpperCase(),
-    cnpj         : toDigits(extra.cnpj || ''),
-    ie           : String(extra.ie || '').trim().toUpperCase(),
-    cep          : toDigits(extra.cep || ''),
-    contato      : toDigits(extra.contato || ''),
+    cnpj         : onlyDigits(extra.cnpj),
+    ie           : String(extra.ie || '').trim().toUpperCase() || 'ISENTO',
+    cep          : onlyDigits(extra.cep),
+    contato      : onlyDigits(extra.contato),
     isentoFrete  : !!isentoFrete,
-    frete        : (isentoFrete ? 0 : (isFinite(freteNum) ? freteNum : 0)),
-    updatedAt    : serverTimestamp(),
-    createdAt    : serverTimestamp(),    // primeira vez prevalece; rules aceitam ambos
+    frete        : freteNum
   };
 }
 
 /**
  * Salva/atualiza um cliente (idempotente por doc-id = UPPER(nome)).
- * @param {string} nome Nome livre do cliente
- * @param {string} endereco Endereço (pode ter cidade)
- * @param {boolean} isentoFrete
- * @param {{cnpj?:string, ie?:string, cep?:string, contato?:string, frete?:string|number}} extra
+ * - Na **criação**: define tenantId, createdAt, createdBy, updatedAt, updatedBy.
+ * - No **update**: NÃO redefine createdAt/createdBy (evita conflito com validAuthorFields()).
  */
 export async function salvarCliente(nome, endereco, isentoFrete, extra = {}) {
   const tenantId = await getTenantId();
+  const user = auth.currentUser;
+  if (!user) throw new Error('Não autenticado');
+
   const nomeUpper = up(nome || '').trim();
   if (!nomeUpper) throw new Error('Nome do cliente inválido');
+
   const ref = doc(colPath(tenantId), nomeUpper);
-  const data = normalizeCliente(nomeUpper, endereco, isentoFrete, extra);
-  // merge:true preserva createdAt anterior; updatedAt recebe novo valor
+  const snap = await getDoc(ref);
+  const now = serverTimestamp();
+
+  const core = basePayload({ nomeUpper, endereco, isentoFrete, extra });
+
+  let data;
+  if (!snap.exists()) {
+    // CREATE
+    data = {
+      ...core,
+      tenantId   : tenantId,   // casa com matchesTenantField(tenantId)
+      createdAt  : now,        // regras aceitam timestamp
+      createdBy  : user.uid,   // regras: createdBy == auth.uid se enviado
+      updatedAt  : now,
+      updatedBy  : user.uid
+    };
+  } else {
+    // UPDATE (não mexe em createdAt/createdBy)
+    data = {
+      ...core,
+      tenantId   : tenantId,   // manter explícito
+      updatedAt  : now,
+      updatedBy  : user.uid
+    };
+  }
+
   await setDoc(ref, data, { merge: true });
   return { ok: true, id: nomeUpper };
 }
 
 /**
  * Busca informações do cliente por nome (case-insensitive – usamos UPPER como id)
- * Retorna { endereco, cnpj, ie, cep, contato, isentoFrete, frete } ou null.
  */
 export async function buscarClienteInfo(nome) {
   const tenantId = await getTenantId();
@@ -72,22 +101,18 @@ export async function buscarClienteInfo(nome) {
 }
 
 /**
- * [NOVA FUNÇÃO]
- * Busca TODOS os clientes cadastrados para popular a lista de sugestões (datalist).
- * Retorna um array de objetos [{ id: 'NOME DO CLIENTE' }, ...].
+ * Busca TODOS os clientes (para datalist)
  */
 export async function buscarTodosClientes() {
   const tenantId = await getTenantId();
   const clientesCol = colPath(tenantId);
   const snapshot = await getDocs(clientesCol);
-  // O ID do documento é o próprio nome do cliente em maiúsculas (clienteUpper)
   return snapshot.docs.map(doc => ({ id: doc.id }));
 }
 
 /**
- * Lista até N clientes “mais usados”.
- * Estratégia simples: varre últimos pedidos e coleta nomes únicos.
- * (sem precisar manter uma coleção auxiliar)
+ * Lista até N clientes “mais usados” a partir de pedidos recentes,
+ * caindo para a coleção de clientes se necessário.
  */
 export async function clientesMaisUsados(max = 80) {
   try {
@@ -101,10 +126,12 @@ export async function clientesMaisUsados(max = 80) {
       const nome = String(d.clienteUpper || d.cliente || '').trim().toUpperCase();
       if (nome) uniq.add(nome);
     });
-    // Se não houver nenhum pedido ainda, opcionalmente podemos cair para a coleção clientes
     if (uniq.size === 0) {
       const clsnap = await getDocs(query(colPath(tenantId), orderBy('createdAt', 'desc'), limit(max)));
-      clsnap.forEach(ds => { const n = String((ds.data() || {}).clienteUpper || '').trim(); if (n) uniq.add(n); });
+      clsnap.forEach(ds => {
+        const n = String((ds.data() || {}).clienteUpper || '').trim();
+        if (n) uniq.add(n);
+      });
     }
     return Array.from(uniq).slice(0, max);
   } catch (e) {
