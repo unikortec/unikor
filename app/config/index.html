@@ -5,16 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UNIKOR – Configuração</title>
 
-  <!-- PWA -->
   <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#1e7f46" />
   <meta name="background-color" content="#f1f5f9" />
-
-  <!-- Ícones -->
   <link rel="icon" href="/assets/logo/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
-
-  <!-- Estilo -->
   <link rel="stylesheet" href="./css/style.css" />
   <base href="./">
 </head>
@@ -30,11 +25,9 @@
   </header>
 
   <main class="container">
-
-    <!-- CARD: Tabela de Pedidos (Produtos) -->
     <section class="card">
       <h2>Tabela de Pedidos (Produtos)</h2>
-      <p>Baixe o modelo, edite e reenvie. Campos em branco não alteram o banco.</p>
+      <p>Baixe o modelo, edite e reenvie. Células em branco não alteram o banco.</p>
       <div class="actions">
         <button id="dlProdutos" class="btn">⬇️ Baixar modelo</button>
         <label class="btn outline">
@@ -42,13 +35,12 @@
           <input type="file" id="upProdutos" accept=".xlsx,.xls,.csv" hidden />
         </label>
       </div>
-      <small>Colunas: internalId (opcional), code, name, unit, price, active</small>
+      <small>Colunas: internalId (vazio para novo), name, unit, price, active</small>
     </section>
 
-    <!-- CARD: Tabela de Custos / Posição de Estoque -->
     <section class="card">
       <h2>Tabela de Custos (Posição de Estoque)</h2>
-      <p>Opcional: centralizar atualização por aqui e desabilitar no app Estoque.</p>
+      <p>Opcional centralizar por aqui e desabilitar no app Estoque.</p>
       <div class="actions">
         <button id="dlCustos" class="btn">⬇️ Baixar modelo</button>
         <label class="btn outline">
@@ -56,10 +48,9 @@
           <input type="file" id="upCustos" accept=".xlsx,.xls,.csv" hidden />
         </label>
       </div>
-      <small>Colunas: internalId/code, custo, posicao (qtd), obs</small>
+      <small>Colunas: internalId (ou name), custo, posicao, obs</small>
     </section>
 
-    <!-- CARD: Tabela de Estoque Mínimo -->
     <section class="card">
       <h2>Tabela de Estoque Mínimo</h2>
       <p>Atualize mínimos por produto.</p>
@@ -70,22 +61,18 @@
           <input type="file" id="upMinimo" accept=".xlsx,.xls,.csv" hidden />
         </label>
       </div>
-      <small>Colunas: internalId/code, minimo</small>
+      <small>Colunas: internalId (ou name), minimo</small>
     </section>
-
   </main>
 
-  <!-- libs externas -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-  <!-- scripts principais -->
   <script type="module" src="./js/app.js"></script>
 
-  <!-- Firebase config global (usa o do Portal principal) -->
+  <!-- Exibir usuário logado usando config global do Portal -->
   <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
     import { firebaseConfig } from "/js/firebase.js";
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
     if (!getApps().length) initializeApp(firebaseConfig);
     const auth = getAuth();
     onAuthStateChanged(auth, (user) => {
@@ -93,13 +80,13 @@
     });
   </script>
 
-  <!-- Registro do Service Worker -->
+  <!-- SW com auto-update -->
   <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then(() => {
-      console.log('SW registrado ✅');
-    }).catch(err => console.warn('Falha SW', err));
-  }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(()=>console.log('SW registrado ✅'))
+        .catch(err=>console.warn('SW erro', err));
+    }
   </script>
 </body>
 </html>
