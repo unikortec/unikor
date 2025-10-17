@@ -1,6 +1,6 @@
 import { baixarModelo, lerPlanilha } from './importers.js';
 import {
-  onReadyAuth, currentUser, tenantIdFromToken,
+  onReadyAuth, currentUser, resolveTenantId,
   upsertProdutosParcial, upsertCustos, upsertMinimo
 } from './firestore.js';
 
@@ -20,7 +20,7 @@ async function handleUpload(ev, tipo){
   try{
     const linhas = await lerPlanilha(file);
     const user = currentUser();
-    const tenantId = tenantIdFromToken(user) || window.UNIKOR_TENANT_ID;
+    const tenantId = await resolveTenantId();
     if (!tenantId) throw new Error('Tenant não identificado');
 
     if (tipo==='produtos') await upsertProdutosParcial(tenantId, linhas, user);
