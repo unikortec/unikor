@@ -8,8 +8,8 @@ const ASSETS = [
   './js/importers.js',
   './js/utils.js',
   './manifest.json',
-  '/assets/logo/unikorbranco-logo-192.png',
-  '/assets/logo/unikorbranco-logo-512.png'
+  '/assets/logo/icon-192.png',
+  '/assets/logo/icon-512.png'
 ];
 
 self.addEventListener('install', e => {
