@@ -1,14 +1,14 @@
 import { baixarModelo, lerPlanilha } from './importers.js';
-import { onReadyAuth, currentUser, tenantIdFromToken,
-         upsertProdutosParcial, upsertCustos, upsertMinimo } from './firestore.js';
+import {
+  onReadyAuth, currentUser, tenantIdFromToken,
+  upsertProdutosParcial, upsertCustos, upsertMinimo
+} from './firestore.js';
 
 function bindButtons(){
-  // baixar modelos
   document.getElementById('dlProdutos').onclick = ()=> baixarModelo('produtos');
   document.getElementById('dlCustos').onclick   = ()=> baixarModelo('custos');
   document.getElementById('dlMinimo').onclick   = ()=> baixarModelo('minimo');
 
-  // uploads
   document.getElementById('upProdutos').addEventListener('change', e=> handleUpload(e,'produtos'));
   document.getElementById('upCustos').addEventListener('change', e=> handleUpload(e,'custos'));
   document.getElementById('upMinimo').addEventListener('change', e=> handleUpload(e,'minimo'));
@@ -20,7 +20,7 @@ async function handleUpload(ev, tipo){
   try{
     const linhas = await lerPlanilha(file);
     const user = currentUser();
-    const tenantId = tenantIdFromToken(user) || window.UNIKOR_TENANT_ID; // fallback
+    const tenantId = tenantIdFromToken(user) || window.UNIKOR_TENANT_ID;
     if (!tenantId) throw new Error('Tenant não identificado');
 
     if (tipo==='produtos') await upsertProdutosParcial(tenantId, linhas, user);
@@ -37,6 +37,6 @@ async function handleUpload(ev, tipo){
 }
 
 onReadyAuth(u=>{
-  if (!u){ location.href = '/'; return; } // manda pro login/portal se não logado
+  if (!u){ location.href = '/'; return; }
   bindButtons();
 });
