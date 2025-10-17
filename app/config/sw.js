@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unikor-config-v1';
+const CACHE_NAME = 'unikor-config-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,9 @@ const ASSETS = [
   './js/firestore.js',
   './js/importers.js',
   './js/utils.js',
-  './manifest.json'
+  './manifest.json',
+  '/assets/logo/unikorbranco-logo-192.png',
+  '/assets/logo/unikorbranco-logo-512.png'
 ];
 
 self.addEventListener('install', e => {
