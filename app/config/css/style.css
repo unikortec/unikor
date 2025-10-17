@@ -1,15 +1,12 @@
-:root{
-  --brand:#1e7f46; --ink:#0f172a; --bg:#f1f5f9; --line:#e2e8f0;
-}
-*{ box-sizing:border-box }
-body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,Segoe UI,Roboto,Inter }
-.brandbar{ background:var(--brand); color:#fff; display:flex; align-items:center; gap:12px; padding:14px 18px }
-.brandbar__logo{ height:48px }
-.brandbar__title{ font-weight:700; font-size:18px }
+:root{ --brand:#1e7f46; --ink:#0f172a; --bg:#f1f5f9; --line:#e2e8f0; --muted:#64748b; }
+*{ box-sizing:border-box } body{ margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,Segoe UI,Roboto,Inter }
+.brandbar{ background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px }
+.brandbar__logo{ height:48px } .brandbar__title{ font-weight:700; font-size:18px }
+.brandbar__user{ font-size:13px; opacity:.9 }
 .container{ padding:18px; display:grid; gap:18px; max-width:980px; margin:0 auto }
 .card{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px }
-.card h2{ margin:0 0 8px 0; font-size:18px }
+.card h2{ margin:0 0 8px; font-size:18px }
 .actions{ display:flex; gap:10px; margin:10px 0 6px }
 .btn{ background:var(--brand); color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer }
 .btn.outline{ background:#fff; color:var(--brand); border:2px solid var(--brand) }
-small{ color:#64748b }
+small{ color:var(--muted) }
