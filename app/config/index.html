@@ -4,17 +4,33 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>UNIKOR – Configuração</title>
-  <link rel="stylesheet" href="./css/style.css" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#1e7f46" />
+  <meta name="background-color" content="#f1f5f9" />
+
+  <!-- Ícones -->
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
+
+  <!-- Estilo -->
+  <link rel="stylesheet" href="./css/style.css" />
   <base href="./">
 </head>
 <body>
   <header class="brandbar">
-    <img class="brandbar__logo" src="/assets/logo/unikorverde-logo.svg" alt="UNIKOR">
-    <div class="brandbar__title">Configuração</div>
+    <div class="brandbar__left">
+      <img class="brandbar__logo" src="/assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+      <span class="brandbar__title">Configuração</span>
+    </div>
+    <div class="brandbar__right">
+      <span class="brandbar__user" id="userEmail">Carregando...</span>
+    </div>
   </header>
 
   <main class="container">
+
     <!-- CARD: Tabela de Pedidos (Produtos) -->
     <section class="card">
       <h2>Tabela de Pedidos (Produtos)</h2>
@@ -56,10 +72,34 @@
       </div>
       <small>Colunas: internalId/code, minimo</small>
     </section>
+
   </main>
 
-  <!-- libs: Firebase + XLSX (CDN) -->
+  <!-- libs externas -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- scripts principais -->
   <script type="module" src="./js/app.js"></script>
+
+  <!-- Firebase config global (usa o do Portal principal) -->
+  <script type="module">
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+    import { firebaseConfig } from "/js/firebase.js";
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+    if (!getApps().length) initializeApp(firebaseConfig);
+    const auth = getAuth();
+    onAuthStateChanged(auth, (user) => {
+      document.getElementById('userEmail').textContent = user?.email || "Sem login";
+    });
+  </script>
+
+  <!-- Registro do Service Worker -->
+  <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then(() => {
+      console.log('SW registrado ✅');
+    }).catch(err => console.warn('Falha SW', err));
+  }
+  </script>
 </body>
 </html>
