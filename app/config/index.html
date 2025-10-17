@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UNIKOR – Configuração</title>
+  <link rel="stylesheet" href="./css/style.css" />
+  <meta name="theme-color" content="#1e7f46" />
+  <base href="./">
+</head>
+<body>
+  <header class="brandbar">
+    <img class="brandbar__logo" src="/assets/logo/unikorverde-logo.svg" alt="UNIKOR">
+    <div class="brandbar__title">Configuração</div>
+  </header>
+
+  <main class="container">
+    <!-- CARD: Tabela de Pedidos (Produtos) -->
+    <section class="card">
+      <h2>Tabela de Pedidos (Produtos)</h2>
+      <p>Baixe o modelo, edite e reenvie. Campos em branco não alteram o banco.</p>
+      <div class="actions">
+        <button id="dlProdutos" class="btn">⬇️ Baixar modelo</button>
+        <label class="btn outline">
+          ➕ Adicionar tabela
+          <input type="file" id="upProdutos" accept=".xlsx,.xls,.csv" hidden />
+        </label>
+      </div>
+      <small>Colunas: internalId (opcional), code, name, unit, price, active</small>
+    </section>
+
+    <!-- CARD: Tabela de Custos / Posição de Estoque -->
+    <section class="card">
+      <h2>Tabela de Custos (Posição de Estoque)</h2>
+      <p>Opcional: centralizar atualização por aqui e desabilitar no app Estoque.</p>
+      <div class="actions">
+        <button id="dlCustos" class="btn">⬇️ Baixar modelo</button>
+        <label class="btn outline">
+          ➕ Adicionar tabela
+          <input type="file" id="upCustos" accept=".xlsx,.xls,.csv" hidden />
+        </label>
+      </div>
+      <small>Colunas: internalId/code, custo, posicao (qtd), obs</small>
+    </section>
+
+    <!-- CARD: Tabela de Estoque Mínimo -->
+    <section class="card">
+      <h2>Tabela de Estoque Mínimo</h2>
+      <p>Atualize mínimos por produto.</p>
+      <div class="actions">
+        <button id="dlMinimo" class="btn">⬇️ Baixar modelo</button>
+        <label class="btn outline">
+          ➕ Adicionar tabela
+          <input type="file" id="upMinimo" accept=".xlsx,.xls,.csv" hidden />
+        </label>
+      </div>
+      <small>Colunas: internalId/code, minimo</small>
+    </section>
+  </main>
+
+  <!-- libs: Firebase + XLSX (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
