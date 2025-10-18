@@ -1,270 +1,109 @@
 // app/pedidos/js/clientes-autofill.js
-// Sugestões com <datalist> (sem auto-preencher enquanto digita).
-// Busca top clientes uma vez (GET /api/tenant-clientes/top?tenantId=...&n=...)
-// e filtra localmente por prefixo. Só preenche após seleção (change/blur).
-// Mantém upsert do cadastro em alterações dos campos.
+import {
+  db, getTenantId, waitForLogin,
+  collection, query, orderBy, startAt, endAt, limit, getDocs
+} from './firebase.js';
+import { up, digitsOnly } from './utils.js';
+import { buscarClienteInfo } from './clientes.js';
+import { setFreteSugestao, atualizarFreteUI } from './frete.js';
 
-import { getTenantId } from './firebase.js';
+const QTD_SUGESTOES = 20;
 
-const DEBOUNCE_MS = 250;
-const TOP_CACHE_N = 300; // quantidade de nomes pré-carregados para sugerir
+function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
-/* ===================== Utils ===================== */
-const up = (s) => String(s || '').trim().toUpperCase();
-const normalize = (s) => up(s).normalize('NFD').replace(/[\u0300-\u036f]/g,''); // sem acentos
-const digitsOnly = (v) => String(v || '').replace(/\D/g, '');
-const debounce = (fn, ms = DEBOUNCE_MS) => {
-  let t = null;
-  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-};
-
-function ensureHiddenClienteId() {
-  let el = document.getElementById('clienteId');
-  if (!el) {
-    const form = document.getElementById('formPedido') || document.querySelector('form') || document.body;
-    el = document.createElement('input');
-    el.type = 'hidden';
-    el.id = 'clienteId';
-    el.name = 'clienteId';
-    form.appendChild(el);
-  }
-  return el;
-}
-
-function ensureDatalist() {
-  let dl = document.getElementById('clientesList');
-  if (!dl) {
-    dl = document.createElement('datalist');
-    dl.id = 'clientesList';
-    document.body.appendChild(dl);
-  }
-  const input = document.getElementById('cliente');
-  if (input && input.getAttribute('list') !== 'clientesList') {
-    input.setAttribute('list', 'clientesList');
-  }
-  return dl;
-}
-
-function getRefs() {
-  return {
-    cliente: document.getElementById('cliente'),
-    endereco: document.getElementById('endereco'),
-    cnpj: document.getElementById('cnpj'),
-    ie: document.getElementById('ie'),
-    cep: document.getElementById('cep'),
-    contato: document.getElementById('contato'),
-    overlay: document.getElementById('appOverlay'),
-    clienteId: ensureHiddenClienteId(),
-    datalist: ensureDatalist(),
-  };
-}
-
-/* ===================== Estado ===================== */
-const state = {
-  topNames: [],        // nomes em UPPER já normalizados para comparação
-  topNamesRaw: [],     // nomes exibíveis (como vieram)
-  lastLoaded: null,    // snapshot do cadastro aplicado
-  loading: false,
-};
-
-/* ===================== API ===================== */
-// GET /api/tenant-clientes/top?tenantId=...&n=...
-async function apiLoadTopNames(n = TOP_CACHE_N) {
+async function buscarSugestoes(prefixUpper){
   const tenantId = await getTenantId();
-  const url = `/api/tenant-clientes/top?tenantId=${encodeURIComponent(tenantId)}&n=${encodeURIComponent(n)}`;
-  const r = await fetch(url, { method: 'GET' });
-  if (!r.ok) return [];
-  const j = await r.json();
-  // retorno esperado: { ok:true, itens:[ 'NOME1', 'NOME2', ... ] }
-  return Array.isArray(j?.itens) ? j.itens : [];
-}
-
-// POST /api/tenant-clientes/find → { ok, found, id, data }
-async function apiFindByName(nome) {
-  if (!nome) return null;
-  try {
-    const tenantId = await getTenantId();
-    const r = await fetch('/api/tenant-clientes/find', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, nome }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (j?.ok && j.found && j.id && j.data) return { id: j.id, ...j.data };
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// POST /api/tenant-clientes/create → { ok, id }
-async function apiUpsertCliente(payload) {
-  try {
-    const tenantId = await getTenantId();
-    const r = await fetch('/api/tenant-clientes/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, cliente: payload }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (j?.ok) return { ok: true, id: j.id, cliente: { ...payload, id: j.id } };
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/* ===================== UI helpers ===================== */
-function fillDatalistFrom(namesRaw) {
-  const { datalist } = getRefs();
-  datalist.innerHTML = '';
-  for (const name of namesRaw) {
-    const opt = document.createElement('option');
-    opt.value = up(name || '');
-    datalist.appendChild(opt);
-  }
-}
-
-function filterTopByPrefix(q) {
-  if (!q) return [];
-  const nq = normalize(q);
-  const out = [];
-  for (let i = 0; i < state.topNames.length; i++) {
-    if (state.topNames[i].startsWith(nq)) out.push(state.topNamesRaw[i]);
-    if (out.length >= 20) break; // limita opções no datalist
-  }
-  return out;
-}
-
-/* ===================== Aplicar cliente no formulário ===================== */
-async function aplicarCliente(info) {
-  const refs = getRefs();
-  const setIf = (el, v) => { if (el) el.value = v ?? ''; };
-
-  setIf(refs.endereco, info?.endereco || '');
-  setIf(refs.cnpj, info?.cnpj || '');
-  setIf(refs.ie, info?.ie || '');
-  setIf(refs.cep, info?.cep || '');
-  setIf(refs.contato, info?.contato || '');
-
-  refs.clienteId.value = info?.id || info?._id || info?.clienteId || '';
-
-  state.lastLoaded = {
-    id: refs.clienteId.value || '',
-    nome: up(refs.cliente?.value || info?.nome || ''),
-    endereco: up(refs.endereco?.value || ''),
-    cnpj: digitsOnly(refs.cnpj?.value || ''),
-    ie: up(refs.ie?.value || ''),
-    cep: digitsOnly(refs.cep?.value || ''),
-    contato: digitsOnly(refs.contato?.value || ''),
-  };
-}
-
-/* ===================== Fluxos ===================== */
-// Sugestões (apenas lista; não preenche)
-const onTypeSuggest = debounce(() => {
-  const { cliente } = getRefs();
-  const q = up(cliente?.value || '');
-  const list = filterTopByPrefix(q);
-  fillDatalistFrom(list);
-}, DEBOUNCE_MS);
-
-// Seleção/confirmar nome → preenche
-async function onChooseCliente() {
-  const refs = getRefs();
-  const nomeEscolhido = up(refs.cliente?.value || '');
-  if (!nomeEscolhido) {
-    refs.clienteId.value = '';
-    return;
-  }
-
-  try {
-    refs.overlay && refs.overlay.classList.remove('hidden');
-    const info = await apiFindByName(nomeEscolhido);
-    if (info) await aplicarCliente(info);
-    else {
-      // não existe cadastro exato — apenas zera o id; usuário pode continuar
-      refs.clienteId.value = '';
-      state.lastLoaded = null;
-    }
-  } finally {
-    refs.overlay && refs.overlay.classList.add('hidden');
-  }
-}
-
-// Autosave quando campos mudam
-async function salvarSeMudou() {
-  const refs = getRefs();
-  const nome = up(refs.cliente?.value || '');
-  if (!nome) return;
-
-  const curr = {
-    id: refs.clienteId.value || null,
-    nome,
-    endereco: up(refs.endereco?.value || ''),
-    cnpj: digitsOnly(refs.cnpj?.value || ''),
-    ie: up(refs.ie?.value || ''),
-    cep: digitsOnly(refs.cep?.value || ''),
-    contato: digitsOnly(refs.contato?.value || ''),
-  };
-
-  const prev = state.lastLoaded || {};
-  const changed = (
-    up(prev.nome || '') !== curr.nome ||
-    up(prev.endereco || '') !== curr.endereco ||
-    String(prev.cnpj || '') !== curr.cnpj ||
-    up(prev.ie || '') !== curr.ie ||
-    String(prev.cep || '') !== curr.cep ||
-    String(prev.contato || '') !== curr.contato
+  const col = collection(db, 'tenants', tenantId, 'clientes');
+  const q = query(
+    col,
+    orderBy('clienteUpper'),
+    startAt(prefixUpper),
+    endAt(prefixUpper + '\uf8ff'),
+    limit(QTD_SUGESTOES)
   );
-  if (!changed) return;
-
-  const res = await apiUpsertCliente(curr);
-  if (res?.ok) {
-    if (res.id && !refs.clienteId.value) refs.clienteId.value = res.id;
-    await aplicarCliente(res.cliente || curr);
-  }
+  const snap = await getDocs(q);
+  return snap.docs.map(d => d.id); // id é o próprio clienteUpper
 }
 
-/* ===================== Inicialização ===================== */
-async function initTopCache() {
-  try {
-    const names = await apiLoadTopNames(TOP_CACHE_N);
-    state.topNamesRaw = names.map(n => String(n || ''));
-    state.topNames = state.topNamesRaw.map(n => normalize(n));
-  } catch {
-    state.topNames = [];
-    state.topNamesRaw = [];
-  }
-}
-
-function wire() {
-  const refs = getRefs();
-  if (!refs.cliente) return;
-
-  // Prefetch dos top nomes (uma vez)
-  initTopCache();
-
-  // Se já existir clienteId (ex.: reabertura), preenche; caso contrário, não auto-preenche.
-  if (refs.clienteId.value) {
-    apiFindByName(up(refs.cliente.value || '')).then((info) => { if (info) aplicarCliente(info); });
-  }
-
-  // Enquanto digita: só sugestões (filtradas localmente)
-  refs.cliente.addEventListener('input', onTypeSuggest);
-
-  // Quando confirma (seleciona no datalist / sai do campo): preenche
-  refs.cliente.addEventListener('change', onChooseCliente);
-  refs.cliente.addEventListener('blur', onChooseCliente);
-
-  // Campos que salvam cadastro quando mudam
-  [refs.endereco, refs.cnpj, refs.ie, refs.cep, refs.contato].forEach((el) => {
-    if (!el) return;
-    el.addEventListener('blur', salvarSeMudou);
-    el.addEventListener('input', debounce(salvarSeMudou, 400));
+function preencherDatalist(nomes){
+  const dl = document.getElementById('listaClientes');
+  if (!dl) return;
+  dl.innerHTML = '';
+  nomes.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n;
+    dl.appendChild(opt);
   });
 }
 
-document.addEventListener('DOMContentLoaded', wire);
+async function onClienteInput(){
+  const el = document.getElementById('cliente');
+  if (!el) return;
+  const raw = (el.value || '').trim();
+  if (!raw) { preencherDatalist([]); return; }
+  const prefix = up(raw);
+  try{
+    const nomes = await buscarSugestoes(prefix);
+    preencherDatalist(nomes);
+  }catch(e){
+    console.warn('[autofill] falha ao buscar sugestões:', e?.message || e);
+  }
+}
+
+async function preencherFormularioCom(nomeDigitado){
+  const nome = up(nomeDigitado || '');
+  if (!nome) return;
+
+  try{
+    const info = await buscarClienteInfo(nome); // lê do Firestore por doc-id (UPPER)
+    if (!info) return;
+
+    // Endereço
+    const end = document.getElementById('endereco'); if (end) end.value = (info.endereco||'').toUpperCase();
+
+    // CNPJ/IE/CEP/Contato
+    const cnpj = document.getElementById('cnpj');     if (cnpj) cnpj.value = info.cnpj || '';
+    const ie   = document.getElementById('ie');       if (ie)   ie.value   = info.ie   || '';
+    const cep  = document.getElementById('cep');      if (cep)  cep.value  = info.cep  || '';
+    const tel  = document.getElementById('contato');  if (tel)  tel.value  = info.contato || '';
+
+    // Frete: se isento, marca; senão, coloca valor no frete manual como sugestão
+    const chkIsento = document.getElementById('isentarFrete');
+    const freteMan  = document.getElementById('freteManual');
+
+    if (chkIsento) chkIsento.checked = !!info.isentoFrete;
+
+    if (!info.isentoFrete && freteMan){
+      const v = Number(info.frete || 0);
+      freteMan.value = v ? String(v.toFixed(2)).replace('.', ',') : '';
+    }
+
+    // Sinaliza ao módulo de frete para esconder input manual se tiver sugestão
+    setFreteSugestao(info.isentoFrete ? 0 : Number(info.frete || 0));
+
+    // Atualiza exibição do frete na UI
+    atualizarFreteUI();
+
+  }catch(e){
+    console.warn('[autofill] erro ao preencher formulário:', e?.message || e);
+  }
+}
+
+const debouncedInput = debounce(onClienteInput, 180);
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await waitForLogin();
+
+  const inp = document.getElementById('cliente');
+  if (inp){
+    // Quando digitar, buscamos sugestões
+    inp.addEventListener('input', debouncedInput);
+
+    // Ao sair do campo ou confirmar um valor da lista, preenche o restante do formulário
+    inp.addEventListener('change', () => preencherFormularioCom(inp.value));
+    inp.addEventListener('blur',   () => preencherFormularioCom(inp.value));
+  }
+
+  // Primeira carga (se já vier com algo digitado via restore)
+  debouncedInput();
+});
