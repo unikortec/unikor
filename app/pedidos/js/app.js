@@ -26,6 +26,7 @@ function formatarNome(input) {
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
 }
+// 🔸 REMOVIDO: interceptar espaço pode atrapalhar o datalist
 function habilitarEspacoNoCliente() {
   const el = document.getElementById('cliente');
   if (!el) return;
@@ -328,9 +329,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnReimprimirUltimo')?.addEventListener('click', reimprimirUltimoPedidoSalvo);
 
   const inputCliente = document.getElementById('cliente');
-  if (inputCliente) inputCliente.addEventListener('input', () => formatarNome(inputCliente));
+  if (inputCliente) {
+    // 🔸 NÃO uppercasar a cada tecla — só ao finalizar edição:
+    inputCliente.addEventListener('change', () => formatarNome(inputCliente));
+    inputCliente.addEventListener('blur',   () => formatarNome(inputCliente));
+  }
 
-  habilitarEspacoNoCliente();
+  // 🔸 NÃO bloquear espaço (pode atrapalhar o datalist)
+  // habilitarEspacoNoCliente();
 });
 
 // exposição p/ HTML
