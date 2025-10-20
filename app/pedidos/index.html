@@ -35,6 +35,8 @@
       <label for="cliente">Cliente:</label>
       <input list="listaClientes" type="text" id="cliente" autocomplete="off" required />
       <datalist id="listaClientes"></datalist>
+      <!-- 🔹 NOVO: vincular o cadastro selecionado -->
+      <input type="hidden" id="clienteId" />
     </div>
 
     <div class="field-group grid-2">
@@ -146,6 +148,7 @@
   <!-- ⚠️ IMPORTA O MODAL (necessário para injetar HTML e buscar clientes) -->
   <script type="module" src="./js/modal-cliente.js"></script>
 
+  <!-- 🔹 Autofill de clientes na página de pedidos -->
   <script type="module" src="./js/clientes-autofill.js"></script>
 
   <!-- Mostrar/ocultar “pagamentoOutro” -->
