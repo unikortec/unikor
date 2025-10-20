@@ -8,13 +8,16 @@
   --danger:#dc2626;
   --gray:#475569;
 }
+
 *{ box-sizing:border-box }
+
 body{
   margin:0;
   font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;
   background:var(--bg);
   color:var(--ink);
 }
+
 /* HEADER */
 .hero{
   background:var(--brand);
@@ -33,6 +36,7 @@ body{
   width:auto;
   display:block;
 }
+
 .btn-report{
   background:#fff;
   color:var(--brand);
@@ -47,6 +51,7 @@ body{
   box-shadow:0 1px 0 rgba(0,0,0,.06);
 }
 .btn-report:active{ transform:translateY(1px); }
+
 /* Botão redondo “+” */
 .btn-add{
   background:var(--brand);
@@ -64,33 +69,60 @@ body{
   cursor:pointer;
 }
 .btn-add:active{ transform:translateY(1px); }
+
 /* MAIN */
-#appMain{ max-width: 1100px; margin: 14px auto 40px; padding: 0 12px; }
+#appMain{
+  max-width: 1100px;
+  margin: 14px auto 40px;
+  padding: 0 12px;
+}
+
 /* MOBILE */
 @media (max-width: 560px){
   .hero-inner{ padding:14px 12px; }
   .hero-logo.big{ height:40px; }
   .btn-report{ padding:8px 14px; font-size:14px; }
 }
+
 /* Banners */
-.offline-banner{ background:#fbbf24; color:#000; text-align:center; padding:6px; font-size:14px }
+.offline-banner{
+  background:#fbbf24;
+  color:#000;
+  text-align:center;
+  padding:6px;
+  font-size:14px;
+}
+
 /* FORM */
 .field-group{ margin-bottom:12px }
 .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:12px }
 @media (max-width: 740px){ .grid-2{ grid-template-columns:1fr } }
-.switch-box{ display:flex; align-items:center; gap:8px }
+
 .frete-row{ display:flex; align-items:center; gap:12px }
 .muted{ color:var(--muted); font-size:12px }
 .inline-help{ font-size:11px; color:var(--muted) }
+
 input, select, textarea{
-  width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; outline:0; background:#fff
+  width:100%;
+  padding:8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  outline:0;
+  background:#fff;
 }
 button{
-  width:100%; padding:10px 14px; border-radius:8px; border:none; cursor:pointer; font:inherit
+  width:100%;
+  padding:10px 14px;
+  border-radius:8px;
+  border:none;
+  cursor:pointer;
+  font:inherit;
 }
+
 .pdf-btn{ background:#0ea5a6; color:#fff; margin:4px 0 }
 .pdf-btn.salvar{ background:var(--brand) }
 .pdf-btn.compartilhar{ background:#475569 }
+
 /* ITENS */
 .item{
   border:1px solid var(--line);
@@ -100,6 +132,7 @@ button{
   margin-bottom:10px;
 }
 .total{ font-weight:700; font-size:1.05rem }
+
 /* BOTÕES ADICIONAR/REMOVER */
 #adicionarItemBtn{
   background:#16a34a; /* verde */
@@ -108,6 +141,7 @@ button{
   margin:8px 0 16px;
 }
 #adicionarItemBtn:hover{ filter:brightness(0.95); }
+
 .item .remove{
   background:var(--danger); /* vermelho */
   color:#fff;
@@ -115,13 +149,18 @@ button{
   margin-top:8px;
 }
 .item .remove:hover{ filter:brightness(0.95); }
+
 /* ===== Modal de Cliente ===== */
 .modal.hidden{ display:none; }
 .modal{
-  position:fixed; inset:0; z-index:1000;
+  position:fixed;
+  inset:0;
+  z-index:1000;
 }
 .modal-backdrop{
-  position:absolute; inset:0; background:rgba(0,0,0,.45);
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.45);
 }
 .modal-card{
   position:relative;
@@ -133,27 +172,44 @@ button{
   overflow:hidden;
 }
 .modal-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
 }
 .modal-header h3{ margin:0; font-size:18px; }
 .modal-close{
-  background:transparent; border:none; font-size:22px; line-height:1; cursor:pointer;
-  width:36px; height:36px; border-radius:8px;
+  background:transparent;
+  border:none;
+  font-size:22px;
+  line-height:1;
+  cursor:pointer;
+  width:36px;
+  height:36px;
+  border-radius:8px;
 }
 .modal-close:hover{ background:#f1f5f9; }
 .modal-body{ padding:14px; }
 .modal-footer{
-  display:flex; gap:10px; justify-content:flex-end;
-  padding:12px 14px; border-top:1px solid var(--line);
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  padding:12px 14px;
+  border-top:1px solid var(--line);
 }
 .btn-secondary{
-  background:#e2e8f0; color:#111827; font-weight:700;
+  background:#e2e8f0;
+  color:#111827;
+  font-weight:700;
 }
 .btn-primary{
-  background:var(--brand); color:#fff; font-weight:700;
+  background:var(--brand);
+  color:#fff;
+  font-weight:700;
 }
 .btn-secondary:hover, .btn-primary:hover{ filter:brightness(0.97); }
+
 /* Botão de consulta (lupa) */
 .btn-consultar {
   background: #e2e8f0;
@@ -169,18 +225,9 @@ button{
   font-size: 14px;
   flex-shrink: 0;
 }
-.btn-consultar:hover {
-  filter: brightness(0.97);
-}
-.btn-consultar:active {
-  transform: translateY(1px);
-}
-.btn-consultar:hover {
-  filter: brightness(0.95);
-}
-.btn-consultar:active {
-  transform: translateY(1px);
-}
+.btn-consultar:hover { filter: brightness(0.95); }
+.btn-consultar:active { transform: translateY(1px); }
+
 /* Layout do frete */
 .frete-row {
   display: flex;
@@ -195,21 +242,37 @@ button{
   flex: 1;
   min-width: 0;
 }
+
+/* ===== Ajuste visual dos radios (Entrega/Retirada) no mobile ===== */
 .switch-box {
   display: flex;
   align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.switch-box input[type="checkbox"] {
-  width: auto;
-  margin: 0;
+  flex-wrap: wrap;
+  gap: 12px;
+  line-height: 1.4;
 }
 .switch-box label {
-  margin: 0;
-  font-weight: normal;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
 }
+.switch-box input[type="radio"] {
+  transform: scale(1.2);
+  margin: 0;
+  accent-color: var(--brand); /* mantém o verde Unikor */
+}
+@media (max-width: 480px) {
+  .switch-box {
+    gap: 10px;
+    justify-content: flex-start;
+  }
+  .switch-box label {
+    font-size: 16px;
+  }
+}
+
 /* ----- feedback de loading / bloqueio ----- */
 .app-disabled { pointer-events: none; opacity: .6; }
 .overlay {
@@ -224,42 +287,17 @@ button{
   animation: spin 1s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
 /* toasts */
 .toast-box { position: fixed; right: 12px; bottom: 12px; z-index: 2500; }
-.toast { background: #111827; color: #fff; padding: 10px 14px; border-radius: 10px; margin-top: 8px; box-shadow: 0 5px 20px rgba(0,0,0,.25); }
+.toast {
+  background: #111827;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-top: 8px;
+  box-shadow: 0 5px 20px rgba(0,0,0,.25);
+}
 .toast.ok { background: var(--brand); }
 .toast.warn { background: #f59e0b; color:#111; }
 .toast.err { background: #ef4444; }
-/* ===== Ajuste visual dos radios (Entrega/Retirada) no mobile ===== */
-.switch-box {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  line-height: 1.4;
-}
-
-.switch-box label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.switch-box input[type="radio"] {
-  transform: scale(1.2);
-  margin: 0;
-  accent-color: var(--brand); /* mantém o verde Unikor */
-}
-
-/* Melhora visual geral em telas pequenas */
-@media (max-width: 480px) {
-  .switch-box {
-    gap: 10px;
-    justify-content: flex-start;
-  }
-  .switch-box label {
-    font-size: 16px;
-  }
-}
