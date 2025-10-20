@@ -1,11 +1,11 @@
 // app/pedidos/js/clientes-autofill.js
 import {
   db, getTenantId, waitForLogin,
-  collection, query, orderBy, startAt, endAt, limit, getDocs
+  collection, query, orderBy, startAt, endAt, limit, getDocs, doc, getDoc
 } from './firebase.js';
-import { up, digitsOnly } from './utils.js';
+import { up } from './utils.js';
 import { buscarClienteInfo } from './clientes.js';
-import { setFreteSugestao, atualizarFreteUI } from './frete.js';
+// 🔸 sem setFreteSugestao / atualizarFreteUI agora
 
 const QTD_SUGESTOES = 20;
 
@@ -22,14 +22,19 @@ async function buscarSugestoes(prefixUpper){
     limit(QTD_SUGESTOES)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => d.id); // id é o próprio clienteUpper
+  // Preferimos mostrar o nome (clienteUpper); se for doc legado sem esse campo, mostramos o id mesmo
+  return snap.docs.map(d => {
+    const data = d.data() || {};
+    return (data.clienteUpper || data.nomeUpper || d.id || '').toString();
+  }).filter(Boolean);
 }
 
 function preencherDatalist(nomes){
   const dl = document.getElementById('listaClientes');
   if (!dl) return;
+  const uniq = Array.from(new Set(nomes));
   dl.innerHTML = '';
-  nomes.forEach(n => {
+  uniq.forEach(n => {
     const opt = document.createElement('option');
     opt.value = n;
     dl.appendChild(opt);
@@ -38,8 +43,11 @@ function preencherDatalist(nomes){
 
 async function onClienteInput(){
   const el = document.getElementById('cliente');
+  const hiddenId = document.getElementById('clienteId');
   if (!el) return;
   const raw = (el.value || '').trim();
+  if (hiddenId && !raw) hiddenId.value = ''; // se apagou o nome, limpa o id
+  
   if (!raw) { preencherDatalist([]); return; }
   const prefix = up(raw);
   try{
@@ -55,7 +63,7 @@ async function preencherFormularioCom(nomeDigitado){
   if (!nome) return;
 
   try{
-    const info = await buscarClienteInfo(nome); // lê do Firestore por doc-id (UPPER)
+    const info = await buscarClienteInfo(nome); // tolerante a legado
     if (!info) return;
 
     // Endereço
@@ -67,22 +75,24 @@ async function preencherFormularioCom(nomeDigitado){
     const cep  = document.getElementById('cep');      if (cep)  cep.value  = info.cep  || '';
     const tel  = document.getElementById('contato');  if (tel)  tel.value  = info.contato || '';
 
-    // Frete: se isento, marca; senão, coloca valor no frete manual como sugestão
-    const chkIsento = document.getElementById('isentarFrete');
-    const freteMan  = document.getElementById('freteManual');
+    // 🔸 Não mexer em frete agora (stand by) — não preencher freteManual,
+    //     não setar sugestão. UI do frete ficará “—” até definirmos regra.
 
-    if (chkIsento) chkIsento.checked = !!info.isentoFrete;
-
-    if (!info.isentoFrete && freteMan){
-      const v = Number(info.frete || 0);
-      freteMan.value = v ? String(v.toFixed(2)).replace('.', ',') : '';
+    // Preenche o clienteId (se existir no DOM)
+    const tenantId = await getTenantId();
+    const hiddenId = document.getElementById('clienteId');
+    if (hiddenId) {
+      // tentamos achar o doc real para extrair o id definitivo
+      // primeiro: doc com id = nome
+      const ref = doc(collection(db, 'tenants', tenantId, 'clientes'), nome);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        hiddenId.value = ref.id;
+      } else {
+        // fallback: deixa o próprio nome em uppercase (compat)
+        hiddenId.value = nome;
+      }
     }
-
-    // Sinaliza ao módulo de frete para esconder input manual se tiver sugestão
-    setFreteSugestao(info.isentoFrete ? 0 : Number(info.frete || 0));
-
-    // Atualiza exibição do frete na UI
-    atualizarFreteUI();
 
   }catch(e){
     console.warn('[autofill] erro ao preencher formulário:', e?.message || e);
@@ -96,10 +106,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const inp = document.getElementById('cliente');
   if (inp){
-    // Quando digitar, buscamos sugestões
+    // Conforme digita: sugestões
     inp.addEventListener('input', debouncedInput);
 
-    // Ao sair do campo ou confirmar um valor da lista, preenche o restante do formulário
+    // Ao selecionar/confirmar: preenche o formulário
     inp.addEventListener('change', () => preencherFormularioCom(inp.value));
     inp.addEventListener('blur',   () => preencherFormularioCom(inp.value));
   }
