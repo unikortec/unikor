@@ -210,7 +210,12 @@ async function construirPDFDePedidoSalvo(pedidoDocData){
 
 /* ===================== Desenho ===================== */
 function construirPDFBase(data){
-  const doc = new jsPDF({ orientation:"portrait", unit:"mm", format:[72,297] });
+  const doc = new jsPDF({
+  orientation: "portrait",
+  unit: "mm",
+  format: [72, 297],
+  compress: true   // 🔹 ativa compactação (de textos e streams)
+});
 
   // Cabeçalho
   doc.setFont("helvetica","bold"); doc.setFontSize(11);
