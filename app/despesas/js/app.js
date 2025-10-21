@@ -24,9 +24,9 @@ refreshCats();
 const onlyDigits = s => (s||'').replace(/\D+/g,'');
 const maskCNPJ = v => (onlyDigits(v).slice(0,14).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5').replace(/[-./]+$/,''));
 const parseBR = n => parseFloat(String(n).replace(/\./g,'').replace(',','.'))||0;
-const fmtBR = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fmtBR   = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-/* Eventos base */
+/* Navegação e inputs */
 document.addEventListener('click',(ev)=>{
   if (ev.target.id==='btnVoltar' || ev.target.closest('.logo')) { ev.preventDefault(); location.href='/'; }
 });
@@ -71,11 +71,10 @@ $('#btnScanChave').onclick = ()=> startScan({
 });
 $('#btnCloseScan').onclick = ()=> stopScan();
 
-/* Salvar + abrir drive (aba primeiro para não bloquear) */
+/* Salvar + abrir drive (abre aba primeiro para não bloquear) */
 const DRIVE_URL = 'https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb';
 $('#btnAdicionarNota').addEventListener('click', async (e)=>{
-  // abre a aba imediatamente (não bloqueia popup)
-  const win = window.open(DRIVE_URL,'_blank','noopener'); // pode ser null se bloqueado
+  const win = window.open(DRIVE_URL,'_blank','noopener'); // abre já
   e.preventDefault();
 
   const u = getCurrentUser();
@@ -117,8 +116,6 @@ $('#btnAdicionarNota').addEventListener('click', async (e)=>{
     showStatus('Falha ao salvar no Firestore.');
     alert('Falha ao salvar no Firestore.');
   }
-  // debug opcional: comente a linha abaixo para esconder o JSON
-  // document.getElementById('statusBox').classList.add('hidden');
 });
 /* init */
 addItem(); calcAll();
