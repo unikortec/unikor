@@ -2,26 +2,16 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 :root {
-  --brand:#1e7f46;
-  --brand-dark:#166c3a;
-  --ink:#163b27;
-  --muted:#64748b;
-  --line:#e4efe8;
-  --card:#fff;
-  --bg:#f6fbf8;
+  --brand:#1e7f46; --brand-dark:#166c3a; --ink:#163b27; --muted:#64748b;
+  --line:#e4efe8; --card:#fff; --bg:#f6fbf8;
 }
-body {
-  font-family: system-ui, Segoe UI, Roboto, Inter, Arial;
-  background: var(--bg);
-  color: var(--ink);
-  -webkit-font-smoothing: antialiased;
-}
+body { font-family: system-ui, Segoe UI, Roboto, Inter, Arial; background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased; }
 
 /* Topo */
-.topbar { display:flex; align-items:center; gap:12px; background:var(--brand); color:#fff; padding:10px 16px; }
-.topbar .logo { height:84px; cursor:pointer; }
-.title-strong { font-size:28px; font-weight:700; }
-.user-mini { font-size:13px; opacity:.9; }
+.topbar{ display:flex; align-items:center; gap:12px; background:var(--brand); color:#fff; padding:10px 16px; }
+.topbar .logo{ height:84px; cursor:pointer; }
+.title-strong{ font-size:28px; font-weight:700; }
+.user-mini{ font-size:13px; opacity:.9; }
 
 /* Botão voltar */
 .btn-back{ background:transparent; color:#fff; font-size:20px; font-weight:bold; border:none; padding:4px 8px; cursor:pointer; }
@@ -29,18 +19,13 @@ body {
 
 /* Layout */
 .wrap{ max-width:900px; margin:16px auto; padding:0 12px 60px; }
-.card{
-  background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:16px;
-  box-shadow:0 2px 5px rgba(0,0,0,.04);
-}
+.card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:16px; box-shadow:0 2px 5px rgba(0,0,0,.04);}
 h1,h2{ margin:8px 0; color:var(--brand-dark); font-weight:700; }
 
 /* Campos */
 .row{ display:grid; grid-template-columns:160px 1fr; align-items:center; margin:8px 0; gap:6px; }
 .row label{ font-weight:600; color:var(--ink); }
-.row input,.row select{
-  padding:10px; border:1px solid var(--line); border-radius:8px; width:100%; background:#fff; font-size:15px;
-}
+.row input,.row select{ padding:10px; border:1px solid var(--line); border-radius:8px; width:100%; background:#fff; font-size:15px; }
 .row input:focus,.row select:focus{ outline:2px solid var(--brand); border-color:var(--brand); }
 
 /* Botões */
@@ -61,19 +46,16 @@ h1,h2{ margin:8px 0; color:var(--brand-dark); font-weight:700; }
 .sum-row td{ font-weight:700; }
 .divider{ height:1px; background:var(--line); margin:12px 0; }
 
-/* Prévia/status */
-.preview{
-  padding:10px; border:1px solid var(--line); border-radius:10px;
-  background:#fff; white-space:pre-wrap; font-family:ui-monospace, Consolas, monospace;
-}
+/* Status/preview */
+.preview{ padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; white-space:pre-wrap; font-family:ui-monospace, Consolas, monospace; }
 .muted{ color:var(--muted); font-size:13px; display:block; margin-top:4px; }
+.hidden{ display:none !important; }
 
 /* Modal scanner */
-.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:9999; }
+.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.5); z-index:99999; }
 .modal-box{ width:min(560px,92vw); background:#fff; border-radius:12px; padding:12px; border:1px solid var(--line); }
 .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .scan-video{ width:100%; max-height:60vh; background:#000; border-radius:10px; }
-.hidden{ display:none !important; }
 
 /* Responsivo */
 @media (max-width:640px){
@@ -85,7 +67,7 @@ h1,h2{ margin:8px 0; color:var(--brand-dark); font-weight:700; }
   .grid2{ display:grid; grid-template-columns:1fr; gap:10px; margin:10px 0; }
 }
 
-/* iOS refinamentos */
+/* iOS */
 .row select,.tbl input[type="number"]{ -webkit-appearance:none; appearance:none; }
 .btn:disabled{ opacity:.55; cursor:not-allowed; }
 .btn:focus{ outline:2px solid var(--brand); outline-offset:2px; }
