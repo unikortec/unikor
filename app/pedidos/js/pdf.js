@@ -269,20 +269,34 @@ function construirPDFBase(data){
   doc.text(data.hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // FORMA DE PAGAMENTO — sempre exibe, com quebra automática
-  ensureSpace(14);
-  const pagamentoTxt = (data.pagamento && String(data.pagamento).trim())
-    ? String(data.pagamento).toUpperCase()
-    : "NÃO INFORMADO";
-  const linhasPag = splitToWidth(doc, pagamentoTxt, larguraCaixa - 8);
-  const boxH = Math.max(10, 6 + linhasPag.length * 4);
-  doc.rect(margemX, y, larguraCaixa, boxH, "S");
-  doc.setFont("helvetica","bold"); doc.setFontSize(8);
-  doc.text("FORMA DE PAGAMENTO", margemX + 3, y + 5);
-  doc.setFont("helvetica","normal"); doc.setFontSize(9);
-  let baseY2 = y + 9;
-  linhasPag.forEach((ln, i) => doc.text(ln, margemX + 3, baseY2 + i * 4));
-  y += boxH + 2;
+  // FORMA DE PAGAMENTO — sempre exibe, centralizado e com quebra automática
+ensureSpace(14);
+const pagamentoTxt = (data.pagamento && String(data.pagamento).trim())
+  ? String(data.pagamento).toUpperCase()
+  : "NÃO INFORMADO";
+
+// quebra em linhas, medindo para centralizar
+const padX = 3;
+const innerW = larguraCaixa - padX * 2;
+const linhasPag = splitToWidth(doc, pagamentoTxt, innerW);
+
+const boxH = Math.max(12, 7 + linhasPag.length * 4.4);
+doc.rect(margemX, y, larguraCaixa, boxH, "S");
+
+// Título
+doc.setFont("helvetica","bold"); 
+doc.setFontSize(8);
+doc.text("FORMA DE PAGAMENTO", margemX + larguraCaixa/2, y + 5, { align: "center" });
+
+// Valor centralizado (cada linha central na caixa)
+doc.setFont("helvetica","normal"); 
+doc.setFontSize(9);
+let cy = y + 9;
+linhasPag.forEach(ln => {
+  doc.text(ln, margemX + larguraCaixa/2, cy, { align: "center" });
+  cy += 4.4;
+});
+y += boxH + 2;
 
   // Cabeçalho itens
   ensureSpace(14);
@@ -442,29 +456,57 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
-// Compartilhamento nativo (mantém user-activation)
+// Compartilhamento nativo com tolerância a iOS/Android/desktop
 export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
-  const file = new File([blob], nomeArq, { type: 'application/pdf' });
-  try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file] });
+  const file = new File([blob], nomeArq, { type: 'application/pdf', lastModified: Date.now() });
+  const canLevel2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
+
+  // 1) Se der, tenta Web Share Level 2 (com files)
+  if (canLevel2 && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Pedido', text: 'Segue o PDF do pedido.' });
       return { compartilhado: true };
+    } catch (e) {
+      if (String(e?.name || e).includes('AbortError')) {
+        return { compartilhado: false, cancelado: true };
+      }
+      // cai para fallback abaixo
     }
-  } catch (e) {
-    if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
   }
+
+  // 2) Alguns iOS aceitam share sem files, só com URL
+  //    (abre o “Open In…” do sistema a partir de uma aba/visualização)
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ title: 'Pedido', text: 'Segue o PDF do pedido.', files: [file] });
-      return { compartilhado: true };
+    const url = URL.createObjectURL(blob);
+    // se navigator.share existe mas não suporta files, tente com url/title/text
+    if ('share' in navigator && !canLevel2) {
+      try {
+        await navigator.share({ title: nomeArq, text: 'PDF do pedido', url });
+        setTimeout(() => URL.revokeObjectURL(url), 15000);
+        return { compartilhado: true };
+      } catch (e) {
+        if (String(e?.name || e).includes('AbortError')) {
+          URL.revokeObjectURL(url);
+          return { compartilhado: false, cancelado: true };
+        }
+        // segue para fallback visual
+      }
     }
-  } catch (e) {
-    if (String(e).includes('AbortError')) return { compartilhado: false, cancelado: true };
+
+    // 3) Fallback universal: abre o PDF numa nova aba (Quick Look no iOS / visualizador no Android/PC)
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    return { compartilhado: false, fallback: true };
+  } catch {
+    // 4) Último recurso: download direto
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nomeArq;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return { compartilhado: false, fallback: true, download: true };
   }
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank', 'noopener,noreferrer');
-  setTimeout(()=>URL.revokeObjectURL(url), 10000);
-  return { compartilhado: false, fallback: true };
 }
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
