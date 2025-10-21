@@ -1,136 +1,162 @@
-// ===== UNIKOR • Scanner com Fallback =====
-// Usa ZXing (vídeo ou foto). Suporta iPhone e PC.
+// ===== UNIKOR • Scanner universal (fix ZXing + iOS/PC fallback) =====
+let zxing = null;
+let reader = null;
+let stream = null;
 
-let zxing = null, reader = null, stopFn = null;
-
-function show(msg){
-  const el = document.getElementById('statusBox');
-  if (el){ el.classList.remove('hidden'); el.textContent = msg; }
-}
-
-async function ensureZXing(){
-  if (zxing) return;
-  await new Promise((res, rej)=>{
-    const s = document.createElement('script');
-    s.src  = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js';
-    s.onload = res; s.onerror = rej; document.head.appendChild(s);
-  });
-  zxing = window.ZXingBrowser;
-}
-
-async function getBackCameraConstraints(){
-  try { await navigator.mediaDevices.getUserMedia({ video:true, audio:false }).then(s=>s.getTracks().forEach(t=>t.stop())); } catch {}
-  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-  const back = devs.find(d => /back|traseira|rear|environment/i.test(d.label));
-  if (back) return { deviceId: { exact: back.deviceId } };
-  return { facingMode: { exact: 'environment' } };
-}
-
-export async function startScan({ onResult, onError } = {}){
-  if (!navigator.mediaDevices?.getUserMedia){
-    show('Câmera não disponível neste navegador.');
-    openFallbackInput(onResult);
-    return;
+function show(msg) {
+  const el = document.getElementById("statusBox");
+  if (el) {
+    el.classList.remove("hidden");
+    el.textContent = msg;
   }
+}
 
-  try{
+// ===== Carrega ZXing de fonte estável =====
+async function ensureZXing() {
+  if (zxing) return;
+  const urls = [
+    "https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js",
+    "https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/index.min.js"
+  ];
+  for (const u of urls) {
+    try {
+      await new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = u;
+        s.onload = res;
+        s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      if (window.ZXingBrowser) {
+        zxing = window.ZXingBrowser;
+        console.log("[Scanner] ZXing carregado de:", u);
+        return;
+      }
+    } catch (e) {
+      console.warn("[Scanner] Falhou em:", u);
+    }
+  }
+  throw new Error("ZXing não pôde ser carregado");
+}
+
+// ===== Obtém câmera traseira ou fallback =====
+async function getBackCamera() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: true });
+  } catch {}
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const backs = devices.filter(
+    (d) => d.kind === "videoinput" && /back|rear|traseira|environment/i.test(d.label)
+  );
+  if (backs.length) return { deviceId: { exact: backs[0].deviceId } };
+  return { facingMode: { ideal: "environment" } };
+}
+
+// ===== Inicia leitura =====
+export async function startScan({ onResult } = {}) {
+  const modal = document.getElementById("scanModal");
+  const video = document.getElementById("scanVideo");
+  const fallbackDiv = document.getElementById("scanPhoto");
+
+  try {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      show("Navegador não suporta câmera. Use o modo foto.");
+      openFallback(onResult);
+      return;
+    }
+
     await ensureZXing();
-    const modal = document.getElementById('scanModal');
-    const video = document.getElementById('scanVideo');
-    const photo = document.getElementById('scanPhoto');
 
+    modal.classList.remove("hidden");
+    fallbackDiv.classList.add("hidden");
+    video.classList.remove("hidden");
+
+    video.setAttribute("autoplay", "");
+    video.setAttribute("playsinline", "");
     video.muted = true;
-    video.setAttribute('muted','');
-    video.setAttribute('playsinline','');
-    video.setAttribute('autoplay','');
 
-    modal.classList.remove('hidden');
-    photo.classList.add('hidden');
-    video.classList.remove('hidden');
+    const cam = await getBackCamera();
+    stream = await navigator.mediaDevices.getUserMedia({ video: cam });
+    video.srcObject = stream;
 
-    const hints = new Map();
-    hints.set(zxing.DecodeHintType.POSSIBLE_FORMATS, [
-      zxing.BarcodeFormat.QR_CODE,
-      zxing.BarcodeFormat.CODE_128,
-      zxing.BarcodeFormat.CODE_39,
-      zxing.BarcodeFormat.EAN_13,
-      zxing.BarcodeFormat.EAN_8,
-      zxing.BarcodeFormat.ITF
-    ]);
-    reader = new zxing.BrowserMultiFormatReader(hints);
-
-    const camera = await getBackCameraConstraints();
-    await reader.decodeFromConstraints({ video: camera, audio: false }, video, (result)=>{
-      if (result?.text){
-        const raw = result.text;
-        const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw).replace(/\D/g,'').slice(0,44);
-        try{ onResult && onResult(chave || raw); }catch{}
+    reader = new zxing.BrowserMultiFormatReader();
+    reader.decodeFromVideoElementContinuously(video, (res, err) => {
+      if (res?.text) {
+        const raw = res.text;
+        const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw)
+          .replace(/\D/g, "")
+          .slice(0, 44);
+        stopScan();
+        onResult && onResult(chave || raw);
       }
     });
-
-    stopFn = async ()=>{
-      try { reader?.reset(); } catch {}
-      const s = video.srcObject;
-      if (s && s.getTracks) s.getTracks().forEach(t=>t.stop());
-      video.srcObject = null;
-      modal.classList.add('hidden');
-      reader = null; stopFn = null;
-    };
-
-  }catch(e){
-    console.warn('[scanner] erro', e);
-    show('Não foi possível abrir a câmera. Usando fallback de foto.');
-    openFallbackInput(onResult);
+  } catch (err) {
+    console.error("[scanner] erro:", err);
+    show("Falha ao abrir câmera. Usando modo foto.");
+    openFallback(onResult);
   }
 }
 
-export function stopScan(){
-  if (stopFn) stopFn();
+// ===== Fecha câmera =====
+export function stopScan() {
+  try {
+    reader?.reset();
+  } catch {}
+  try {
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      stream = null;
+    }
+  } catch {}
+  document.getElementById("scanModal")?.classList.add("hidden");
 }
 
-/* ===== Fallback por foto (upload) ===== */
-async function openFallbackInput(onResult){
-  await ensureZXing();
-  const modal = document.getElementById('scanModal');
-  const video = document.getElementById('scanVideo');
-  const photo = document.getElementById('scanPhoto');
-  video.classList.add('hidden');
-  photo.classList.remove('hidden');
-  modal.classList.remove('hidden');
+// ===== Fallback: leitura por foto =====
+function openFallback(onResult) {
+  const modal = document.getElementById("scanModal");
+  const video = document.getElementById("scanVideo");
+  const fallbackDiv = document.getElementById("scanPhoto");
+  modal.classList.remove("hidden");
+  video.classList.add("hidden");
+  fallbackDiv.classList.remove("hidden");
 
-  // cria input dinâmico se não existir
-  let input = document.getElementById('fileQr');
-  if (!input){
-    input = document.createElement('input');
-    input.type = 'file';
-    input.id = 'fileQr';
-    input.accept = 'image/*';
-    input.capture = 'environment';
-    input.style.display = 'none';
-    document.body.appendChild(input);
+  let fileInput = document.getElementById("fileQr");
+  if (!fileInput) {
+    fileInput = document.createElement("input");
+    fileInput.id = "fileQr";
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.capture = "environment";
+    fileInput.style.display = "none";
+    document.body.appendChild(fileInput);
   }
 
-  input.onchange = async (ev)=>{
+  const btn = document.getElementById("btnTakePhoto");
+  btn.onclick = () => fileInput.click();
+
+  fileInput.onchange = async (ev) => {
     const file = ev.target.files[0];
     if (!file) return;
-    show('Processando imagem...');
+    show("Processando imagem...");
+    await ensureZXing();
     const img = new Image();
     img.src = URL.createObjectURL(file);
-    await new Promise(r=>img.onload=r);
-    const result = await zxing.BrowserMultiFormatReader.decodeFromImageElement(img)
-      .catch(()=>null);
-    if (result?.text){
-      const raw = result.text;
-      const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw).replace(/\D/g,'').slice(0,44);
-      try{ onResult && onResult(chave || raw); }catch{}
-      modal.classList.add('hidden');
-    }else{
-      show('Nenhum código reconhecido. Tente outra foto.');
-    }
-    input.value = '';
-  };
+    await new Promise((r) => (img.onload = r));
 
-  // botão que dispara o input
-  const btn = document.getElementById('btnTakePhoto');
-  btn.onclick = ()=>input.click();
+    try {
+      const result = await zxing.BrowserMultiFormatReader.decodeFromImageElement(img);
+      if (result?.text) {
+        const raw = result.text;
+        const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw)
+          .replace(/\D/g, "")
+          .slice(0, 44);
+        stopScan();
+        onResult && onResult(chave || raw);
+      } else {
+        show("Não foi possível ler o QR. Tente outra foto.");
+      }
+    } catch {
+      show("Erro ao processar imagem.");
+    }
+  };
 }
