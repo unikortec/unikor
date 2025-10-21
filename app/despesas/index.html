@@ -118,16 +118,19 @@
   </div>
 
   <!-- Modal Scanner -->
-  <div id="scanModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Leitor de código">
-    <div class="modal-box">
-      <div class="modal-head">
-        <strong>Leitor de código</strong>
-        <button id="btnCloseScan" class="btn outline">Fechar</button>
-      </div>
-      <video id="scanVideo" autoplay playsinline muted class="scan-video"></video>
-      <div class="muted" style="margin-top:6px">Aponte para o QR/código de barras da NFe.</div>
+<div id="scanModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Leitor de código">
+  <div class="modal-box">
+    <div class="modal-head">
+      <strong>Leitor de código</strong>
+      <button id="btnCloseScan" class="btn outline">Fechar</button>
+    </div>
+    <video id="scanVideo" autoplay playsinline muted class="scan-video"></video>
+    <div id="scanPhoto" class="hidden" style="text-align:center;padding:12px">
+      <button id="btnTakePhoto" class="btn primary" type="button">📷 Tirar foto do QR</button>
+      <div class="muted" style="margin-top:8px">Se a câmera não abrir, use este modo para enviar uma foto do QR.</div>
     </div>
   </div>
+</div>
 
   <!-- Firebase raiz compartilhado -->
   <script type="module" src="/js/firebase.js"></script>
