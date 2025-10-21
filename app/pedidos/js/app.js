@@ -2,38 +2,47 @@
 import { up } from './utils.js';
 import { initItens, adicionarItem, getItens } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
+
+// salvar idempotente + frete
 import { savePedidoIdempotente, buildIdempotencyKey } from './db.js';
 import { getFreteAtual, ensureFreteBeforePDF } from './frete.js';
+
+// integrações Firebase (usa o mesmo app/auth/db/storage da raiz)
 import {
   waitForLogin, app, db, storage, getTenantId,
   doc, setDoc, serverTimestamp
 } from './firebase.js';
+
 import { ref, uploadBytes } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 
 console.log('[APP] Pedidos inicializado');
 
-function formatarNome(input){ if (!input) return; const v = input.value.replace(/_/g,' ').replace(/\s{2,}/g,' '); input.value = up(v); }
+/* ===================== Helpers ===================== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
+function formatarNome(input){ if(!input)return; input.value = up(input.value.replace(/_/g,' ').replace(/\s{2,}/g,' ')); }
 
-function coletarDadosFormulario(){ return {
-  cliente: document.getElementById('cliente')?.value || '',
-  telefone: document.getElementById('contato')?.value || '',
-  endereco: document.getElementById('endereco')?.value || '',
-  observacoes: document.getElementById('obsGeral')?.value || '',
-  itens: getItens()
-};}
+function coletarDadosFormulario() {
+  return {
+    cliente: document.getElementById('cliente')?.value || '',
+    telefone: document.getElementById('contato')?.value || '',
+    endereco: document.getElementById('endereco')?.value || '',
+    observacoes: document.getElementById('obsGeral')?.value || '',
+    itens: getItens()
+  };
+}
 
-function validarAntesGerar(){
+function validarAntesGerar() {
   const dados = coletarDadosFormulario();
   if (!dados.cliente.trim()) { alert('Informe o nome do cliente'); return false; }
   const itens = getItens();
-  if (itens.length === 0 || !itens.some(item => (item.produto||'').trim())) {
+  if (itens.length === 0 || !itens.some(i => (i.produto||'').trim())) {
     alert('Adicione pelo menos um item'); return false;
   }
   return true;
 }
 
+/* ===================== Pagamento + Payload ===================== */
 function lerPagamento(){
   const sel = document.getElementById('pagamento');
   const outro = document.getElementById('pagamentoOutro');
@@ -50,10 +59,17 @@ function montarPayloadPedido(){
     const q = num(i.quantidade);
     const pu = num(i.preco);
     const total = +(q*pu).toFixed(2);
-    return { produto: (i.produto||'').trim(), tipo: (i.tipo||'KG').toUpperCase(), quantidade: q, precoUnit: pu, total, obs: (i.obs||'').trim() };
+    return {
+      produto:(i.produto||'').trim(),
+      tipo:(i.tipo||'KG').toUpperCase(),
+      quantidade:q,
+      precoUnit:pu,
+      total,
+      obs:(i.obs||'').trim()
+    };
   }).filter(i=> i.produto || i.quantidade>0 || i.total>0);
 
-  const subtotal = +(itens.reduce((s,i)=>s + num(i.total), 0).toFixed(2));
+  const subtotal = +(itens.reduce((s,i)=>s+num(i.total),0).toFixed(2));
   const frete = getFreteAtual() || { valorBase:0, valorCobravel:0, isento:false };
   const isentoMan = !!document.getElementById('isentarFrete')?.checked;
   const freteCobrado = isentoMan ? 0 : num(frete.valorCobravel || frete.valorBase || 0);
@@ -72,7 +88,7 @@ function montarPayloadPedido(){
     frete: { isento: !!(frete.isento || isentoMan), valorBase: num(frete.valorBase || 0), valorCobrado: freteCobrado },
     totalPedido: +(subtotal + freteCobrado).toFixed(2),
     pagamento: lerPagamento(),
-    obs: (document.getElementById('obsGeral')?.value || '').trim(),
+    obs:(document.getElementById('obsGeral')?.value || '').trim(),
     clienteFiscal: {
       cnpj: digitsOnly(document.getElementById('cnpj')?.value || ''),
       ie: (document.getElementById('ie')?.value || '').trim(),
@@ -82,75 +98,114 @@ function montarPayloadPedido(){
   };
 }
 
+/* ===================== Persistência idempotente ===================== */
 async function persistirPedidoSeNecessario(){
-  await waitForLogin();
-  await ensureFreteBeforePDF();
+  await waitForLogin(); await ensureFreteBeforePDF();
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
   try{
     const { id } = await savePedidoIdempotente(payload);
-    console.info('[PEDIDOS] salvo:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
     if (id) localStorage.setItem('unikor:lastPedidoId', id);
-  }catch(e){
-    console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
-  }
+    console.info('[PEDIDOS] salvo:', id);
+  }catch(e){ console.warn('[PEDIDOS] Falha ao salvar:', e); }
 }
-
 async function persistirComTimeout(ms=4000){
-  try{ await Promise.race([persistirPedidoSeNecessario(), new Promise(r=>setTimeout(r, ms))]); }catch(_){}
+  try{ await Promise.race([ persistirPedidoSeNecessario(), new Promise(r=>setTimeout(r,ms)) ]); }catch(_){}
 }
 
-/* ======= Upload PDF ======= */
+/* ===================== Upload PDF p/ Storage ===================== */
 async function uploadPdfParaStorage(blob, filename){
   try{
     const tenantId = await getTenantId();
     const docId = localStorage.getItem('unikor:lastPedidoId');
     if (!tenantId || !docId) return;
-
     const lastUp = localStorage.getItem('unikor:lastUploadedId');
     if (lastUp === docId) return;
 
     const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
     await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
 
-    await setDoc(
-      doc(db, "tenants", tenantId, "pedidos", docId),
-      { pdfPath: path, pdfCreatedAt: serverTimestamp() },
-      { merge: true }
-    );
+    await setDoc(doc(db, "tenants", tenantId, "pedidos", docId),
+      { pdfPath:path, pdfCreatedAt:serverTimestamp() },
+      { merge:true });
 
     localStorage.setItem('unikor:lastUploadedId', docId);
     console.info('[Storage] PDF enviado:', path);
-  }catch(e){
-    console.warn('[Storage] Falha no upload:', e?.message || e);
-  }
+  }catch(e){ console.warn('[Storage] Falha no upload:', e?.message||e); }
 }
 
-/* ======= Botões ======= */
+/* ===================== Ações ===================== */
 async function gerarPDF(){
-  const botao = document.getElementById('btnGerarPdf');
-  if (!botao) return;
+  const botao=document.getElementById('btnGerarPdf');
+  if(!botao)return;
   const { gerarPDFPreview } = await import('./pdf.js');
-  if (!validarAntesGerar()) return;
-  const t = botao.textContent; botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
-  showOverlay();
-  try { await persistirComTimeout(4000); await gerarPDFPreview(); toastOk('PDF gerado (preview)'); }
-  catch(e){ console.error('[PDF] Erro ao gerar:', e); toastErro('Erro ao gerar PDF'); alert('Erro ao gerar PDF: ' + e.message); }
-  finally { hideOverlay(); botao.disabled = false; botao.textContent = t; }
+  if(!validarAntesGerar())return;
+  botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Gerando...';showOverlay();
+  try{await persistirComTimeout(4000);await gerarPDFPreview();toastOk('PDF gerado (preview)');}
+  catch(e){toastErro('Erro ao gerar PDF');console.error(e);}
+  finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
 }
 
 async function salvarPDF(){
-  const botao = document.getElementById('btnSalvarPdf'); if (!botao) return;
+  const botao=document.getElementById('btnSalvarPdf');if(!botao)return;
   const { salvarPDFLocal, construirPDF } = await import('./pdf.js');
-  if (!validarAntesGerar()) return;
-  const t = botao.textContent; botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
-  showOverlay();
-  try {
+  if(!validarAntesGerar())return;
+  botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Salvando...';showOverlay();
+  try{
     await persistirComTimeout(4000);
-    const { nome } = await salvarPDFLocal();
-    toastOk(`PDF salvo: ${nome}`);
-    const { blob, nomeArq } = await construirPDF();
-    await uploadPdfParaStorage(blob, nomeArq);
-  } catch(e){ console.error('[PDF] Erro ao salvar:', e); toastErro('Erro ao salvar PDF'); alert('Erro ao salvar PDF: ' + e.message); }
+    const { nome }=await salvarPDFLocal();toastOk(`PDF salvo: ${nome}`);
+    const { blob, nomeArq }=await construirPDF();await uploadPdfParaStorage(blob,nomeArq);
+  }catch(e){toastErro('Erro ao salvar PDF');console.error(e);}
+  finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
+}
+
+async function compartilharPDF(){
+  const botao=document.getElementById('btnCompartilharPdf');if(!botao)return;
+  const { construirPDF, compartilharComBlob } = await import('./pdf.js');
+  if(!validarAntesGerar())return;
+  botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Compartilhando...';showOverlay();
+  try{
+    const { blob,nomeArq }=await construirPDF();
+    const res=await compartilharComBlob(blob,nomeArq);
+    (async()=>{try{await persistirComTimeout(4000);await uploadPdfParaStorage(blob,nomeArq);}catch(_){}})();
+    if(res.compartilhado)toastOk('PDF compartilhado');
+    else if(res.cancelado)toastOk('Compartilhamento cancelado');
+    else toastOk('Abrimos o PDF (fallback)');
+  }catch(e){toastErro('Erro ao compartilhar');console.error(e);}
+  finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
+}
+
+/* ===================== Reimpressão ===================== */
+async function reimprimirUltimoPedidoSalvo(){
+  const id=localStorage.getItem('unikor:lastPedidoId');
+  if(!id){alert('Nenhum pedido salvo nesta sessão.');return;}
+  const btn=document.getElementById('btnReimprimirUltimo');const txt=btn.textContent;
+  btn.disabled=true;btn.textContent='⏳ Reimprimindo...';showOverlay();
+  try{
+    const { gerarPDFPreviewDePedidoFirestore }=await import('./pdf.js');
+    await gerarPDFPreviewDePedidoFirestore(id);toastOk('Reimpressão gerada');
+  }catch(e){toastErro('Erro ao reimprimir');console.error(e);}
+  finally{hideOverlay();btn.disabled=false;btn.textContent=txt;}
+}
+
+/* ===================== Init ===================== */
+document.addEventListener('DOMContentLoaded',()=>{
+  initItens();
+  setTimeout(()=>{const c=document.getElementById('itens');if(c&&!c.children.length)adicionarItem();},100);
+  document.getElementById('adicionarItemBtn')?.addEventListener('click',adicionarItem);
+  document.getElementById('btnGerarPdf')?.addEventListener('click',gerarPDF);
+  document.getElementById('btnSalvarPdf')?.addEventListener('click',salvarPDF);
+  document.getElementById('btnCompartilharPdf')?.addEventListener('click',compartilharPDF);
+  document.getElementById('btnReimprimirUltimo')?.addEventListener('click',reimprimirUltimoPedidoSalvo);
+
+  const inputCliente=document.getElementById('cliente');
+  if(inputCliente){inputCliente.addEventListener('change',()=>formatarNome(inputCliente));inputCliente.addEventListener('blur',()=>formatarNome(inputCliente));}
+});
+
+window.gerarPDF=gerarPDF;
+window.salvarPDF=salvarPDF;
+window.compartilharPDF=compartilharPDF;
+window.reimprimirUltimoPedidoSalvo=reimprimirUltimoPedidoSalvo;
+console.log('[APP] Configurado (desktop + mobile ok)');
