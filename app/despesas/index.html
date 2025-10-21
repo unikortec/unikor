@@ -23,7 +23,7 @@
       <h2>Lançamento de Nota</h2>
 
       <div class="row">
-        <label>Categoria:</label>
+        <label for="categoria">Categoria:</label>
         <input id="categoria" list="listaCategorias" placeholder="Digite ou escolha" />
         <datalist id="listaCategorias"></datalist>
       </div>
@@ -37,17 +37,17 @@
       </div>
 
       <div class="row">
-        <label>Fornecedor:</label>
+        <label for="fornecedor">Fornecedor:</label>
         <input id="fornecedor" placeholder="Nome do fornecedor" />
       </div>
 
       <div class="row">
-        <label>CNPJ Fornecedor:</label>
+        <label for="cnpj">CNPJ Fornecedor:</label>
         <input id="cnpj" placeholder="__.___.___/____-__" inputmode="numeric" maxlength="18" />
       </div>
 
       <div class="row">
-        <label>Forma de pagamento:</label>
+        <label for="formaPagamento">Forma de pagamento:</label>
         <select id="formaPagamento">
           <option value="DINHEIRO">DINHEIRO</option>
           <option value="BOLETO">BOLETO</option>
@@ -56,71 +56,106 @@
       </div>
 
       <div class="row hidden" id="rowParcelas">
-        <label>Parcelas:</label>
+        <label for="parcelas">Parcelas:</label>
         <select id="parcelas">
-          ${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('')}
+          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+          <option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
         </select>
       </div>
 
       <div class="row">
-        <label>Chave NFe:</label>
+        <label for="chave">Chave NFe:</label>
         <input id="chave" placeholder="44 dígitos ou URL do QR" />
       </div>
       <div class="actions-left" style="margin-top:-8px;margin-bottom:6px">
         <button id="btnScanChave" class="btn outline" type="button">📷 Ler código</button>
       </div>
 
-      <div class="divider"></div>
+      <div class="divider" aria-hidden="true"></div>
 
       <h2>Produtos</h2>
 
-      <table class="tbl">
-        <thead>
-          <tr>
-            <th>Item</th><th>Qtd</th><th>Valor Un</th><th>Total</th>
-          </tr>
-        </thead>
-        <tbody id="tbodyItens"></tbody>
-        <tfoot>
-          <tr class="sum-row">
-            <td></td>
-            <td style="text-align:right"><span id="sumQtd">0</span></td>
-            <td></td>
-            <td style="text-align:right"><span id="sumTotal">R$ 0,00</span></td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="grid2">
-        <button id="btnAddItem" class="btn primary">+ Adicionar item</button>
-        <button id="btnRemItem" class="btn outline" style="border-color:#e57373;color:#e57373">– Remover</button>
+      <div class="table-wrap">
+        <table class="tbl">
+          <thead>
+            <tr>
+              <th style="width:55%">Item</th>
+              <th style="width:15%;text-align:right">Qtd</th>
+              <th style="width:15%;text-align:right">Valor Un</th>
+              <th style="width:15%;text-align:right">Total</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyItens"></tbody>
+          <tfoot>
+            <tr class="sum-row">
+              <td></td>
+              <td style="text-align:right"><span id="sumQtd">0</span></td>
+              <td></td>
+              <td style="text-align:right"><span id="sumTotal">R$ 0,00</span></td>
+            </tr>
+          </tfoot>
+        </table>
+        <div class="grid2">
+          <button id="btnAddItem" class="btn primary" type="button">+ Adicionar item</button>
+          <button id="btnRemItem" class="btn outline" type="button" style="border-color:#e57373;color:#e57373">– Remover</button>
+        </div>
       </div>
 
-      <div class="row">
-        <label>TOTAL NF:</label>
-        <input id="totalNota" placeholder="(opcional)" inputmode="decimal" />
+      <div class="row" style="align-items:center">
+        <label for="totalNota">TOTAL NF:</label>
+        <input id="totalNota" placeholder="(opcional) se vazio usa total líquido" inputmode="decimal" />
       </div>
 
       <div class="actions-right">
-        <button id="btnAdicionarNota" class="btn primary">Adicionar nota</button>
+        <button id="btnAdicionarNota" class="btn primary" type="button">Adicionar nota</button>
       </div>
 
-      <pre id="statusBox" class="preview muted">—</pre>
+      <pre id="statusBox" class="preview muted" style="margin-top:12px">—</pre>
     </div>
   </div>
 
-  <!-- Modal scanner -->
-  <div id="scanModal" class="modal hidden" role="dialog">
+  <!-- Modal Scanner -->
+  <div id="scanModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Leitor de código">
     <div class="modal-box">
       <div class="modal-head">
         <strong>Leitor de código</strong>
         <button id="btnCloseScan" class="btn outline">Fechar</button>
       </div>
       <video id="scanVideo" autoplay playsinline class="scan-video"></video>
-      <div class="muted">Aponte para o QR/código de barras.</div>
+      <div class="muted" style="margin-top:6px">Aponte para o QR/código de barras da NFe.</div>
     </div>
   </div>
 
+  <!-- Firebase raiz compartilhado -->
+  <script type="module" src="/js/firebase.js"></script>
+  <!-- Módulos locais -->
+  <script type="module" src="./js/modal.js"></script>
+  <script type="module" src="./js/scanner.js"></script>
+  <script type="module" src="./js/db.js"></script>
   <script type="module" src="./js/app.js"></script>
+
+  <!-- SW register -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', async ()=>{
+        try{
+          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
+          document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') reg.update(); });
+          setInterval(()=>reg.update(), 5*60*1000);
+          reg.addEventListener('updatefound', ()=>{
+            const nw = reg.installing;
+            nw && nw.addEventListener('statechange', ()=>{
+              if (nw.state==='installed' && navigator.serviceWorker.controller) {
+                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+            if (!window._reloadedBySW) { window._reloadedBySW = true; location.reload(); }
+          });
+        }catch(e){ console.warn('SW register:', e); }
+      });
+    }
+  </script>
 </body>
 </html>
