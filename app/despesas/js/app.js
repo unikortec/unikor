@@ -5,42 +5,51 @@ import './modal.js';
 
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+function toast(t){ const b=$('#statusBox'); if (b) b.textContent=t; }
 
-/* ======== USUÁRIO LOGADO ======== */
+/* Usuário topo */
 onAuthUser((u)=>{
   const el = $('#usuarioLogado');
   if (u) el.textContent = (u.displayName || u.email || 'Usuário').split('@')[0];
   else el.textContent = 'Usuário: —';
 });
 
-/* ======== AUTOCOMPLETE CATEGORIA ======== */
-const CAT_KEY = 'unikor_despesas:cats';
+/* Categoria autocomplete (localStorage) */
+const CAT_KEY='unikor_despesas:cats';
 function getCats(){ try{ return JSON.parse(localStorage.getItem(CAT_KEY)||'[]'); }catch{return[];} }
-function setCats(list){ localStorage.setItem(CAT_KEY, JSON.stringify(Array.from(new Set(list)).slice(0,50))); }
+function setCats(list){ localStorage.setItem(CAT_KEY, JSON.stringify(Array.from(new Set(list)).slice(0,100))); }
 function refreshCats(){
-  const dl = $('#listaCategorias');
-  dl.innerHTML = '';
+  const dl=$('#listaCategorias'); dl.innerHTML='';
   getCats().forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); });
 }
 refreshCats();
 
-/* ======== FUNÇÕES ======== */
+/* Helpers BR */
 function onlyDigits(s){ return (s||'').replace(/\D+/g,''); }
 function maskCNPJ(v){
-  const d = onlyDigits(v).slice(0,14);
-  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
-                   '$1.$2.$3/$4-$5').replace(/[-./]+$/,'');
+  const d=onlyDigits(v).slice(0,14);
+  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5').replace(/[-./]+$/,'');
 }
 function parseBR(n){ return parseFloat(String(n).replace(/\./g,'').replace(',','.'))||0; }
 function fmtBR(v){ return (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 
-/* ======== ITENS ======== */
+/* Eventos base */
+document.addEventListener('click',(ev)=>{
+  if (ev.target.id==='btnVoltar' || ev.target.closest('.logo')) { ev.preventDefault(); location.href='/'; }
+});
+$('#cnpj').addEventListener('input', e=> e.target.value = maskCNPJ(e.target.value));
+$('#formaPagamento').addEventListener('change', e=>{
+  const show = ['CARTAO','BOLETO'].includes(e.target.value);
+  $('#rowParcelas').classList.toggle('hidden', !show);
+});
+
+/* Itens */
 function addItem(desc='',qtd='',vu=''){
   const tr=document.createElement('tr');
   tr.innerHTML=`
     <td><input class="it-desc" value="${desc}" placeholder="Descrição"/></td>
-    <td><input class="it-qtd" value="${qtd}" inputmode="decimal"/></td>
-    <td><input class="it-vu" value="${vu}" inputmode="decimal"/></td>
+    <td style="text-align:right"><input class="it-qtd" value="${qtd}" inputmode="decimal"/></td>
+    <td style="text-align:right"><input class="it-vu" value="${vu}" inputmode="decimal"/></td>
     <td style="text-align:right"><span class="it-total">R$ 0,00</span></td>`;
   $('#tbodyItens').appendChild(tr);
   calcAll();
@@ -59,59 +68,62 @@ function calcAll(){
   $('#sumTotal').textContent=fmtBR(sumTot);
   if(!$('#totalNota').value) $('#totalNota').placeholder=fmtBR(sumTot);
 }
-
-/* ======== EVENTOS ======== */
-$('#btnAddItem').onclick = ()=>addItem();
-$('#btnRemItem').onclick = ()=>remItem();
+$('#btnAddItem').onclick=()=>addItem();
+$('#btnRemItem').onclick=()=>remItem();
 $('#tbodyItens').addEventListener('input', calcAll);
-$('#cnpj').addEventListener('input',e=>e.target.value=maskCNPJ(e.target.value));
-$('#formaPagamento').addEventListener('change',e=>{
-  if(['CARTAO','BOLETO'].includes(e.target.value))
-    $('#rowParcelas').classList.remove('hidden');
-  else $('#rowParcelas').classList.add('hidden');
+
+/* Scanner */
+$('#btnScanChave').onclick = ()=> startScan({
+  onResult:(text)=>{ document.getElementById('chave').value = text.replace(/\D/g,'').slice(0,44); toast('Chave capturada!'); stopScan(); },
+  onError:()=> toast('Não foi possível ler o código.')
 });
+$('#btnCloseScan').onclick = ()=> stopScan();
 
-/* ======== SCANNER ======== */
-$('#btnScanChave').onclick = ()=>startScan();
-$('#btnCloseScan').onclick = ()=>stopScan();
-
-/* ======== SALVAR ======== */
+/* Salvar */
 $('#btnAdicionarNota').onclick = async ()=>{
-  const user = getCurrentUser();
+  const u = getCurrentUser();
   const categoria = $('#categoria').value.trim() || 'GERAL';
-  setCats([categoria, ...getCats()]);
-  const tipo = $$('input[name=tipo]').find(i=>i.checked)?.value || 'CUPOM';
+  setCats([categoria, ...getCats()]); refreshCats();
+
+  const tipo = $$('input[name="tipo"]').find(i=>i.checked)?.value || 'CUPOM';
   const fornecedor = $('#fornecedor').value.trim();
   const cnpj = $('#cnpj').value.trim();
-  const forma = $('#formaPagamento').value;
-  const parcelas = $('#rowParcelas').classList.contains('hidden')?1:Number($('#parcelas').value||1);
-  const chave = $('#chave').value.trim();
-  const itens = $$('#tbodyItens tr').map(tr=>({
-    nome: tr.querySelector('.it-desc').value,
-    qtd: parseBR(tr.querySelector('.it-qtd').value),
-    vunit: parseBR(tr.querySelector('.it-vu').value),
-    total: parseBR(tr.querySelector('.it-qtd').value)*parseBR(tr.querySelector('.it-vu').value)
-  }));
+  const formaPagamento = $('#formaPagamento').value;
+  const parcelas = ['CARTAO','BOLETO'].includes(formaPagamento) ? Number($('#parcelas').value||1) : 1;
+  const chaveNFe = $('#chave').value.trim();
+
+  const itens = $$('#tbodyItens tr').map(tr=>{
+    const nome = tr.querySelector('.it-desc').value.trim();
+    const qtd = parseBR(tr.querySelector('.it-qtd').value);
+    const vunit = parseBR(tr.querySelector('.it-vu').value);
+    const total = qtd*vunit;
+    return { nome, qtd, vunit, total };
+  }).filter(i=> i.nome || i.qtd || i.vunit);
+
   const totalCalc = itens.reduce((s,i)=>s+i.total,0);
   const totalNota = $('#totalNota').value ? parseBR($('#totalNota').value) : totalCalc;
 
   const payload = {
     categoria, tipo, fornecedor, cnpj,
-    formaPagamento: forma, parcelas,
-    chaveNFe: chave,
-    itens, totalCalc, totalNota,
-    createdBy: user?.email?.split('@')[0]||'anon',
-    createdAt: new Date()
+    formaPagamento, parcelas, chaveNFe,
+    itens, sumQtd: itens.reduce((s,i)=>s+i.qtd,0),
+    totalLiquido: totalCalc, totalNota,
+    createdByUid: u?.uid || 'anon',
+    createdByName: (u?.email || '').split('@')[0] || 'anon'
   };
+
   try{
+    toast('Salvando...');
     await saveExpense(payload);
-    alert('Despesa salva com sucesso!');
+    toast('Salvo! Abrindo pasta do Drive…');
+    window.open('https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb','_blank','noopener');
   }catch(e){
-    alert('Erro ao salvar: '+e.message);
+    console.error(e);
+    alert('Falha ao salvar no Firestore.');
+    toast('Erro ao salvar.');
   }
   $('#statusBox').textContent = JSON.stringify(payload,null,2);
 };
 
-/* ======== INIT ======== */
-addItem();
-calcAll();
+/* init */
+addItem(); calcAll();
