@@ -1,3 +1,4 @@
+// ===== UNIKOR • Despesas • App =====
 import { onAuthUser, getCurrentUser } from '/js/firebase.js';
 import { saveExpense } from './db.js';
 import { startScan, stopScan } from './scanner.js';
@@ -5,28 +6,38 @@ import './modal.js';
 
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+const DRIVE_URL = 'https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb';
+
 function showStatus(t){ const b=$('#statusBox'); if (b){ b.classList.remove('hidden'); b.textContent=t; } }
 
-/* Usuário topo */
+// ===== Topo: usuário =====
 onAuthUser((u)=>{
-  const el = $('#usuarioLogado');
-  el.textContent = u ? (u.displayName || u.email || 'Usuário').split('@')[0] : 'Usuário: —';
+  $('#usuarioLogado').textContent = u
+    ? (u.displayName || u.email || 'Usuário').split('@')[0]
+    : 'Usuário: —';
 });
 
-/* Categoria autocomplete */
+// ===== Autocomplete de categorias (localStorage) =====
 const CAT_KEY='unikor_despesas:cats';
 function getCats(){ try{ return JSON.parse(localStorage.getItem(CAT_KEY)||'[]'); }catch{return[];} }
 function setCats(list){ localStorage.setItem(CAT_KEY, JSON.stringify(Array.from(new Set(list)).slice(0,100))); }
 function refreshCats(){ const dl=$('#listaCategorias'); dl.innerHTML=''; getCats().forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); }); }
 refreshCats();
 
-/* Helpers BR */
+// ===== Helpers BR =====
 const onlyDigits = s => (s||'').replace(/\D+/g,'');
-const maskCNPJ = v => (onlyDigits(v).slice(0,14).replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5').replace(/[-./]+$/,''));
+const maskCNPJ = v => {
+  const d = onlyDigits(v).slice(0,14);
+  if (d.length <= 2)  return d;
+  if (d.length <= 5)  return d.replace(/^(\d{2})(\d+)/, '$1.$2');
+  if (d.length <= 8)  return d.replace(/^(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
+  if (d.length <= 12) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
+  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})$/, '$1.$2.$3/$4-$5');
+};
 const parseBR = n => parseFloat(String(n).replace(/\./g,'').replace(',','.'))||0;
 const fmtBR   = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-/* Navegação e inputs */
+// ===== Navegação e inputs =====
 document.addEventListener('click',(ev)=>{
   if (ev.target.id==='btnVoltar' || ev.target.closest('.logo')) { ev.preventDefault(); location.href='/'; }
 });
@@ -36,7 +47,7 @@ $('#formaPagamento').addEventListener('change', e=>{
   $('#rowParcelas').classList.toggle('hidden', !show);
 });
 
-/* Itens */
+// ===== Itens (linha dinâmica) =====
 function addItem(desc='',qtd='',vu=''){
   const tr=document.createElement('tr');
   tr.innerHTML=`
@@ -64,20 +75,16 @@ $('#btnAddItem').onclick=()=>addItem();
 $('#btnRemItem').onclick=()=>remItem();
 $('#tbodyItens').addEventListener('input', calcAll);
 
-/* Scanner */
+// ===== Scanner (QR/código de barras) =====
 $('#btnScanChave').onclick = ()=> startScan({
-  onResult:(text)=>{ document.getElementById('chave').value = text.replace(/\D/g,'').slice(0,44); showStatus('Chave capturada!'); stopScan(); },
-  onError:()=> showStatus('Não foi possível ler o código.')
+  onResult:(text)=>{ $('#chave').value = text.replace(/\D/g,'').slice(0,44); showStatus('Chave capturada!'); stopScan(); }
 });
 $('#btnCloseScan').onclick = ()=> stopScan();
 
-/* Salvar + abrir drive (abre aba primeiro para não bloquear) */
-const DRIVE_URL = 'https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb';
-$('#btnAdicionarNota').addEventListener('click', async (e)=>{
-  const win = window.open(DRIVE_URL,'_blank','noopener'); // abre já
-  e.preventDefault();
-
+// ===== Monta payload único (reuso: Salvar / Drive) =====
+function collectPayload(){
   const u = getCurrentUser();
+
   const categoria = $('#categoria').value.trim() || 'GERAL';
   setCats([categoria, ...getCats()]); refreshCats();
 
@@ -98,24 +105,50 @@ $('#btnAdicionarNota').addEventListener('click', async (e)=>{
   const totalCalc = itens.reduce((s,i)=>s+i.total,0);
   const totalNota = $('#totalNota').value ? parseBR($('#totalNota').value) : totalCalc;
 
-  const payload = {
+  return {
     categoria, tipo, fornecedor, cnpj,
     formaPagamento, parcelas, chaveNFe,
-    itens, sumQtd: itens.reduce((s,i)=>s+i.qtd,0),
-    totalLiquido: totalCalc, totalNota,
+    itens,
+    sumQtd: itens.reduce((s,i)=>s+i.qtd,0),
+    totalLiquido: totalCalc,
+    totalNota,
     createdByUid: u?.uid || 'anon',
     createdByName: (u?.email || '').split('@')[0] || 'anon'
   };
+}
 
+// ===== SALVAR (somente Firestore) =====
+$('#btnSalvar')?.addEventListener('click', async ()=>{
+  const u = getCurrentUser();
+  if (!u){ alert('Faça login para salvar.'); return; }
+
+  const payload = collectPayload();
   try{
     showStatus('Salvando…');
     await saveExpense(payload);
     showStatus('Salvo com sucesso.');
+    alert('Registro salvo no Firestore.');
   }catch(err){
     console.error(err);
-    showStatus('Falha ao salvar no Firestore.');
-    alert('Falha ao salvar no Firestore.');
+    showStatus('Falha ao salvar.');
+    alert('Sem permissão para salvar no Firestore.');
   }
 });
-/* init */
+
+// ===== ADICIONAR NOTA (abre Drive, salva em background sem travar) =====
+$('#btnAdicionarNota')?.addEventListener('click', async (e)=>{
+  window.open(DRIVE_URL,'_blank','noopener'); // abre já (evita bloqueio)
+  e.preventDefault();
+
+  const payload = collectPayload();
+  try{
+    await saveExpense(payload);
+    showStatus('Drive aberto + salvo no Firestore.');
+  }catch(err){
+    console.warn('[Firestore] erro ao salvar (soft):', err?.message || err);
+    showStatus('Drive aberto. Não foi possível salvar no Firestore.');
+  }
+});
+
+// ===== Init =====
 addItem(); calcAll();
