@@ -1,4 +1,4 @@
-// app/pedidos/js/app.js
+// /app/pedidos/js/app.js
 import { up } from './utils.js';
 import { initItens, adicionarItem, getItens } from './itens.js';
 import { showOverlay, hideOverlay, toastOk, toastErro } from './ui.js';
@@ -9,14 +9,12 @@ import { getFreteAtual, ensureFreteBeforePDF } from './frete.js';
 
 // >>> precisamos do app/db/getTenantId + helpers do Firestore p/ registrar o PDF
 import {
-  waitForLogin, app, db, getTenantId,
+  waitForLogin, app, db, storage, getTenantId,
   doc, setDoc, serverTimestamp
 } from './firebase.js';
 
 // >>> Storage SDK (upload do PDF para o bucket)
-import {
-  getStorage, ref, uploadBytes
-} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+import { ref, uploadBytes } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 
 console.log('[APP] Pedidos inicializado');
 
@@ -26,16 +24,20 @@ function formatarNome(input) {
   const v = input.value.replace(/_/g, ' ').replace(/\s{2,}/g, ' ');
   input.value = up(v);
 }
+// 🔸 REMOVIDO: interceptar espaço pode atrapalhar o datalist
+function habilitarEspacoNoCliente() {
+  const el = document.getElementById('cliente');
+  if (!el) return;
+  ['keydown','keypress','keyup','beforeinput'].forEach(type=>{
+    el.addEventListener(type, (ev)=>{
+      if ((ev.key === ' ') || (ev.data === ' ')) ev.stopImmediatePropagation();
+    }, true);
+  });
+}
 
 /* ===================== Helpers ===================== */
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
-const isStandalone = () =>
-  // iOS PWA
-  (window.navigator.standalone === true) ||
-  // qualquer PWA
-  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 
 function coletarDadosFormulario() {
   return {
@@ -92,12 +94,13 @@ function montarPayloadPedido(){
 
   const tipoEnt = document.querySelector('input[name="tipoEntrega"]:checked')?.value || 'ENTREGA';
 
+  // >>> NOVO: captura clienteId (se existir no formulário)
   const clienteId = document.getElementById('clienteId')?.value || null;
 
   return {
     cliente: up(document.getElementById('cliente')?.value || ''),
     clienteUpper: up(document.getElementById('cliente')?.value || ''),
-    clienteId,
+    clienteId, // <<< adicionado para vincular com o cadastro do cliente
     dataEntregaISO: document.getElementById('entrega')?.value || null,
     horaEntrega: document.getElementById('horaEntrega')?.value || '',
     entrega: {
@@ -131,39 +134,43 @@ async function persistirPedidoSeNecessario(){
   const payload = montarPayloadPedido();
   const idemKey = buildIdempotencyKey(payload);
 
+  // evita reenvio imediato
   if (localStorage.getItem('unikor:lastIdemKey') === idemKey) return;
 
   try{
     const { id } = await savePedidoIdempotente(payload);
     console.info('[PEDIDOS] salvo:', id);
     localStorage.setItem('unikor:lastIdemKey', idemKey);
+    // <- necessário para upload/reimpressão do último
     if (id) localStorage.setItem('unikor:lastPedidoId', id);
   }catch(e){
     console.warn('[PEDIDOS] Falha ao salvar (seguindo com PDF):', e);
   }
 }
 
+// versão com limite de tempo (não trava a UI em mobile/desktop)
 async function persistirComTimeout(ms=4000){
   try{
     await Promise.race([
       persistirPedidoSeNecessario(),
       new Promise(resolve => setTimeout(resolve, ms))
     ]);
-  }catch(_){}
+  }catch(_){} // segue adiante
 }
 
 /* ===================== Upload do PDF (Storage) ===================== */
+// Garante 1 upload por pedido (evita duplicar ao salvar/compartilhar)
 async function uploadPdfParaStorage(blob, filename){
   try{
     const tenantId = await getTenantId();
     const docId = localStorage.getItem('unikor:lastPedidoId');
     if (!tenantId || !docId) return;
 
+    // guarda último id que já subiu (não duplica)
     const lastUp = localStorage.getItem('unikor:lastUploadedId');
     if (lastUp === docId) return;
 
-    // ⚠️ confira seu bucket aqui:
-    const storage = getStorage(app /*, "gs://SEU_BUCKET_AQUI"*/);
+    // ✅ usa o storage default do config (bucket certo)
     const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
 
     await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
@@ -177,13 +184,12 @@ async function uploadPdfParaStorage(blob, filename){
     localStorage.setItem('unikor:lastUploadedId', docId);
     console.info('[Storage] PDF enviado:', path);
   }catch(e){
+    // não bloqueia o fluxo no mobile/desktop
     console.warn('[Storage] Falha no upload:', e?.message || e);
   }
 }
 
 /* ===================== Ações ===================== */
-
-// Abre preview primeiro (mantém user-activation) e persiste depois
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
@@ -195,9 +201,9 @@ async function gerarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
   showOverlay();
   try {
+    await persistirComTimeout(4000);
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
-    (async () => { try { await persistirComTimeout(4000); } catch(_) {} })();
   } catch (e) {
     console.error('[PDF] Erro ao gerar:', e);
     toastErro('Erro ao gerar PDF');
@@ -208,7 +214,6 @@ async function gerarPDF() {
   }
 }
 
-// Salva primeiro e depois persiste + upload
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
@@ -220,16 +225,15 @@ async function salvarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
-    const { nome } = await salvarPDFLocal(); // mantém user activation
+    await persistirComTimeout(4000);
+
+    // salva local
+    const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
 
-    (async () => {
-      try {
-        const { blob, nomeArq } = await construirPDF();
-        await persistirComTimeout(4000);
-        await uploadPdfParaStorage(blob, nomeArq);
-      } catch (_) {}
-    })();
+    // gera o mesmo PDF (blob) e sobe p/ Storage (1x por pedido)
+    const { blob, nomeArq } = await construirPDF();
+    await uploadPdfParaStorage(blob, nomeArq);
 
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
@@ -241,12 +245,12 @@ async function salvarPDF() {
   }
 }
 
-// Compartilha primeiro, depois persiste/upload
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
 
-  const { construirPDF, compartilharComBlob } = await import('./pdf.js');
+  // importações leves só quando necessário
+  const { construirPDF } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
 
@@ -254,9 +258,14 @@ async function compartilharPDF() {
   botao.disabled = true; botao.textContent = '⏳ Compartilhando PDF...';
   showOverlay();
   try {
-    const { blob, nomeArq } = await construirPDF(); // mantém user activation
+    // 1) CONSTRÓI JÁ (mantém user-activation)
+    const { blob, nomeArq } = await construirPDF();
+
+    // 2) COMPARTILHA IMEDIATO
+    const { compartilharComBlob } = await import('./pdf.js');
     const res = await compartilharComBlob(blob, nomeArq);
 
+    // 3) EM PARALELO: persiste e sobe pro Storage (não bloquear o share)
     (async () => {
       try {
         await persistirComTimeout(4000);
@@ -319,11 +328,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const inputCliente = document.getElementById('cliente');
   if (inputCliente) {
+    // 🔸 NÃO uppercasar a cada tecla — só ao finalizar edição:
     inputCliente.addEventListener('change', () => formatarNome(inputCliente));
     inputCliente.addEventListener('blur',   () => formatarNome(inputCliente));
   }
+
+  // 🔸 NÃO bloquear espaço (pode atrapalhar o datalist)
+  // habilitarEspacoNoCliente();
 });
 
+// exposição p/ HTML
 window.gerarPDF = gerarPDF;
 window.salvarPDF = salvarPDF;
 window.compartilharPDF = compartilharPDF;
