@@ -1,17 +1,25 @@
-import { db, collection, addDoc, serverTimestamp, getCurrentUser } from '/js/firebase.js';
+import { db, auth, collection, addDoc, serverTimestamp } from '/js/firebase.js';
 
-const TENANT_DEFAULT = 'serranobrecarnes.com.br';
+const TENANT_FALLBACK = 'serranobrecarnes.com.br';
+
+async function getTenantId(){
+  const u = auth.currentUser;
+  if (!u) return TENANT_FALLBACK;
+  try{
+    const t = await u.getIdTokenResult(true);
+    return t.claims?.tenantId || TENANT_FALLBACK;
+  }catch{ return TENANT_FALLBACK; }
+}
 
 export async function saveExpense(data){
-  const user = getCurrentUser();
-  const tenantId = user?.tenantId || TENANT_DEFAULT;
-
+  const tenantId = await getTenantId();
   const col = collection(db, 'tenants', tenantId, 'expenses');
   const payload = {
     ...data,
     tenantId,
     createdAt: serverTimestamp(),
-    createdBy: user?.email?.split('@')[0] || 'anon'
+    updatedAt: serverTimestamp(),
+    source: 'FORM-MANUAL'
   };
   return addDoc(col, payload);
 }
