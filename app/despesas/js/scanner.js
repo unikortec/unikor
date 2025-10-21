@@ -1,4 +1,6 @@
-// Scanner robusto para iPhone/PC usando ZXing
+// ===== UNIKOR • Scanner com Fallback =====
+// Usa ZXing (vídeo ou foto). Suporta iPhone e PC.
+
 let zxing = null, reader = null, stopFn = null;
 
 function show(msg){
@@ -17,35 +19,34 @@ async function ensureZXing(){
 }
 
 async function getBackCameraConstraints(){
-  // iOS só revela labels se já tiver permissão — “desbloqueia” com um getUserMedia rápido
   try { await navigator.mediaDevices.getUserMedia({ video:true, audio:false }).then(s=>s.getTracks().forEach(t=>t.stop())); } catch {}
-
   const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-  // tenta câmera traseira por label
   const back = devs.find(d => /back|traseira|rear|environment/i.test(d.label));
   if (back) return { deviceId: { exact: back.deviceId } };
-  // fallback por facingMode
   return { facingMode: { exact: 'environment' } };
 }
 
 export async function startScan({ onResult, onError } = {}){
   if (!navigator.mediaDevices?.getUserMedia){
     show('Câmera não disponível neste navegador.');
+    openFallbackInput(onResult);
     return;
   }
+
   try{
     await ensureZXing();
-
     const modal = document.getElementById('scanModal');
     const video = document.getElementById('scanVideo');
+    const photo = document.getElementById('scanPhoto');
 
-    // iOS: precisa disso antes do play
     video.muted = true;
     video.setAttribute('muted','');
     video.setAttribute('playsinline','');
     video.setAttribute('autoplay','');
 
     modal.classList.remove('hidden');
+    photo.classList.add('hidden');
+    video.classList.remove('hidden');
 
     const hints = new Map();
     hints.set(zxing.DecodeHintType.POSSIBLE_FORMATS, [
@@ -59,17 +60,14 @@ export async function startScan({ onResult, onError } = {}){
     reader = new zxing.BrowserMultiFormatReader(hints);
 
     const camera = await getBackCameraConstraints();
-    // Deixa o ZXing gerenciar o stream: mais estável no iOS
-    await reader.decodeFromConstraints({ video: camera, audio: false }, video, (result, err)=>{
+    await reader.decodeFromConstraints({ video: camera, audio: false }, video, (result)=>{
       if (result?.text){
-        // extrai 44 dígitos se for URL/QR
         const raw = result.text;
         const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw).replace(/\D/g,'').slice(0,44);
-        try { onResult && onResult(chave || raw); } catch {}
+        try{ onResult && onResult(chave || raw); }catch{}
       }
     });
 
-    // função de parada
     stopFn = async ()=>{
       try { reader?.reset(); } catch {}
       const s = video.srcObject;
@@ -81,12 +79,58 @@ export async function startScan({ onResult, onError } = {}){
 
   }catch(e){
     console.warn('[scanner] erro', e);
-    show('Não foi possível abrir a câmera. Verifique HTTPS e permissões.');
-    try{ onError && onError(e); }catch{}
-    stopScan();
+    show('Não foi possível abrir a câmera. Usando fallback de foto.');
+    openFallbackInput(onResult);
   }
 }
 
 export function stopScan(){
   if (stopFn) stopFn();
+}
+
+/* ===== Fallback por foto (upload) ===== */
+async function openFallbackInput(onResult){
+  await ensureZXing();
+  const modal = document.getElementById('scanModal');
+  const video = document.getElementById('scanVideo');
+  const photo = document.getElementById('scanPhoto');
+  video.classList.add('hidden');
+  photo.classList.remove('hidden');
+  modal.classList.remove('hidden');
+
+  // cria input dinâmico se não existir
+  let input = document.getElementById('fileQr');
+  if (!input){
+    input = document.createElement('input');
+    input.type = 'file';
+    input.id = 'fileQr';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+  }
+
+  input.onchange = async (ev)=>{
+    const file = ev.target.files[0];
+    if (!file) return;
+    show('Processando imagem...');
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await new Promise(r=>img.onload=r);
+    const result = await zxing.BrowserMultiFormatReader.decodeFromImageElement(img)
+      .catch(()=>null);
+    if (result?.text){
+      const raw = result.text;
+      const chave = (raw.match(/[?&]p=([^|&]+)/i)?.[1] || raw).replace(/\D/g,'').slice(0,44);
+      try{ onResult && onResult(chave || raw); }catch{}
+      modal.classList.add('hidden');
+    }else{
+      show('Nenhum código reconhecido. Tente outra foto.');
+    }
+    input.value = '';
+  };
+
+  // botão que dispara o input
+  const btn = document.getElementById('btnTakePhoto');
+  btn.onclick = ()=>input.click();
 }
