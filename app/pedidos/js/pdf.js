@@ -1,4 +1,4 @@
-// app/pedidos/js/pdf.js
+// /app/pedidos/js/pdf.js
 import { ensureFreteBeforePDF, getFreteAtual } from './frete.js';
 import { db, getTenantId, doc, getDoc } from './firebase.js';
 
@@ -211,10 +211,7 @@ async function construirPDFDePedidoSalvo(pedidoDocData){
 /* ===================== Desenho ===================== */
 function construirPDFBase(data){
   const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: [72, 297],
-    compress: true   // 🔹 ativa compactação (de textos e streams)
+    orientation:"portrait", unit:"mm", format:[72,297], compress:true
   });
 
   // Cabeçalho
@@ -274,7 +271,7 @@ function construirPDFBase(data){
   doc.text(data.hora, margemX+halfW2+1+halfW2/2, y+8, {align:"center"});
   y += 12;
 
-  // FORMA DE PAGAMENTO — centralizado e com quebra automática
+  // FORMA DE PAGAMENTO — sempre exibe, centralizado e com quebra automática
   ensureSpace(14);
   const pagamentoTxt = (data.pagamento && String(data.pagamento).trim())
     ? String(data.pagamento).toUpperCase()
@@ -283,21 +280,15 @@ function construirPDFBase(data){
   const padX = 3;
   const innerW = larguraCaixa - padX * 2;
   const linhasPag = splitToWidth(doc, pagamentoTxt, innerW);
-
   const boxH = Math.max(12, 7 + linhasPag.length * 4.4);
-  doc.rect(margemX, y, larguraCaixa, boxH, "S");
 
-  doc.setFont("helvetica","bold"); 
-  doc.setFontSize(8);
+  doc.rect(margemX, y, larguraCaixa, boxH, "S");
+  doc.setFont("helvetica","bold"); doc.setFontSize(8);
   doc.text("FORMA DE PAGAMENTO", margemX + larguraCaixa/2, y + 5, { align: "center" });
 
-  doc.setFont("helvetica","normal"); 
-  doc.setFontSize(9);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9);
   let cy = y + 9;
-  linhasPag.forEach(ln => {
-    doc.text(ln, margemX + larguraCaixa/2, cy, { align: "center" });
-    cy += 4.4;
-  });
+  linhasPag.forEach(ln => { doc.text(ln, margemX + larguraCaixa/2, cy, { align: "center" }); cy += 4.4; });
   y += boxH + 2;
 
   // Cabeçalho itens
@@ -322,6 +313,7 @@ function construirPDFBase(data){
   (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
     const qtdStr = String(it.qtdTxt || "");
+    the: 
     const tipo = it.tipo || "KG";
     const precoTxt = it.precoTxt || "";
     const totalCents = Math.round(it.totalCents || 0);
@@ -450,10 +442,7 @@ export async function salvarPDFLocal(){
   }catch{}
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; 
-  a.download = nomeArq;
-  a.target = '_blank';   // 🔹 ajuda no iOS/Safari
-  a.rel = 'noopener';    // 🔹 segurança/popups
+  a.href = url; a.download = nomeArq;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -466,7 +455,7 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
   const file = new File([blob], nomeArq, { type: 'application/pdf', lastModified: Date.now() });
   const canLevel2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
 
-  // 1) Se der, tenta Web Share Level 2 (com files)
+  // 1) Web Share Level 2 (files)
   if (canLevel2 && navigator.canShare({ files: [file] })) {
     try {
       await navigator.share({ files: [file], title: 'Pedido', text: 'Segue o PDF do pedido.' });
@@ -475,11 +464,11 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
       if (String(e?.name || e).includes('AbortError')) {
         return { compartilhado: false, cancelado: true };
       }
-      // cai para fallback abaixo
+      // continua para fallback
     }
   }
 
-  // 2) Alguns iOS aceitam share sem files, só com URL
+  // 2) iOS antigo: share sem files, só com URL
   try {
     const url = URL.createObjectURL(blob);
     if ('share' in navigator && !canLevel2) {
@@ -492,11 +481,9 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
           URL.revokeObjectURL(url);
           return { compartilhado: false, cancelado: true };
         }
-        // segue para fallback visual
       }
     }
-
-    // 3) Fallback universal: abre o PDF numa nova aba
+    // 3) Fallback universal
     window.open(url, '_blank', 'noopener,noreferrer');
     setTimeout(() => URL.revokeObjectURL(url), 15000);
     return { compartilhado: false, fallback: true };
@@ -505,15 +492,12 @@ export async function compartilharComBlob(blob, nomeArq = 'pedido.pdf') {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = nomeArq;
-    a.target = '_blank';   // 🔹 iOS/Safari
-    a.rel = 'noopener';
     document.body.appendChild(a);
     a.click();
     a.remove();
     return { compartilhado: false, fallback: true, download: true };
   }
 }
-
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
   return compartilharComBlob(blob, nomeArq);
@@ -531,6 +515,5 @@ export async function gerarPDFPreviewDePedidoFirestore(pedidoId){
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 30000);
 }
-
 // Exposto para a fila reconstruir PDF sem duplicar código:
 export const __construirPDFBasePublic = construirPDFBase;
