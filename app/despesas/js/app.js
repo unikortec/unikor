@@ -1,30 +1,60 @@
-// ===== UNIKOR • Despesas • App =====
+// ===== UNIKOR • Despesas • App (completo e final) =====
 import { onAuthUser, getCurrentUser } from '/js/firebase.js';
-import { saveExpense } from './db.js';
-import { startScan, stopScan } from './scanner.js';
+import { saveExpense }               from './db.js';
+import { startScan, stopScan }       from './scanner.js';
 import './modal.js';
 
 const $  = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
 const DRIVE_URL = 'https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb';
 
-function showStatus(t){ const b=$('#statusBox'); if (b){ b.classList.remove('hidden'); b.textContent=t; } }
+/* ==========================
+   STATUS / LOG UTIL
+========================== */
+function showStatus(txt){
+  const box = $('#statusBox');
+  if (!box) return;
+  box.classList.remove('hidden');
+  box.textContent = txt;
+}
 
-// ===== Topo: usuário =====
-onAuthUser((u)=>{
-  $('#usuarioLogado').textContent = u
-    ? (u.displayName || u.email || 'Usuário').split('@')[0]
-    : 'Usuário: —';
+/* ==========================
+   TOPO: USUÁRIO / TENANT
+========================== */
+onAuthUser(async (u)=>{
+  const nome = u ? (u.displayName || u.email || 'Usuário').split('@')[0] : '—';
+  $('#usuarioLogado').textContent = `Usuário: ${nome}`;
+
+  if (u){
+    try {
+      const tok = await u.getIdTokenResult(true);
+      const tenant = tok.claims?.tenantId || '(sem tenant)';
+      showStatus(`Tenant: ${tenant}`);
+    } catch {}
+  }
 });
 
-// ===== Autocomplete de categorias (localStorage) =====
-const CAT_KEY='unikor_despesas:cats';
+/* ==========================
+   CATEGORIAS (autocomplete)
+========================== */
+const CAT_KEY = 'unikor_despesas:cats';
 function getCats(){ try{ return JSON.parse(localStorage.getItem(CAT_KEY)||'[]'); }catch{return[];} }
-function setCats(list){ localStorage.setItem(CAT_KEY, JSON.stringify(Array.from(new Set(list)).slice(0,100))); }
-function refreshCats(){ const dl=$('#listaCategorias'); dl.innerHTML=''; getCats().forEach(c=>{ const o=document.createElement('option'); o.value=c; dl.appendChild(o); }); }
+function setCats(arr){ localStorage.setItem(CAT_KEY, JSON.stringify(Array.from(new Set(arr)).slice(0,100))); }
+function refreshCats(){
+  const dl = $('#listaCategorias');
+  if (!dl) return;
+  dl.innerHTML = '';
+  getCats().forEach(c=>{
+    const o = document.createElement('option');
+    o.value = c;
+    dl.appendChild(o);
+  });
+}
 refreshCats();
 
-// ===== Helpers BR =====
+/* ==========================
+   HELPERS BR
+========================== */
 const onlyDigits = s => (s||'').replace(/\D+/g,'');
 const maskCNPJ = v => {
   const d = onlyDigits(v).slice(0,14);
@@ -34,76 +64,95 @@ const maskCNPJ = v => {
   if (d.length <= 12) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
   return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})$/, '$1.$2.$3/$4-$5');
 };
-const parseBR = n => parseFloat(String(n).replace(/\./g,'').replace(',','.'))||0;
+const parseBR = n => parseFloat(String(n).replace(/\./g,'').replace(',','.')) || 0;
 const fmtBR   = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-// ===== Navegação e inputs =====
+/* ==========================
+   NAVEGAÇÃO / INPUTS
+========================== */
 document.addEventListener('click',(ev)=>{
-  if (ev.target.id==='btnVoltar' || ev.target.closest('.logo')) { ev.preventDefault(); location.href='/'; }
+  if (ev.target.id==='btnVoltar' || ev.target.closest('.logo')){
+    ev.preventDefault(); location.href = '/';
+  }
 });
-$('#cnpj').addEventListener('input', e=> e.target.value = maskCNPJ(e.target.value));
-$('#formaPagamento').addEventListener('change', e=>{
+$('#cnpj')?.addEventListener('input', e=> e.target.value = maskCNPJ(e.target.value));
+$('#formaPagamento')?.addEventListener('change', e=>{
   const show = ['CARTAO','BOLETO'].includes(e.target.value);
-  $('#rowParcelas').classList.toggle('hidden', !show);
+  $('#rowParcelas')?.classList.toggle('hidden', !show);
 });
 
-// ===== Itens (linha dinâmica) =====
+/* ==========================
+   ITENS (tabela dinâmica)
+========================== */
 function addItem(desc='',qtd='',vu=''){
-  const tr=document.createElement('tr');
-  tr.innerHTML=`
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
     <td><input class="it-desc" value="${desc}" placeholder="Descrição"/></td>
     <td style="text-align:right"><input class="it-qtd" value="${qtd}" inputmode="decimal"/></td>
     <td style="text-align:right"><input class="it-vu" value="${vu}" inputmode="decimal"/></td>
     <td style="text-align:right"><span class="it-total">R$ 0,00</span></td>`;
-  $('#tbodyItens').appendChild(tr); calcAll();
+  $('#tbodyItens').appendChild(tr);
+  calcAll();
 }
-function remItem(){ const rows=$$('#tbodyItens tr'); if(rows.length) rows.pop().remove(); calcAll(); }
+function remItem(){
+  const rows = $$('#tbodyItens tr');
+  if (rows.length) rows.pop().remove();
+  calcAll();
+}
 function calcAll(){
-  let sumQtd=0,sumTot=0;
+  let sumQtd=0, sumTot=0;
   $$('#tbodyItens tr').forEach(tr=>{
-    const q=parseBR(tr.querySelector('.it-qtd').value);
-    const vu=parseBR(tr.querySelector('.it-vu').value);
-    const tot=q*vu;
-    tr.querySelector('.it-total').textContent=fmtBR(tot);
-    sumQtd+=q; sumTot+=tot;
+    const q  = parseBR(tr.querySelector('.it-qtd').value);
+    const vu = parseBR(tr.querySelector('.it-vu').value);
+    const tot = q * vu;
+    tr.querySelector('.it-total').textContent = fmtBR(tot);
+    sumQtd += q; sumTot += tot;
   });
-  $('#sumQtd').textContent=sumQtd.toLocaleString('pt-BR');
-  $('#sumTotal').textContent=fmtBR(sumTot);
-  if(!$('#totalNota').value) $('#totalNota').placeholder=fmtBR(sumTot);
+  $('#sumQtd').textContent   = sumQtd.toLocaleString('pt-BR');
+  $('#sumTotal').textContent = fmtBR(sumTot);
+  if (!$('#totalNota').value) $('#totalNota').placeholder = fmtBR(sumTot);
 }
-$('#btnAddItem').onclick=()=>addItem();
-$('#btnRemItem').onclick=()=>remItem();
-$('#tbodyItens').addEventListener('input', calcAll);
+$('#btnAddItem')?.addEventListener('click', ()=>addItem());
+$('#btnRemItem')?.addEventListener('click', ()=>remItem());
+$('#tbodyItens')?.addEventListener('input', calcAll);
 
-// ===== Scanner (QR/código de barras) =====
-$('#btnScanChave').onclick = ()=> startScan({
-  onResult:(text)=>{ $('#chave').value = text.replace(/\D/g,'').slice(0,44); showStatus('Chave capturada!'); stopScan(); }
-});
-$('#btnCloseScan').onclick = ()=> stopScan();
+/* ==========================
+   SCANNER (QR / BARRAS)
+========================== */
+$('#btnScanChave')?.addEventListener('click', ()=> startScan({
+  onResult:(text)=>{
+    $('#chave').value = text.replace(/\D/g,'').slice(0,44);
+    showStatus('Chave capturada!');
+    stopScan();
+  }
+}));
+$('#btnCloseScan')?.addEventListener('click', ()=> stopScan());
 
-// ===== Monta payload único (reuso: Salvar / Drive) =====
+/* ==========================
+   COLETA DO FORM (payload)
+========================== */
 function collectPayload(){
   const u = getCurrentUser();
-
-  const categoria = $('#categoria').value.trim() || 'GERAL';
+  const categoria = ($('#categoria')?.value || '').trim() || 'GERAL';
   setCats([categoria, ...getCats()]); refreshCats();
 
-  const tipo = $$('input[name="tipo"]').find(i=>i.checked)?.value || 'CUPOM';
-  const fornecedor = $('#fornecedor').value.trim();
-  const cnpj = $('#cnpj').value.trim();
-  const formaPagamento = $('#formaPagamento').value;
-  const parcelas = ['CARTAO','BOLETO'].includes(formaPagamento) ? Number($('#parcelas').value||1) : 1;
-  const chaveNFe = $('#chave').value.trim();
+  const tipo            = $$('input[name="tipo"]').find(i=>i.checked)?.value || 'CUPOM';
+  const fornecedor      = ($('#fornecedor')?.value || '').trim();
+  const cnpj            = ($('#cnpj')?.value || '').trim();
+  const formaPagamento  = $('#formaPagamento')?.value || 'DINHEIRO';
+  const parcelas        = ['CARTAO','BOLETO'].includes(formaPagamento)
+                          ? Number($('#parcelas')?.value || 1) : 1;
+  const chaveNFe        = ($('#chave')?.value || '').trim();
 
   const itens = $$('#tbodyItens tr').map(tr=>{
-    const nome = tr.querySelector('.it-desc').value.trim();
-    const qtd = parseBR(tr.querySelector('.it-qtd').value);
+    const nome  = tr.querySelector('.it-desc').value.trim();
+    const qtd   = parseBR(tr.querySelector('.it-qtd').value);
     const vunit = parseBR(tr.querySelector('.it-vu').value);
     return { nome, qtd, vunit, total: qtd*vunit };
   }).filter(i=> i.nome || i.qtd || i.vunit);
 
   const totalCalc = itens.reduce((s,i)=>s+i.total,0);
-  const totalNota = $('#totalNota').value ? parseBR($('#totalNota').value) : totalCalc;
+  const totalNota = $('#totalNota')?.value ? parseBR($('#totalNota').value) : totalCalc;
 
   return {
     categoria, tipo, fornecedor, cnpj,
@@ -117,7 +166,9 @@ function collectPayload(){
   };
 }
 
-// ===== SALVAR (somente Firestore) =====
+/* ==========================
+   AÇÕES: SALVAR / ADICIONAR NOTA
+========================== */
 $('#btnSalvar')?.addEventListener('click', async ()=>{
   const u = getCurrentUser();
   if (!u){ alert('Faça login para salvar.'); return; }
@@ -130,14 +181,16 @@ $('#btnSalvar')?.addEventListener('click', async ()=>{
     alert('Registro salvo no Firestore.');
   }catch(err){
     console.error(err);
-    showStatus('Falha ao salvar.');
-    alert('Sem permissão para salvar no Firestore.');
+    const msg = /tenantId/i.test(err.message)
+      ? 'Sua conta não possui tenant habilitado. Contate o administrador.'
+      : 'Sem permissão para salvar no Firestore.';
+    showStatus(msg);
+    alert(msg);
   }
 });
 
-// ===== ADICIONAR NOTA (abre Drive, salva em background sem travar) =====
 $('#btnAdicionarNota')?.addEventListener('click', async (e)=>{
-  window.open(DRIVE_URL,'_blank','noopener'); // abre já (evita bloqueio)
+  window.open(DRIVE_URL,'_blank','noopener');
   e.preventDefault();
 
   const payload = collectPayload();
@@ -150,5 +203,8 @@ $('#btnAdicionarNota')?.addEventListener('click', async (e)=>{
   }
 });
 
-// ===== Init =====
-addItem(); calcAll();
+/* ==========================
+   INIT
+========================== */
+addItem();
+calcAll();
