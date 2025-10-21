@@ -192,6 +192,8 @@ async function uploadPdfParaStorage(blob, filename){
 }
 
 /* ===================== Ações ===================== */
+
+// >>>> AJUSTADO: abre preview primeiro (mantém user-activation) e persiste depois
 async function gerarPDF() {
   const botao = document.getElementById('btnGerarPdf');
   if (!botao) return;
@@ -203,9 +205,15 @@ async function gerarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Gerando PDF...';
   showOverlay();
   try {
-    await persistirComTimeout(4000);
+    // 1) ABRE JÁ (mantém user-activation para window.open)
     await gerarPDFPreview();
     toastOk('PDF gerado (preview)');
+
+    // 2) PERSISTE EM PARALELO (não bloqueia o gesto)
+    (async () => {
+      try { await persistirComTimeout(4000); } catch(_) {}
+    })();
+
   } catch (e) {
     console.error('[PDF] Erro ao gerar:', e);
     toastErro('Erro ao gerar PDF');
@@ -216,6 +224,7 @@ async function gerarPDF() {
   }
 }
 
+// >>>> AJUSTADO: salva primeiro (File Picker/Download) e depois persiste + upload
 async function salvarPDF() {
   const botao = document.getElementById('btnSalvarPdf');
   if (!botao) return;
@@ -227,15 +236,18 @@ async function salvarPDF() {
   botao.disabled = true; botao.textContent = '⏳ Salvando PDF...';
   showOverlay();
   try {
-    await persistirComTimeout(4000);
-
-    // salva local
+    // 1) SALVA JÁ (mantém user-activation)
     const { nome } = await salvarPDFLocal();
     toastOk(`PDF salvo: ${nome}`);
 
-    // gera o mesmo PDF (blob) e sobe p/ Storage (1x por pedido)
-    const { blob, nomeArq } = await construirPDF();
-    await uploadPdfParaStorage(blob, nomeArq);
+    // 2) EM PARALELO: gerar blob, persistir e subir pro Storage (sem travar UI)
+    (async () => {
+      try {
+        const { blob, nomeArq } = await construirPDF();
+        await persistirComTimeout(4000);
+        await uploadPdfParaStorage(blob, nomeArq);
+      } catch (_) {}
+    })();
 
   } catch (e) {
     console.error('[PDF] Erro ao salvar:', e);
@@ -247,11 +259,11 @@ async function salvarPDF() {
   }
 }
 
+// Compartilhar já estava correto (compartilha primeiro, depois persiste/upload)
 async function compartilharPDF() {
   const botao = document.getElementById('btnCompartilharPdf');
   if (!botao) return;
 
-  // importações leves só quando necessário
   const { construirPDF } = await import('./pdf.js');
 
   if (!validarAntesGerar()) return;
