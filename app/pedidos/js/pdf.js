@@ -277,10 +277,9 @@ function construirPDFBase(data){
     ? String(data.pagamento).toUpperCase()
     : "NÃO INFORMADO";
 
-  const padX = 3;
-  const innerW = larguraCaixa - padX * 2;
-  const linhasPag = splitToWidth(doc, pagamentoTxt, innerW);
-  const boxH = Math.max(12, 7 + linhasPag.length * 4.4);
+const padX = 3;
+const innerWPag = larguraCaixa - padX * 2;   // <- nome diferente
+const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
 
   doc.rect(margemX, y, larguraCaixa, boxH, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
