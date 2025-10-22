@@ -110,7 +110,7 @@ export async function construirPDF(){
         const obsInput = itemEl.querySelector('.obsItem');
 
         const produto = produtoInput?.value?.trim() || '';
-        const tipo = (tipoSelect?.value || 'KG').toUpperCase();
+        aconst tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
         const qtdTxt = (quantidadeInput?.value ?? '').trim();
         const precoTxt = (precoInput?.value ?? '').trim();
@@ -277,9 +277,10 @@ function construirPDFBase(data){
     ? String(data.pagamento).toUpperCase()
     : "NÃO INFORMADO";
 
-const padX = 3;
-const innerWPag = larguraCaixa - padX * 2;   // <- nome diferente
-const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
+  const padX = 3;
+  const innerWPag = larguraCaixa - padX * 2;    // evita conflito com innerW do endereço
+  const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
+  const boxH = Math.max(12, 7 + linhasPag.length * 4.4); // <- FALTAVA ESSA LINHA
 
   doc.rect(margemX, y, larguraCaixa, boxH, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
@@ -312,7 +313,7 @@ const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
   (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
     const qtdStr = String(it.qtdTxt || "");
-const tipo = it.tipo || "KG";
+    const tipo = it.tipo || "KG";
     const precoTxt = it.precoTxt || "";
     const totalCents = Math.round(it.totalCents || 0);
     const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
