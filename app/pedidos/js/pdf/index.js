@@ -1,4 +1,4 @@
-// index.js
+// /app/pedidos/js/pdf/index.js
 import { ensureFreteBeforePDF, getFreteAtual } from '../frete.js';
 import { db, getTenantId, doc, getDoc } from '../firebase.js';
 import {
@@ -43,6 +43,7 @@ export async function construirPDF(){
         const obsInput = itemEl.querySelector('.obsItem');
 
         const produto = produtoInput?.value?.trim() || '';
+        the:
         const tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
         const qtdTxt = (quantidadeInput?.value ?? '').trim();
@@ -166,26 +167,41 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
+/* ======== Compartilhamento nativo (forçar ANEXO, sem link) ======== */
 export async function compartilharComBlob(blob, nomeArq='pedido.pdf'){
+  // cria o arquivo com o nome certo
   const file = new File([blob], nomeArq, { type:'application/pdf', lastModified:Date.now() });
-  const canLevel2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
-  if (canLevel2 && navigator.canShare({ files:[file] })) {
-    try { await navigator.share({ files:[file], title:'Pedido', text:'Segue o PDF do pedido.' }); return { compartilhado:true }; }
-    catch(e){ if (String(e?.name||e).includes('AbortError')) return { compartilhado:false, cancelado:true }; }
+
+  // Web Share Level 2 com arquivos
+  const level2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
+  if (level2 && navigator.canShare({ files:[file] })) {
+    try {
+      // ⚠️ não enviar url/text aqui — alguns apps preferem link se tiver
+      await navigator.share({ files:[file], title: nomeArq });
+      return { compartilhado:true };
+    } catch (e) {
+      if (String(e?.name||e).includes('AbortError')) {
+        return { compartilhado:false, cancelado:true };
+      }
+      // cai para fallback
+    }
   }
+
+  // Fallback sem link: abrir visualizador (Quick Look no iOS / visor no Android/PC)
   try{
     const url = URL.createObjectURL(blob);
-    if ('share' in navigator && !canLevel2) {
-      try { await navigator.share({ title:nomeArq, text:'PDF do pedido', url }); setTimeout(()=>URL.revokeObjectURL(url),15000); return { compartilhado:true }; }
-      catch(e){ if (String(e?.name||e).includes('AbortError')) { URL.revokeObjectURL(url); return { compartilhado:false, cancelado:true }; } }
-    }
-    window.open(url,'_blank','noopener,noreferrer'); setTimeout(()=>URL.revokeObjectURL(url),15000);
+    window.open(url,'_blank','noopener,noreferrer');
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
     return { compartilhado:false, fallback:true };
   }catch{
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nomeArq; document.body.appendChild(a); a.click(); a.remove();
+    // Último recurso: download
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=nomeArq;
+    document.body.appendChild(a); a.click(); a.remove();
     return { compartilhado:false, fallback:true, download:true };
   }
 }
+
 export async function compartilharPDFNativo(){
   const { blob, nomeArq } = await construirPDF();
   return compartilharComBlob(blob, nomeArq);
