@@ -6,10 +6,24 @@ import {
 } from './helpers.js';
 import { construirPDFBase } from './base.js';
 
+/* ====================== Plataforma ====================== */
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+function isAndroid(){ return /Android/.test(navigator.userAgent); }
+function hasWebShareWithFiles(){
+  // iOS 13.4+ e Android modernos
+  return !!(navigator && 'share' in navigator && 'canShare' in navigator);
+}
+function montarTextoCompartilhamento(nomeArq){
+  const cliente = (document.getElementById('cliente')?.value || '').trim();
+  const entregaISO = document.getElementById('entrega')?.value || '';
+  if (cliente && entregaISO) return `Pedido ${cliente} ${formatarData(entregaISO)}`;
+  return `Pedido ${nomeArq}`;
+}
+
+/* =================== Construção do PDF =================== */
 export async function construirPDF(){
   await ensureFreteBeforePDF();
 
-  // Coleta do DOM
   const form = {
     cliente     : (document.getElementById("cliente")?.value || "").trim().toUpperCase(),
     endereco    : (document.getElementById("endereco")?.value || "").trim().toUpperCase(),
@@ -95,7 +109,7 @@ export async function construirPDF(){
   });
 }
 
-// Reimpressão
+/* ================= Reimpressão (Firestore) ================= */
 function normalizarPedidoSalvo(p){
   const itens = Array.isArray(p?.itens) ? p.itens.map(it=>{
     const tipo = String(it.tipo||'KG').toUpperCase();
@@ -136,7 +150,7 @@ async function construirPDFDePedidoSalvo(docData){
   return construirPDFBase(normalizarPedidoSalvo(docData));
 }
 
-/* ========= APIs públicas: preview/salvar/share ========= */
+/* ================= Preview / Salvar ================== */
 export async function gerarPDFPreview(){
   const { blob } = await construirPDF();
   const url = URL.createObjectURL(blob);
@@ -166,50 +180,44 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
-/* ======== Compartilhamento nativo (ANEXO c/ nome + texto “Nome cliente data entrega”) ======== */
-function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
-
-function montarTextoCompartilhamento(nomeArq){
-  const cliente = (document.getElementById('cliente')?.value || '').trim();
-  const entregaISO = document.getElementById('entrega')?.value || '';
-  if (cliente && entregaISO){
-    return `Pedido ${cliente} ${formatarData(entregaISO)}`;
-  }
-  // fallback se não houver campos no DOM
-  return `Pedido ${nomeArq}`;
-}
-
+/* ======== Compartilhamento: iPhone/Android (anexo) | PC (download + WhatsApp Web) ======== */
 export async function compartilharComBlob(blob, nomeArq='pedido.pdf'){
   const file = new File([blob], nomeArq, { type:'application/pdf', lastModified:Date.now() });
   const text = montarTextoCompartilhamento(nomeArq);
 
-  const level2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
-  if (level2 && navigator.canShare({ files:[file] })) {
+  // Mobile com Web Share + arquivos -> ANEXO direto (sem link)
+  if (hasWebShareWithFiles() && navigator.canShare({ files:[file] })) {
     try {
-      // iOS costuma exigir algum texto para exibir o WhatsApp no share sheet
-      const shareData = { files:[file], title:nomeArq, text };
-      await navigator.share(shareData);
+      await navigator.share({ files:[file], title:nomeArq, text });
       return { compartilhado:true };
     } catch (e) {
-      if (String(e?.name||e).includes('AbortError')) {
-        return { compartilhado:false, cancelado:true };
-      }
-      // continua para fallback
+      if (String(e?.name||e).includes('AbortError')) return { compartilhado:false, cancelado:true };
+      // segue para fallback
     }
   }
 
-  // Fallback visualizador (Quick Look no iOS / visor no Android/PC)
+  // Desktop/ambiente sem share: baixa o arquivo e abre WhatsApp Web com o texto
   try{
     const url = URL.createObjectURL(blob);
-    if (isIOS()) window.location.assign(url);
-    else window.open(url,'_blank','noopener,noreferrer');
-    setTimeout(()=>URL.revokeObjectURL(url),15000);
-    return { compartilhado:false, fallback:true };
+    // dispara download automático (para o usuário anexar no WhatsApp Web)
+    const a = document.createElement('a');
+    a.href = url; a.download = nomeArq; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 15000);
+
+    // abre WhatsApp (web) com o texto pré-preenchido
+    const wa = (isAndroid() || isIOS())
+      ? `whatsapp://send?text=${encodeURIComponent(text)}`
+      : `https://web.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    // usar location para manter gesto do usuário
+    window.location.href = wa;
+
+    return { compartilhado:false, fallback:true, web:true };
   }catch{
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob); a.download=nomeArq;
-    document.body.appendChild(a); a.click(); a.remove();
-    return { compartilhado:false, fallback:true, download:true };
+    // último recurso: só abre o PDF
+    const vis = URL.createObjectURL(blob);
+    window.open(vis,'_blank','noopener,noreferrer');
+    setTimeout(()=>URL.revokeObjectURL(vis),15000);
+    return { compartilhado:false, fallback:true };
   }
 }
 
@@ -218,6 +226,7 @@ export async function compartilharPDFNativo(){
   return compartilharComBlob(blob, nomeArq);
 }
 
+/* =============== Reimpressão (Firestore) =============== */
 export async function gerarPDFPreviewDePedidoFirestore(pedidoId){
   const tenantId = await getTenantId();
   const ref = doc(db, "tenants", tenantId, "pedidos", pedidoId);
@@ -228,5 +237,6 @@ export async function gerarPDFPreviewDePedidoFirestore(pedidoId){
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(()=>URL.revokeObjectURL(url), 30000);
 }
+
 // útil p/ fila
 export { construirPDFBase as __construirPDFBasePublic };
