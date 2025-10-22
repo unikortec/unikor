@@ -1,7 +1,15 @@
-// helpers.js
+// /app/pedidos/js/pdf/helpers.js
 export function digitsOnly(v) { return String(v || "").replace(/\D/g, ""); }
-export function formatarData(iso) { if (!iso) return ""; const [a,m,d]=iso.split("-"); return `${d}/${m}/${a.slice(-2)}`; }
-export function diaDaSemanaExtenso(iso){ if(!iso) return ""; const d=new Date(iso+"T00:00:00"); return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase(); }
+export function formatarData(iso) {
+  if (!iso) return "";
+  const [a,m,d] = String(iso).split("-");
+  return `${d}/${m}/${(a||"").slice(-2)}`;
+}
+export function diaDaSemanaExtenso(iso){
+  if(!iso) return "";
+  const d = new Date(iso+"T00:00:00");
+  return d.toLocaleDateString('pt-BR',{weekday:'long'}).toUpperCase();
+}
 export function splitToWidth(doc, t, w){ return doc.splitTextToSize(String(t || ""), w); }
 
 export function twoFirstNamesCamel(client){
@@ -21,17 +29,37 @@ export function nomeArquivoPedido(cliente, entregaISO, horaEntrega) {
   return `${twoFirstNamesCamel(cliente)}_${dia||'DD'}_${mes||'MM'}_${aa}_H${hh}-${mm}.pdf`;
 }
 
-/* Precisão decimal */
-export function strToCents(str){
-  const s = String(str ?? "").trim().replace(/\s+/g,"").replace(/\./g,"").replace(",",";");
+/* ======== Parsers numéricos robustos ========
+   Aceitam "18,97", "18.97", "1.234,56", "1,234.56", "15", "0,250" etc. */
+function parseFlexible(str, scale){
+  let s = String(str ?? "").trim();
   if (!s) return 0;
-  return Math.round(Number(s.replace(";", ".")) * 100);
+  s = s.replace(/\s/g, "");
+
+  // Mantém apenas dígitos, separadores e sinal
+  s = s.replace(/[^0-9.,-]/g, "");
+
+  // Detecta separador decimal:
+  // - se tem vírgula e ponto, assume ponto = milhar e vírgula = decimal ("1.234,56")
+  // - se só vírgula, usa vírgula como decimal
+  // - se só ponto, usa ponto como decimal
+  if (s.includes(",") && s.includes(".")) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (s.includes(",")) {
+    s = s.replace(",", ".");
+  }
+  const n = Number(s);
+  if (!isFinite(n)) return 0;
+  return Math.round(n * scale);
 }
-export function strToThousandths(str){
-  const s = String(str ?? "").trim().replace(",",";");
-  if (!s) return 0;
-  return Math.round(Number(s.replace(";", ".")) * 1000);
+
+export function strToCents(str){        // preço -> centavos
+  return parseFlexible(str, 100);
 }
+export function strToThousandths(str){  // quantidade -> milésimos (KG*1000 ou UN*1000 quando aplicável)
+  return parseFlexible(str, 1000);
+}
+
 export function moneyBRfromCents(cents){
   const v = Math.round(cents);
   const sign = v < 0 ? "-" : "";
