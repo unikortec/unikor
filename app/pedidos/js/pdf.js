@@ -110,7 +110,7 @@ export async function construirPDF(){
         const obsInput = itemEl.querySelector('.obsItem');
 
         const produto = produtoInput?.value?.trim() || '';
-        aconst tipo = (tipoSelect?.value || 'KG').toUpperCase();
+        const tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
         const qtdTxt = (quantidadeInput?.value ?? '').trim();
         const precoTxt = (precoInput?.value ?? '').trim();
@@ -278,9 +278,9 @@ function construirPDFBase(data){
     : "NÃO INFORMADO";
 
   const padX = 3;
-  const innerWPag = larguraCaixa - padX * 2;    // evita conflito com innerW do endereço
+  const innerWPag = larguraCaixa - padX * 2;           // nome exclusivo p/ evitar colisão
   const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
-  const boxH = Math.max(12, 7 + linhasPag.length * 4.4); // <- FALTAVA ESSA LINHA
+  const boxH = Math.max(12, 7 + linhasPag.length * 4.4); // <- FALTAVA!
 
   doc.rect(margemX, y, larguraCaixa, boxH, "S");
   doc.setFont("helvetica","bold"); doc.setFontSize(8);
@@ -313,7 +313,7 @@ function construirPDFBase(data){
   (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
     const qtdStr = String(it.qtdTxt || "");
-    const tipo = it.tipo || "KG";
+    const tipo = it.tipo || "KG";                     // <- sem lixo de merge
     const precoTxt = it.precoTxt || "";
     const totalCents = Math.round(it.totalCents || 0);
     const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
