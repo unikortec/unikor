@@ -2,7 +2,7 @@
 import { ensureFreteBeforePDF, getFreteAtual } from '../frete.js';
 import { db, getTenantId, doc, getDoc } from '../firebase.js';
 import {
-  digitsOnly, strToCents, strToThousandths, nomeArquivoPedido
+  digitsOnly, strToCents, strToThousandths, nomeArquivoPedido, formatarData
 } from './helpers.js';
 import { construirPDFBase } from './base.js';
 
@@ -43,7 +43,6 @@ export async function construirPDF(){
         const obsInput = itemEl.querySelector('.obsItem');
 
         const produto = produtoInput?.value?.trim() || '';
-        the:
         const tipo = (tipoSelect?.value || 'KG').toUpperCase();
 
         const qtdTxt = (quantidadeInput?.value ?? '').trim();
@@ -167,34 +166,46 @@ export async function salvarPDFLocal(){
   return { nome: nomeArq };
 }
 
-/* ======== Compartilhamento nativo (forçar ANEXO, sem link) ======== */
-export async function compartilharComBlob(blob, nomeArq='pedido.pdf'){
-  // cria o arquivo com o nome certo
-  const file = new File([blob], nomeArq, { type:'application/pdf', lastModified:Date.now() });
+/* ======== Compartilhamento nativo (ANEXO c/ nome + texto “Nome cliente data entrega”) ======== */
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
 
-  // Web Share Level 2 com arquivos
+function montarTextoCompartilhamento(nomeArq){
+  const cliente = (document.getElementById('cliente')?.value || '').trim();
+  const entregaISO = document.getElementById('entrega')?.value || '';
+  if (cliente && entregaISO){
+    return `Pedido ${cliente} ${formatarData(entregaISO)}`;
+  }
+  // fallback se não houver campos no DOM
+  return `Pedido ${nomeArq}`;
+}
+
+export async function compartilharComBlob(blob, nomeArq='pedido.pdf'){
+  const file = new File([blob], nomeArq, { type:'application/pdf', lastModified:Date.now() });
+  const text = montarTextoCompartilhamento(nomeArq);
+
   const level2 = !!(navigator && 'share' in navigator && 'canShare' in navigator);
   if (level2 && navigator.canShare({ files:[file] })) {
     try {
-      // ⚠️ não enviar url/text aqui — alguns apps preferem link se tiver
-      await navigator.share({ files:[file], title: nomeArq });
+      // iOS costuma exigir algum texto para exibir o WhatsApp no share sheet
+      const shareData = { files:[file], title:nomeArq, text };
+      await navigator.share(shareData);
       return { compartilhado:true };
     } catch (e) {
       if (String(e?.name||e).includes('AbortError')) {
         return { compartilhado:false, cancelado:true };
       }
-      // cai para fallback
+      // continua para fallback
     }
   }
 
-  // Fallback sem link: abrir visualizador (Quick Look no iOS / visor no Android/PC)
+  // Fallback visualizador (Quick Look no iOS / visor no Android/PC)
   try{
     const url = URL.createObjectURL(blob);
-    window.open(url,'_blank','noopener,noreferrer');
+    if (isIOS()) window.location.assign(url);
+    else window.open(url,'_blank','noopener,noreferrer');
     setTimeout(()=>URL.revokeObjectURL(url),15000);
     return { compartilhado:false, fallback:true };
   }catch{
-    // Último recurso: download
     const a=document.createElement('a');
     a.href=URL.createObjectURL(blob); a.download=nomeArq;
     document.body.appendChild(a); a.click(); a.remove();
