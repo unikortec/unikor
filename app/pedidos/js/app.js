@@ -13,7 +13,7 @@ import {
   doc, setDoc, serverTimestamp
 } from './firebase.js';
 
-// 🔸 Storage SDK (ref, upload, URL, e também getStorage para forçar bucket)
+// Storage SDK (+ getStorage para forçar bucket)
 import {
   getStorage, ref, uploadBytes, getDownloadURL
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
@@ -30,7 +30,6 @@ function openWhatsAppWithText(text){
   const waUrl = isIOS()
     ? `whatsapp://send?text=${encodeURIComponent(text)}`
     : `https://wa.me/?text=${encodeURIComponent(text)}`;
-  // usar location.href mantém o gesto do usuário (menos chance de bloqueio)
   window.location.href = waUrl;
 }
 
@@ -128,17 +127,13 @@ async function persistirComTimeout(ms=4000){
 }
 
 /* ===================== Upload PDF p/ Storage ===================== */
-// - força o bucket certo (regras Storage) via getStorage(app, "gs://...")
-// - sobe 1x por pedido, salva pdfUrl no Firestore para compartilhamento por link
 async function uploadPdfParaStorage(blob, filename){
   try{
     const tenantId = await getTenantId();
     const docId = localStorage.getItem('unikor:lastPedidoId');
     if (!tenantId || !docId) return null;
 
-    // evita duplicar upload
     const lastUp = localStorage.getItem('unikor:lastUploadedId');
-    // mesmo se já subiu, vamos tentar obter a URL depois
     const storageForced = getStorage(app, "gs://unikorapp.firebasestorage.app");
     const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
     const storageRef = ref(storageForced, path);
@@ -185,14 +180,8 @@ async function salvarPDF(){
   botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Salvando...';showOverlay();
   try{
     await persistirComTimeout(4000);
-
-    // salva local (File System Access API quando disponível)
-    const { nome }=await salvarPDFLocal();
-    toastOk(`PDF salvo: ${nome}`);
-
-    // sobe p/ Storage e salva URL p/ consulta futura
-    const { blob, nomeArq }=await construirPDF();
-    await uploadPdfParaStorage(blob,nomeArq);
+    const { nome }=await salvarPDFLocal();toastOk(`PDF salvo: ${nome}`);
+    const { blob, nomeArq }=await construirPDF();await uploadPdfParaStorage(blob,nomeArq);
   }catch(e){toastErro('Erro ao salvar PDF');console.error(e);}
   finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
 }
@@ -204,27 +193,21 @@ async function compartilharPDF(){
   botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Compartilhando...';showOverlay();
 
   try{
-    // 1) constrói já (aproveita a user-activation do clique)
+    // 1) Gera o PDF no gesto do clique
     const { blob, nomeArq } = await construirPDF();
 
-    // 2) tenta Web Share com arquivo (Android moderno / iOS recente)
+    // 2) Tenta compartilhar como ARQUIVO (WhatsApp recebe anexo com o nome certo)
     const res = await compartilharComBlob(blob, nomeArq);
     if (res?.compartilhado) {
-      // faz persistência + upload em background (sem travar UI)
       (async()=>{ try{ await persistirComTimeout(4000); await uploadPdfParaStorage(blob, nomeArq); }catch{} })();
       toastOk('PDF compartilhado');
       return;
     }
-    if (res?.cancelado) {
-      toastOk('Compartilhamento cancelado');
-      return;
-    }
+    if (res?.cancelado) { toastOk('Compartilhamento cancelado'); return; }
 
-    // 3) se não deu share com arquivo, persistimos e subimos para gerar url
+    // 3) Sem Level 2: persiste + sobe e manda link via WhatsApp (fallback)
     await persistirComTimeout(4000);
     const up = await uploadPdfParaStorage(blob, nomeArq);
-
-    // 4) se temos URL pública autenticada (downloadURL), mandamos pelo WhatsApp
     if (up?.url) {
       const msg = `Pedido ${nomeArq}\n${up.url}`;
       openWhatsAppWithText(msg);
@@ -232,18 +215,14 @@ async function compartilharPDF(){
       return;
     }
 
-    // 5) último fallback: abrir o PDF em nova aba (Quick Look no iOS / visor no Android/PC)
+    // 4) Último recurso: abrir o PDF
     const url = URL.createObjectURL(blob);
-    // usar window.open pode ser bloqueado se perder o gesto; mas estamos ainda no clique do botão
     window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
     toastOk('Abrimos o PDF (fallback)');
 
-  } catch (e) {
-    toastErro('Erro ao compartilhar'); console.error(e);
-  } finally {
-    hideOverlay(); botao.disabled=false; botao.textContent=txt;
-  }
+  }catch(e){ toastErro('Erro ao compartilhar'); console.error(e); }
+  finally{ hideOverlay(); botao.disabled=false; botao.textContent=txt; }
 }
 
 /* ===================== Reimpressão ===================== */
