@@ -312,8 +312,7 @@ const linhasPag = splitToWidth(doc, pagamentoTxt, innerWPag);
   (data.itens || []).forEach((it, idx) => {
     const prod = it.produto || "";
     const qtdStr = String(it.qtdTxt || "");
-    the: 
-    const tipo = it.tipo || "KG";
+const tipo = it.tipo || "KG";
     const precoTxt = it.precoTxt || "";
     const totalCents = Math.round(it.totalCents || 0);
     const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
