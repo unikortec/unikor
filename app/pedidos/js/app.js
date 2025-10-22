@@ -13,7 +13,10 @@ import {
   doc, setDoc, serverTimestamp
 } from './firebase.js';
 
-import { ref, uploadBytes } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
+// 🔸 Storage SDK (ref, upload, URL, e também getStorage para forçar bucket)
+import {
+  getStorage, ref, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 
 console.log('[APP] Pedidos inicializado');
 
@@ -21,6 +24,15 @@ console.log('[APP] Pedidos inicializado');
 function digitsOnly(v){ return String(v||'').replace(/\D/g,''); }
 function num(n){ const v = Number(n); return isFinite(v) ? v : 0; }
 function formatarNome(input){ if(!input)return; input.value = up(input.value.replace(/_/g,' ').replace(/\s{2,}/g,' ')); }
+
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent); }
+function openWhatsAppWithText(text){
+  const waUrl = isIOS()
+    ? `whatsapp://send?text=${encodeURIComponent(text)}`
+    : `https://wa.me/?text=${encodeURIComponent(text)}`;
+  // usar location.href mantém o gesto do usuário (menos chance de bloqueio)
+  window.location.href = waUrl;
+}
 
 function coletarDadosFormulario() {
   return {
@@ -116,24 +128,42 @@ async function persistirComTimeout(ms=4000){
 }
 
 /* ===================== Upload PDF p/ Storage ===================== */
+// - força o bucket certo (regras Storage) via getStorage(app, "gs://...")
+// - sobe 1x por pedido, salva pdfUrl no Firestore para compartilhamento por link
 async function uploadPdfParaStorage(blob, filename){
   try{
     const tenantId = await getTenantId();
     const docId = localStorage.getItem('unikor:lastPedidoId');
-    if (!tenantId || !docId) return;
+    if (!tenantId || !docId) return null;
+
+    // evita duplicar upload
     const lastUp = localStorage.getItem('unikor:lastUploadedId');
-    if (lastUp === docId) return;
-
+    // mesmo se já subiu, vamos tentar obter a URL depois
+    const storageForced = getStorage(app, "gs://unikorapp.firebasestorage.app");
     const path = `tenants/${tenantId}/pedidos/${docId}.pdf`;
-    await uploadBytes(ref(storage, path), blob, { contentType: 'application/pdf' });
+    const storageRef = ref(storageForced, path);
 
-    await setDoc(doc(db, "tenants", tenantId, "pedidos", docId),
-      { pdfPath:path, pdfCreatedAt:serverTimestamp() },
-      { merge:true });
+    if (lastUp !== docId) {
+      await uploadBytes(storageRef, blob, { contentType: 'application/pdf' });
+      localStorage.setItem('unikor:lastUploadedId', docId);
+      console.info('[Storage] PDF enviado:', path);
+    } else {
+      console.info('[Storage] já subido este id, só pegando URL:', docId);
+    }
 
-    localStorage.setItem('unikor:lastUploadedId', docId);
-    console.info('[Storage] PDF enviado:', path);
-  }catch(e){ console.warn('[Storage] Falha no upload:', e?.message||e); }
+    const url = await getDownloadURL(storageRef).catch(()=>null);
+
+    await setDoc(
+      doc(db, "tenants", tenantId, "pedidos", docId),
+      { pdfPath: path, ...(url ? { pdfUrl: url } : {}), pdfCreatedAt: serverTimestamp() },
+      { merge: true }
+    );
+
+    return { path, url, id: docId };
+  }catch(e){
+    console.warn('[Storage] Falha no upload/getURL:', e?.message || e);
+    return null;
+  }
 }
 
 /* ===================== Ações ===================== */
@@ -155,8 +185,14 @@ async function salvarPDF(){
   botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Salvando...';showOverlay();
   try{
     await persistirComTimeout(4000);
-    const { nome }=await salvarPDFLocal();toastOk(`PDF salvo: ${nome}`);
-    const { blob, nomeArq }=await construirPDF();await uploadPdfParaStorage(blob,nomeArq);
+
+    // salva local (File System Access API quando disponível)
+    const { nome }=await salvarPDFLocal();
+    toastOk(`PDF salvo: ${nome}`);
+
+    // sobe p/ Storage e salva URL p/ consulta futura
+    const { blob, nomeArq }=await construirPDF();
+    await uploadPdfParaStorage(blob,nomeArq);
   }catch(e){toastErro('Erro ao salvar PDF');console.error(e);}
   finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
 }
@@ -166,15 +202,48 @@ async function compartilharPDF(){
   const { construirPDF, compartilharComBlob } = await import('./pdf.js');
   if(!validarAntesGerar())return;
   botao.disabled=true;const txt=botao.textContent;botao.textContent='⏳ Compartilhando...';showOverlay();
+
   try{
-    const { blob,nomeArq }=await construirPDF();
-    const res=await compartilharComBlob(blob,nomeArq);
-    (async()=>{try{await persistirComTimeout(4000);await uploadPdfParaStorage(blob,nomeArq);}catch(_){}})();
-    if(res.compartilhado)toastOk('PDF compartilhado');
-    else if(res.cancelado)toastOk('Compartilhamento cancelado');
-    else toastOk('Abrimos o PDF (fallback)');
-  }catch(e){toastErro('Erro ao compartilhar');console.error(e);}
-  finally{hideOverlay();botao.disabled=false;botao.textContent=txt;}
+    // 1) constrói já (aproveita a user-activation do clique)
+    const { blob, nomeArq } = await construirPDF();
+
+    // 2) tenta Web Share com arquivo (Android moderno / iOS recente)
+    const res = await compartilharComBlob(blob, nomeArq);
+    if (res?.compartilhado) {
+      // faz persistência + upload em background (sem travar UI)
+      (async()=>{ try{ await persistirComTimeout(4000); await uploadPdfParaStorage(blob, nomeArq); }catch{} })();
+      toastOk('PDF compartilhado');
+      return;
+    }
+    if (res?.cancelado) {
+      toastOk('Compartilhamento cancelado');
+      return;
+    }
+
+    // 3) se não deu share com arquivo, persistimos e subimos para gerar url
+    await persistirComTimeout(4000);
+    const up = await uploadPdfParaStorage(blob, nomeArq);
+
+    // 4) se temos URL pública autenticada (downloadURL), mandamos pelo WhatsApp
+    if (up?.url) {
+      const msg = `Pedido ${nomeArq}\n${up.url}`;
+      openWhatsAppWithText(msg);
+      toastOk('Abrindo WhatsApp…');
+      return;
+    }
+
+    // 5) último fallback: abrir o PDF em nova aba (Quick Look no iOS / visor no Android/PC)
+    const url = URL.createObjectURL(blob);
+    // usar window.open pode ser bloqueado se perder o gesto; mas estamos ainda no clique do botão
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    toastOk('Abrimos o PDF (fallback)');
+
+  } catch (e) {
+    toastErro('Erro ao compartilhar'); console.error(e);
+  } finally {
+    hideOverlay(); botao.disabled=false; botao.textContent=txt;
+  }
 }
 
 /* ===================== Reimpressão ===================== */
@@ -201,11 +270,15 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('btnReimprimirUltimo')?.addEventListener('click',reimprimirUltimoPedidoSalvo);
 
   const inputCliente=document.getElementById('cliente');
-  if(inputCliente){inputCliente.addEventListener('change',()=>formatarNome(inputCliente));inputCliente.addEventListener('blur',()=>formatarNome(inputCliente));}
+  if(inputCliente){
+    inputCliente.addEventListener('change',()=>formatarNome(inputCliente));
+    inputCliente.addEventListener('blur',()=>formatarNome(inputCliente));
+  }
 });
 
 window.gerarPDF=gerarPDF;
 window.salvarPDF=salvarPDF;
 window.compartilharPDF=compartilharPDF;
 window.reimprimirUltimoPedidoSalvo=reimprimirUltimoPedidoSalvo;
+
 console.log('[APP] Configurado (desktop + mobile ok)');
