@@ -1,113 +1,256 @@
-// app/pedidos/js/clientes-autofill.js
-// Sugestões enquanto digita (une clienteUpper e nomeUpper) + preenche formulário
-// e garante que o cliente exista com id=nomeUpper (sem duplicar).
+// app/pedidos/js/modal-cliente.js
+import { salvarCliente, buscarClienteInfo, clientesMaisUsados, listarClientesAlfabetico } from './clientes.js';
+import { up, maskCNPJ, maskCEP, maskTelefone, digitsOnly } from './utils.js';
+import { waitForLogin, getCurrentUser } from './firebase.js';
 
-import {
-  db, getTenantId, waitForLogin,
-  collection, query, orderBy, startAt, endAt, limit, getDocs, doc, getDoc
-} from './firebase.js';
-import { up } from './utils.js';
-import { buscarClienteInfo, salvarCliente } from './clientes.js';
+console.log('[ModalCliente] módulo carregado');
 
-const QTD_SUGESTOES = 20;
-function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+let modalInjected = false;
 
-/** Busca sugestões em dois índices: clienteUpper e nomeUpper (legado). */
-async function buscarSugestoes(prefixUpper){
-  const tenantId = await getTenantId();
-  const col = collection(db, 'tenants', tenantId, 'clientes');
+function injectModal() {
+  if (modalInjected || document.getElementById('modalCliente')) return;
 
-  const qA = query(
-    col, orderBy('clienteUpper'),
-    startAt(prefixUpper), endAt(prefixUpper + '\uf8ff'), limit(QTD_SUGESTOES)
-  );
-  const qB = query(
-    col, orderBy('nomeUpper'),
-    startAt(prefixUpper), endAt(prefixUpper + '\uf8ff'), limit(QTD_SUGESTOES)
-  );
+  const modalHTML = `
+    <div id="modalCliente" class="modal hidden">
+      <div class="modal-backdrop" data-close="1"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalClienteTitulo">
+        <div class="modal-header">
+          <h3 id="modalClienteTitulo">Novo Cliente</h3>
+          <button class="modal-close" id="modalClienteFechar" aria-label="Fechar">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label for="mc_nome">Nome/Razão Social:</label>
+            <input id="mc_nome" list="mc_listaClientes" type="text" autocomplete="off" />
+            <datalist id="mc_listaClientes"></datalist>
+            <small class="inline-help">Selecione para editar um cliente existente.</small>
+          </div>
 
-  const [sA, sB] = await Promise.all([getDocs(qA), getDocs(qB)]);
-  const nomes = new Set();
-  sA.forEach(d => { const x = (d.data()?.clienteUpper || '').toString(); if (x) nomes.add(x); });
-  sB.forEach(d => {
-    const data = d.data() || {};
-    const x = (data.clienteUpper || data.nomeUpper || '').toString();
-    if (x) nomes.add(x);
-  });
+          <div class="field-group grid-2">
+            <div>
+              <label for="mc_cnpj">CNPJ:</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input id="mc_cnpj" type="text" inputmode="numeric" placeholder="00.000.000/0000-00" maxlength="18" style="flex:1;" />
+                <button type="button" id="mc_consultarCNPJ" class="btn-consultar" title="Consultar CNPJ em cnpj.biz">🔍</button>
+              </div>
+              <small class="inline-help">Digite o CNPJ e clique na lupa para abrir em cnpj.biz.</small>
+            </div>
+            <div>
+              <label for="mc_ie">Inscrição Estadual:</label>
+              <input id="mc_ie" type="text" placeholder="ISENTO ou número" />
+            </div>
+          </div>
 
-  return Array.from(nomes).slice(0, QTD_SUGESTOES);
+          <div class="field-group">
+            <label for="mc_endereco">Endereço (com cidade):</label>
+            <input id="mc_endereco" type="text" autocomplete="off" />
+          </div>
+
+          <div class="field-group grid-2">
+            <div>
+              <label for="mc_cep">CEP:</label>
+              <input id="mc_cep" type="text" inputmode="numeric" placeholder="00000-000" maxlength="9" />
+            </div>
+            <div>
+              <label for="mc_contato">Contato (tel/WhatsApp):</label>
+              <input id="mc_contato" type="text" inputmode="numeric" placeholder="(00) 00000-0000" maxlength="16" />
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="frete-row">
+              <label for="mc_frete">Frete:</label>
+              <input id="mc_frete" type="text" inputmode="decimal" placeholder="0,00" style="flex:1;" />
+              <div class="switch-box" style="margin-left:12px;">
+                <input type="checkbox" id="mc_isentoFrete" />
+                <label for="mc_isentoFrete">Isento</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" id="modalClienteCancelar">Cancelar</button>
+          <button class="btn-primary" id="modalClienteSalvar">Salvar</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+  modalInjected = true;
+  console.log('[ModalCliente] HTML injetado');
 }
 
-function preencherDatalist(nomes){
-  const dl = document.getElementById('listaClientes');
-  if (!dl) return;
-  const uniq = Array.from(new Set(nomes));
-  dl.innerHTML = '';
-  uniq.forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n;
-    dl.appendChild(opt);
+function clearForm() {
+  ['mc_nome','mc_cnpj','mc_ie','mc_endereco','mc_cep','mc_contato','mc_frete'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.value = '';
   });
+  const chk = document.getElementById('mc_isentoFrete');
+  if (chk) chk.checked = false;
+
+  const titulo = document.getElementById('modalClienteTitulo');
+  if (titulo) titulo.textContent = 'Novo Cliente';
 }
 
-async function onClienteInput(){
-  const el = document.getElementById('cliente');
-  const hiddenId = document.getElementById('clienteId');
-  if (!el) return;
-  const raw = (el.value || '').trim();
-  if (hiddenId && !raw) hiddenId.value = '';
+function openModal() {
+  injectModal();
+  clearForm();
+  populateDatalist();
 
-  if (!raw) { preencherDatalist([]); return; }
-  const prefix = up(raw);
-  try{
-    const nomes = await buscarSugestoes(prefix);
-    preencherDatalist(nomes);
-  }catch(e){
-    console.warn('[autofill] falha ao buscar sugestões:', e?.message || e);
+  const modal = document.getElementById('modalCliente');
+  if (modal) {
+    modal.classList.remove('hidden');
+    setTimeout(()=> document.getElementById('mc_nome')?.focus(), 80);
   }
 }
+function closeModal() { document.getElementById('modalCliente')?.classList.add('hidden'); }
 
-/** Preenche o formulário e garante existência com id=nomeUpper (migra se necessário). */
-async function preencherFormularioCom(nomeDigitado){
-  const nome = up(nomeDigitado || '');
-  if (!nome) return;
-
-  try{
-    // 1) lê dados (compat com legado)
-    const info = await buscarClienteInfo(nome);
-
-    // 2) preenche campos
-    const setVal = (id, val) => { const e=document.getElementById(id); if(e) e.value = val || ''; };
-    if (info) {
-      setVal('endereco', (info.endereco||'').toUpperCase());
-      setVal('cnpj', info.cnpj);
-      setVal('ie', info.ie);
-      setVal('cep', info.cep);
-      setVal('contato', info.contato);
-    }
-
-    // 3) garante (ou migra) para id=nomeUpper e coloca o id no hidden
-    const { id } = await salvarCliente(nome, info?.endereco || '', info?.isentoFrete, info || {});
-    const hiddenId = document.getElementById('clienteId');
-    if (hiddenId) hiddenId.value = id;
-
-  }catch(e){
-    console.warn('[autofill] erro ao preencher formulário:', e?.message || e);
-  }
+function consultarCNPJ() {
+  const cnpjInput = document.getElementById('mc_cnpj');
+  if (!cnpjInput) return;
+  const raw = cnpjInput.value || '';
+  const digits = digitsOnly(raw);
+  if (!raw.trim()) { alert('Digite o CNPJ antes de consultar.'); cnpjInput.focus(); return; }
+  if (digits.length !== 14) { alert('CNPJ deve ter 14 dígitos.'); cnpjInput.focus(); return; }
+  const url = `https://cnpj.biz/${digits}`;
+  const width = 1100, height = 800;
+  const left = (screen.width - width) / 2, top = (screen.height - height) / 2;
+  const popup = window.open(url, 'consultaCNPJ', `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+  if (!popup) alert('Não foi possível abrir o popup. Desative o bloqueador de pop-ups.');
 }
 
-const debouncedInput = debounce(onClienteInput, 180);
-
-document.addEventListener('DOMContentLoaded', async () => {
+async function populateDatalist() {
   await waitForLogin();
-
-  const inp = document.getElementById('cliente');
-  if (inp){
-    inp.addEventListener('input', debouncedInput);
-    inp.addEventListener('change', () => preencherFormularioCom(inp.value));
-    inp.addEventListener('blur',   () => preencherFormularioCom(inp.value));
+  const datalist = document.getElementById('mc_listaClientes');
+  if (!datalist) return;
+  datalist.innerHTML = '';
+  try {
+    // Preferimos uma lista alfabética abrangente (une clienteUpper e nomeUpper)
+    const nomes = await listarClientesAlfabetico(500);
+    if (nomes.length === 0) {
+      // fallback (mais usados)
+      const top = await clientesMaisUsados(80);
+      top.forEach(nome => {
+        const option = document.createElement('option');
+        option.value = nome;
+        datalist.appendChild(option);
+      });
+      return;
+    }
+    nomes.forEach(nome => {
+      const option = document.createElement('option');
+      option.value = nome;
+      datalist.appendChild(option);
+    });
+  } catch (e) {
+    console.error('[ModalCliente] Erro ao carregar clientes:', e);
   }
+}
 
-  // Primeira carga (se já vier preenchido)
-  debouncedInput();
+async function handleNomeChange() {
+  await waitForLogin();
+  const nomeInput = document.getElementById('mc_nome'); if (!nomeInput) return;
+  const nome = up(nomeInput.value || ''); if (!nome) return;
+  try {
+    const info = await buscarClienteInfo(nome);
+    const titulo = document.getElementById('modalClienteTitulo');
+    if (info) {
+      if (titulo) titulo.textContent = 'Editar Cliente';
+      const setIfEmpty = (id, val) => { const el = document.getElementById(id); if (el && !el.value) el.value = val || ''; };
+      setIfEmpty('mc_endereco', info.endereco);
+      setIfEmpty('mc_cnpj', info.cnpj);
+      setIfEmpty('mc_ie', info.ie);
+      setIfEmpty('mc_cep', info.cep);
+      setIfEmpty('mc_contato', info.contato);
+      if (info.frete && !document.getElementById('mc_frete').value) document.getElementById('mc_frete').value = info.frete;
+      document.getElementById('mc_isentoFrete').checked = !!info.isentoFrete;
+    } else {
+      if (titulo) titulo.textContent = 'Novo Cliente';
+    }
+  } catch (e) {
+    console.error('[ModalCliente] Erro ao buscar cliente:', e);
+  }
+}
+
+function handleFreteChange() {
+  const frete = document.getElementById('mc_frete');
+  const chk = document.getElementById('mc_isentoFrete');
+  if (!frete || !chk) return;
+  if (chk.checked) { frete.value = '0,00'; frete.disabled = true; }
+  else { frete.disabled = false; if (frete.value === '0,00') frete.value = ''; }
+}
+
+async function saveFromModal() {
+  await waitForLogin();
+  if (!getCurrentUser()) { alert('Faça login para salvar clientes.'); return; }
+
+  const nome = (document.getElementById('mc_nome')?.value || '').trim();
+  const endereco = (document.getElementById('mc_endereco')?.value || '').trim();
+  const cnpjMask = document.getElementById('mc_cnpj')?.value || '';
+  const ie = (document.getElementById('mc_ie')?.value || '').trim();
+  const cep = document.getElementById('mc_cep')?.value || '';
+  const contato = document.getElementById('mc_contato')?.value || '';
+  const freteStr = document.getElementById('mc_frete')?.value || '';
+  const isentoFrete = !!document.getElementById('mc_isentoFrete')?.checked;
+
+  if (!nome) { alert('Informe o nome do cliente.'); document.getElementById('mc_nome')?.focus(); return; }
+
+  try {
+    const res = await salvarCliente(nome, endereco, isentoFrete, { cnpj: cnpjMask, ie, cep, contato, frete: freteStr, endereco });
+    // atualiza datalist da tela principal
+    const mainDatalist = document.getElementById('listaClientes');
+    if (mainDatalist && !Array.from(mainDatalist.options).some(o => o.value === up(nome))) {
+      const option = document.createElement('option'); option.value = up(nome); mainDatalist.appendChild(option);
+    }
+    // joga nome no input principal se estiver vazio
+    const inputCliente = document.getElementById('cliente');
+    if (inputCliente && !inputCliente.value) inputCliente.value = up(nome);
+
+    try { const { toastOk } = await import('./ui.js'); toastOk && toastOk('Cliente salvo com sucesso!'); }
+    catch { console.log('[ModalCliente] Cliente salvo com sucesso!'); }
+
+    closeModal();
+  } catch (e) {
+    console.error('[ModalCliente] Erro ao salvar cliente:', e);
+    alert('Erro ao salvar cliente: ' + e.message);
+  }
+}
+
+/* ===================== Inicialização ===================== */
+document.addEventListener('DOMContentLoaded', async () => {
+  await waitForLogin();          // garante sessão
+  injectModal();                 // injeta HTML do modal
+
+  const bindBtn = () => {
+    const btnAddCliente = document.getElementById('btnAddCliente');
+    if (btnAddCliente && !btnAddCliente._mcBound) {
+      btnAddCliente._mcBound = true;
+      btnAddCliente.addEventListener('click', (e) => { e.preventDefault(); openModal(); });
+    }
+  };
+  bindBtn();
+  setTimeout(bindBtn, 500);
+
+  document.body.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (t?.id === 'modalClienteFechar' || t?.id === 'modalClienteCancelar' || t?.dataset?.close) closeModal();
+    if (t?.id === 'modalClienteSalvar') saveFromModal();
+    if (t?.id === 'mc_consultarCNPJ') consultarCNPJ();
+  });
+
+  document.body.addEventListener('input', (ev) => {
+    const t = ev.target;
+    if (t?.id === 'mc_cnpj') maskCNPJ(t);
+    else if (t?.id === 'mc_cep') maskCEP(t);
+    else if (t?.id === 'mc_contato') maskTelefone(t);
+  });
+
+  document.body.addEventListener('blur', (ev) => { if (ev.target?.id === 'mc_nome') handleNomeChange(); }, true);
+  document.body.addEventListener('change', (ev) => {
+    if (ev.target?.id === 'mc_nome') handleNomeChange();
+    else if (ev.target?.id === 'mc_isentoFrete') handleFreteChange();
+  });
+
+  populateDatalist();
+  console.log('[ModalCliente] pronto');
 });
