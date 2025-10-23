@@ -1,7 +1,10 @@
-// /app/pedidos/js/clientes-autofill.js
+// app/pedidos/js/clientes-autofill.js
+// Sugestões enquanto digita (une clienteUpper e nomeUpper) + preenche formulário
+// e garante que o cliente exista com id=nomeUpper (sem duplicar).
+
 import {
-  getTenantId, waitForLogin,
-  collection, query, orderBy, startAt, endAt, limit, getDocs
+  db, getTenantId, waitForLogin,
+  collection, query, orderBy, startAt, endAt, limit, getDocs, doc, getDoc
 } from './firebase.js';
 import { up } from './utils.js';
 import { buscarClienteInfo, salvarCliente } from './clientes.js';
@@ -9,21 +12,30 @@ import { buscarClienteInfo, salvarCliente } from './clientes.js';
 const QTD_SUGESTOES = 20;
 function debounce(fn, ms){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
 
+/** Busca sugestões em dois índices: clienteUpper e nomeUpper (legado). */
 async function buscarSugestoes(prefixUpper){
   const tenantId = await getTenantId();
-  const col = collection(window.db, 'tenants', tenantId, 'clientes');
-  const q = query(
-    col,
-    orderBy('clienteUpper'),
-    startAt(prefixUpper),
-    endAt(prefixUpper + '\uf8ff'),
-    limit(QTD_SUGESTOES)
+  const col = collection(db, 'tenants', tenantId, 'clientes');
+
+  const qA = query(
+    col, orderBy('clienteUpper'),
+    startAt(prefixUpper), endAt(prefixUpper + '\uf8ff'), limit(QTD_SUGESTOES)
   );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => {
+  const qB = query(
+    col, orderBy('nomeUpper'),
+    startAt(prefixUpper), endAt(prefixUpper + '\uf8ff'), limit(QTD_SUGESTOES)
+  );
+
+  const [sA, sB] = await Promise.all([getDocs(qA), getDocs(qB)]);
+  const nomes = new Set();
+  sA.forEach(d => { const x = (d.data()?.clienteUpper || '').toString(); if (x) nomes.add(x); });
+  sB.forEach(d => {
     const data = d.data() || {};
-    return (data.clienteUpper || data.nomeUpper || d.id || '').toString();
-  }).filter(Boolean);
+    const x = (data.clienteUpper || data.nomeUpper || '').toString();
+    if (x) nomes.add(x);
+  });
+
+  return Array.from(nomes).slice(0, QTD_SUGESTOES);
 }
 
 function preencherDatalist(nomes){
@@ -50,32 +62,32 @@ async function onClienteInput(){
   try{
     const nomes = await buscarSugestoes(prefix);
     preencherDatalist(nomes);
-  }catch(e){ console.warn('[autofill] falha ao buscar sugestões:', e?.message || e); }
+  }catch(e){
+    console.warn('[autofill] falha ao buscar sugestões:', e?.message || e);
+  }
 }
 
-/**
- * Preenche o formulário e garante que o cliente exista com id=nomeUpper.
- */
+/** Preenche o formulário e garante existência com id=nomeUpper (migra se necessário). */
 async function preencherFormularioCom(nomeDigitado){
   const nome = up(nomeDigitado || '');
   if (!nome) return;
 
   try{
-    // busca info
+    // 1) lê dados (compat com legado)
     const info = await buscarClienteInfo(nome);
 
-    // preenche campos
-    const setVal = (id, val) => { const e=document.getElementById(id); if(e) e.value=val||''; };
+    // 2) preenche campos
+    const setVal = (id, val) => { const e=document.getElementById(id); if(e) e.value = val || ''; };
     if (info) {
-      setVal('endereco', info.endereco?.toUpperCase());
+      setVal('endereco', (info.endereco||'').toUpperCase());
       setVal('cnpj', info.cnpj);
       setVal('ie', info.ie);
       setVal('cep', info.cep);
       setVal('contato', info.contato);
     }
 
-    // garante existência no banco (salva se não existir)
-    const { id } = await salvarCliente(nome, info?.endereco || '', info?.isentoFrete, info);
+    // 3) garante (ou migra) para id=nomeUpper e coloca o id no hidden
+    const { id } = await salvarCliente(nome, info?.endereco || '', info?.isentoFrete, info || {});
     const hiddenId = document.getElementById('clienteId');
     if (hiddenId) hiddenId.value = id;
 
@@ -84,7 +96,7 @@ async function preencherFormularioCom(nomeDigitado){
   }
 }
 
-const debouncedInput = debounce(onClienteInput, 200);
+const debouncedInput = debounce(onClienteInput, 180);
 
 document.addEventListener('DOMContentLoaded', async () => {
   await waitForLogin();
@@ -96,6 +108,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     inp.addEventListener('blur',   () => preencherFormularioCom(inp.value));
   }
 
-  // primeiro load
+  // Primeira carga (se já vier preenchido)
   debouncedInput();
 });
