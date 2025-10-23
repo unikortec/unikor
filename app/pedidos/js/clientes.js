@@ -86,7 +86,7 @@ export async function salvarCliente(nome, endereco, isentoFrete, extra = {}) {
 
   // merge:true preserva campos preexistentes (inclusive createdAt)
   await setDoc(ref, base, { merge: true });
-  return { ok: true, id: ref.id, existed };
+  return { ok: true, id: ref.id, existed, nomeUpper };
 }
 
 /**
