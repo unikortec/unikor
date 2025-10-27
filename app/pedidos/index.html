@@ -10,7 +10,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" href="/assets/logo/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./css/style.css?v=20251027c" />
 </head>
 <body>
 
@@ -140,25 +140,25 @@
   <script src="https://apis.google.com/js/api.js" async defer></script>
 
   <!-- Auth guard (mantém login) -->
-  <script type="module" src="/shared/js/auth-guard.js"></script>
+  <script type="module" src="/shared/js/auth-guard.js?v=20251027c"></script>
 
   <!-- App -->
-  <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/app.js?v=20251027c"></script>
 
   <!-- ⚠️ IMPORTA O MODAL (necessário para injetar HTML e buscar clientes) -->
-  <script type="module" src="./js/modal-cliente.js"></script>
+  <script type="module" src="./js/modal-cliente.js?v=20251027c"></script>
   
-  <!-- Importador de produtos (XLSX/CSV/JSON -> Firestore). Abre com Ctrl+Alt+P ou #importar-produtos -->
-<script type="module">
-  import { setupProdutosImportUI } from './js/produtos-import.js';
-  setupProdutosImportUI();
-</script>
+  <!-- Importador de produtos (CSV/JSON -> Firestore). Abre com Ctrl+Alt+P ou #importar-produtos -->
+  <script type="module">
+    import { setupProdutosImportUI } from './js/produtos-import.js?v=20251027c';
+    setupProdutosImportUI();
+  </script>
   
   <!-- Autocomplete de produtos (catálogo + preço + unidade) -->
-<script type="module" src="./js/autocomplete-produtos.js"></script>
+  <script type="module" src="./js/autocomplete-produtos.js?v=20251027c"></script>
 
   <!-- 🔹 Autofill de clientes na página de pedidos -->
-  <script type="module" src="./js/clientes-autofill.js"></script>
+  <script type="module" src="./js/clientes-autofill.js?v=20251027c"></script>
 
   <!-- Mostrar/ocultar “pagamentoOutro” -->
   <script>
