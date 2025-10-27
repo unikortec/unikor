@@ -5,14 +5,14 @@ import {
   getFirestore,
   collection, addDoc, getDocs, doc, setDoc, getDoc,
   query, where, orderBy, limit, serverTimestamp, updateDoc,
-  startAt, endAt
+  startAt, endAt, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 
 export {
   collection, addDoc, getDocs, doc, setDoc, getDoc,
   query, where, orderBy, limit, serverTimestamp, updateDoc,
-  startAt, endAt
+  startAt, endAt, writeBatch
 };
 
 export const app  = rootApp;
