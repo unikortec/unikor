@@ -110,8 +110,9 @@ export function construirPDFBase(data){
     const totalCents = Math.round(it.totalCents || 0);
     const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
 
-    const prodLines = splitToWidth(doc, prod, W_PROD-2).slice(0,3);
-    const rowHi = Math.max(14, 6 + prodLines.length*5);
+    // ← sem limite de linhas para o nome do produto
+    const prodLines = splitToWidth(doc, prod, W_PROD - 2);
+    const rowHi = Math.max(14, 6 + (prodLines.length * 5));
     ensureSpace(rowHi + (pesoTotalKgMil ? 6 : 0));
 
     doc.rect(margemX, y, W_PROD, rowHi, "S");
