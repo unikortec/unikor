@@ -1,7 +1,8 @@
+// /app/pedidos/js/autocomplete-produtos.js
 // Liga autocomplete nos inputs .produto dentro de #itens.
-// - Mostra sugestões (substring match)
-// - Ao escolher: preenche .preco e .tipo-select (editável depois)
-// - Funciona em PC e mobile (datalist nativo + preenchimento onChange/onBlur)
+// - Sugestões por substring (não só prefixo)
+// - Ao escolher: preenche .preco (sempre sobrescreve) e .tipo-select (editável)
+// - Não salva no banco — somente no pedido atual
 
 import { loadCatalogoProdutos, buscarProdutos } from './produtos.js';
 
@@ -23,10 +24,9 @@ function fillDatalist(lista){
   dl.innerHTML = '';
   lista.forEach(p => {
     const opt = document.createElement('option');
-    // Exibe com preço para ajudar a escolher
     const precoTxt = isFinite(p.preco) && p.preco > 0 ? ` — R$ ${p.preco.toFixed(2)}/${p.unidade}` : '';
-    opt.value = p.nome;
-    opt.label = `${p.nome}${precoTxt}`;
+    opt.value = p.nome;              // o que aparece no input
+    opt.label = `${p.nome}${precoTxt}`; // rótulo no datalist
     dl.appendChild(opt);
   });
 }
@@ -58,11 +58,14 @@ function aplicarProdutoNaLinha(nomeSelecionado, inputEl){
   const p = sugestoes[0];
   if (!p) return;
 
-  // Preenche unidade (sempre) e preço (mas o usuário pode editar)
+  // Unidade sempre do catálogo (mas campo continua editável)
   if (tipo)  tipo.value = (p.unidade || 'KG').toUpperCase();
-  if (preco && (preco.value === '' || Number(preco.value) === 0)) {
-    // só preenche se estava vazio/zero; se quiser sobrescrever sempre, troque a condição
-    preco.value = (isFinite(p.preco) ? p.preco.toFixed(2) : '');
+
+  // ⚠️ Preço SEMPRE do catálogo — sobrescreve o que tiver no campo.
+  if (preco) {
+    preco.value = isFinite(p.preco) ? p.preco.toFixed(2) : '';
+    // marca de onde veio o preço (apenas informativo pra lógica futura, se quiser)
+    preco.dataset.source = 'catalogo';
   }
 }
 
@@ -96,6 +99,6 @@ function observeItensContainer(){
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadCatalogoProdutos();  // carrega catálogo (FS/JSON)
-  bindAll();                     // liga nos inputs existentes
-  observeItensContainer();       // liga nos itens adicionados depois
+  bindAll();                     // inputs atuais
+  observeItensContainer();       // e os novos
 });
