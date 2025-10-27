@@ -32,7 +32,7 @@ service cloud.firestore {
              request.resource.data.tenantId == tenantId;
     }
 
-    // ======= CORRIGIDO: aceita createdBy/createdAt imutáveis em UPDATE =======
+    // ======= aceita createdBy/createdAt imutáveis em UPDATE =======
     function validAuthorFields() {
       let hasCreated = ("criadoEm" in request.resource.data && request.resource.data.criadoEm is timestamp)
                     || ("createdAt" in request.resource.data && request.resource.data.createdAt is timestamp);
@@ -62,17 +62,17 @@ service cloud.firestore {
       // Leitura padrão: user do próprio tenant ou master
       allow read: if isAuthed() && (tenantId == userTenant() || userRole() == "master");
 
-+     // ---- CATÁLOGO DE PRODUTOS DO TENANT ----
-+     match /produtos/{prodId} {
-+       // qualquer usuário autenticado do tenant (ou admin/master) pode ler
-+       allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
-+       // apenas admin/master do próprio tenant pode escrever
-+       allow create, update, delete:
-+         if isAuthed() && (tenantId == userTenant() || isAdmin())
-+            && tenantId == userTenant()
-+            && matchesTenantField(tenantId)
-+            && validAuthorFields();
-+     }
+      // ---- CATÁLOGO DE PRODUTOS DO TENANT ----
+      match /produtos/{prodId} {
+        // qualquer usuário autenticado do tenant (ou admin/master) lê
+        allow read: if isAuthed() && (tenantId == userTenant() || isAdmin());
+        // escrita apenas por admin/master do próprio tenant
+        allow create, update, delete:
+          if isAuthed() && (tenantId == userTenant() || isAdmin())
+             && tenantId == userTenant()
+             && matchesTenantField(tenantId)
+             && validAuthorFields();
+      }
 
       // ---- CLIENTES ----
       match /clientes/{clienteId} {
