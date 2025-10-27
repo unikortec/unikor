@@ -55,5 +55,5 @@ export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser
 export {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
   query, where, orderBy, limit, serverTimestamp,
-  writeBatch            // ← ADICIONE AQUI
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
