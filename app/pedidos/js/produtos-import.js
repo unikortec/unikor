@@ -5,8 +5,11 @@
 
 import {
   db, auth, getTenantId,
-  collection, doc, writeBatch, serverTimestamp
+  collection, doc, serverTimestamp
 } from './firebase.js';
+
+// 🔧 pega writeBatch direto do CDN para evitar erro
+import { writeBatch } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // UI mínima: tecla de atalho e <input type=file> oculto ---------------------
 export function setupProdutosImportUI() {
@@ -31,7 +34,7 @@ export function setupProdutosImportUI() {
     setTimeout(() => document.getElementById('prodImportInput').click(), 200);
   }
 
-  console.log('[ProdutosImport] pronto.');
+  console.log('[ProdutosImport] pronto (Ctrl+Alt+P ativo).');
 }
 
 // Leitura do arquivo ----------------------------------------------------------
