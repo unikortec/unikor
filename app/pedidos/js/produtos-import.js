@@ -1,15 +1,11 @@
 // /app/pedidos/js/produtos-import.js
 // Importa catálogo de produtos (CSV/JSON) para Firestore em:
-//      tenants/{tenantId}/produtos
-// Observação: XLSX não é suportado nativamente; exporte como CSV do Excel.
+// tenants/{tenantId}/produtos
 
 import {
   db, auth, getTenantId,
-  collection, doc, serverTimestamp
+  collection, doc, writeBatch, serverTimestamp
 } from './firebase.js';
-
-// Importa writeBatch diretamente do CDN (evita conflito de export reencaminhado)
-import { writeBatch } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // UI mínima: tecla de atalho e <input type=file> oculto ---------------------
 export function setupProdutosImportUI() {
@@ -24,17 +20,14 @@ export function setupProdutosImportUI() {
   }
 
   document.addEventListener('keydown', (ev) => {
-    // suporta layouts diferentes (Ctrl/Meta + Alt + P)
-    const key = (ev.key || '').toLowerCase();
-    if ((ev.ctrlKey || ev.metaKey) && ev.altKey && key === 'p') {
+    if ((ev.ctrlKey || ev.metaKey) && ev.altKey && ev.key.toLowerCase() === 'p') {
       ev.preventDefault();
-      const el = document.getElementById('prodImportInput');
-      if (el) el.click();
+      document.getElementById('prodImportInput').click();
     }
   });
 
   if (location.hash === '#importar-produtos') {
-    setTimeout(() => document.getElementById('prodImportInput')?.click(), 200);
+    setTimeout(() => document.getElementById('prodImportInput').click(), 200);
   }
 
   console.log('[ProdutosImport] pronto (Ctrl+Alt+P ativo).');
@@ -66,7 +59,8 @@ async function onFilePicked(e) {
     alert(`Importação concluída.\nGravados: ${written}`);
   } catch (err) {
     console.error('[ProdutosImport] Falha:', err);
-    alert('Erro ao importar produtos: ' + (err?.message || err));
+    const msg = (err && (err.message || err.code)) ? ` (${err.message || err.code})` : '';
+    alert('Erro ao importar produtos: Missing or insufficient permissions' + msg);
   }
 }
 
@@ -116,16 +110,17 @@ function normalizeRows(rows) {
     const lowerObj = {}; Object.keys(r).forEach(k => lowerObj[k.toLowerCase()] = r[k]);
 
     const nome  = toUpper(pick(lowerObj, ['produto','descrição','descricao','nome']));
-    const un    = toUpper(pick(lowerObj, ['unidade','tipo','un']));
+    const un    = toUpper(pick(lowerObj, ['unidade','tipo','un'])) || 'KG';
     const preco = toNum(pick(lowerObj, ['preço','preco','valor','preco_unit','preço_unit']));
     if (!nome) continue;
 
     norm.push({
       id: idFromName(nome),
       nome,
-      unidade: (un || 'KG'),
+      unidade: un,
       preco: +(preco.toFixed(2)),
-      updatedAt: new Date().toISOString()
+      // carimbo local apenas informativo para caso de debug — o servidor gravará seus próprios timestamps
+      updatedAtLocalISO: new Date().toISOString()
     });
   }
   return norm;
@@ -150,15 +145,21 @@ async function writeProducts(items) {
   for (let i = 0; i < items.length; i += CHUNK) {
     const batch = writeBatch(db);
     const slice = items.slice(i, i + CHUNK);
+    const uid = auth?.currentUser?.uid || null;
 
     slice.forEach(it => {
       batch.set(doc(colRef, it.id), {
+        // principais
         nomeUpper: it.nome,
         unidade: it.unidade,
         preco: it.preco,
-        updatedAt: serverTimestamp(),
-        updatedBy: auth?.currentUser?.uid || null,
-        tenantId: tenantId
+
+        // multi-tenant + autoria
+        tenantId: tenantId,
+        createdBy: uid,                 // ok pelas rules (não precisa em update)
+        createdAt: serverTimestamp(),   // ok pelas rules (não precisa em update)
+        updatedBy: uid,
+        updatedAt: serverTimestamp()
       }, { merge: true });
     });
 
