@@ -1,194 +1,131 @@
 // /app/pedidos/js/produtos-import.js
-// Pequena UI de import para XLSX/CSV/JSON -> Firestore
-// Abre via: botão/atalho ou hash #importar-produtos
+// Importador de produtos: lê XLSX/CSV/JSON e grava em tenants/{tenantId}/produtos/{NOME}
+// Usa File API (input type=file) e integra com Firestore multi-tenant da Unikor
 
+import { db, getTenantId, auth } from './firebase.js';
 import {
-  db, getTenantId,
   collection, doc, setDoc, serverTimestamp
-} from './firebase.js';
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-
-function norm(s){
-  return String(s||'')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
+// Import dinâmico para XLSX (evita carregar sempre)
+async function importarXLSX(file) {
+  const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.19.3/package/xlsx.mjs");
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: 'array' });
+  const first = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[first];
+  return XLSX.utils.sheet_to_json(sheet, { defval: "" });
 }
 
-// carrega lib XLSX on-demand
-async function ensureXLSX(){
-  if (window.XLSX) return;
-  await new Promise((res, rej)=>{
-    const sc = document.createElement('script');
-    sc.src = XLSX_URL; sc.onload = res; sc.onerror = ()=>rej(new Error('Falha ao carregar XLSX'));
-    document.head.appendChild(sc);
+// Import CSV básico
+async function importarCSV(file) {
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).map(l => l.split(';').map(c => c.trim()));
+  const headers = lines.shift().map(h => h.toUpperCase());
+  return lines.filter(l => l.some(x=>x)).map(l => {
+    const obj = {};
+    headers.forEach((h,i)=>obj[h] = l[i]);
+    return obj;
   });
 }
 
-function parseAliases(v){
-  if (!v) return [];
-  if (Array.isArray(v)) return v.map(norm).filter(Boolean);
-  // aceita ; , ou / como separador
-  return String(v).split(/[;,/]/g).map(norm).filter(Boolean);
+// Import JSON direto
+async function importarJSON(file) {
+  const txt = await file.text();
+  return JSON.parse(txt);
 }
 
-function normalizeRow(row){
-  // aceita várias chaves comuns
-  const nome = norm(row.nome || row.NOME || row.titulo || row.TITULO || row.produto || row.PRODUTO);
-  if (!nome) return null;
-  const unidade = String(row.unidade || row.UNIDADE || row.un || row.UN || 'KG').trim().toUpperCase();
-  const precoRaw = row.preco ?? row.PRECO ?? row.valor ?? row.VALOR ?? 0;
-  const preco = Number(String(precoRaw).replace(',', '.'));
-  const ativo = (String(row.ativo ?? row.ATIVO ?? 'true').toLowerCase() !== 'false');
-  const aliases = parseAliases(row.aliases || row.ALIases || row.ALIAS || row.SINONIMOS || row.sinonimos);
-
-  return { id: nome, data: { nome, unidade, preco: (isFinite(preco)?preco:0), ativo, aliases } };
-}
-
-async function readFileAsText(file){
-  const buf = await file.arrayBuffer();
-  const dec = new TextDecoder('utf-8');
-  return dec.decode(buf);
-}
-
-async function parseFile(file){
-  const name = file.name.toLowerCase();
-  if (name.endsWith('.json')) {
-    const txt = await readFileAsText(file);
-    const arr = JSON.parse(txt);
-    if (!Array.isArray(arr)) throw new Error('JSON deve ser um array');
-    return arr.map(normalizeRow).filter(Boolean);
-  }
-  if (name.endsWith('.csv')) {
-    await ensureXLSX();
-    const txt = await readFileAsText(file);
-    const wb = XLSX.read(txt, { type: 'string' });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const arr = XLSX.utils.sheet_to_json(ws, { defval: '' });
-    return arr.map(normalizeRow).filter(Boolean);
-  }
-  // XLSX, XLS…
-  await ensureXLSX();
-  const data = new Uint8Array(await file.arrayBuffer());
-  const wb = XLSX.read(data, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const arr = XLSX.utils.sheet_to_json(ws, { defval: '' });
-  return arr.map(normalizeRow).filter(Boolean);
-}
-
-function injectModal(){
-  if (document.getElementById('prodImportModal')) return;
-  const html = `
-    <div id="prodImportModal" class="modal hidden">
-      <div class="modal-backdrop" data-close="1"></div>
-      <div class="modal-card" role="dialog" aria-modal="true" style="max-width:720px">
-        <div class="modal-header">
-          <h3>Importar Produtos</h3>
-          <button class="modal-close" data-close="1" aria-label="Fechar">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="field-group">
-            <label>Planilha (XLSX/CSV/JSON):</label>
-            <input id="pi_arquivo" type="file" accept=".xlsx,.xls,.csv,.json" />
-            <small>Colunas recomendadas: <b>nome</b>, <b>preco</b>, <b>unidade</b>, <b>aliases</b> (opcional), <b>ativo</b>.</small>
-          </div>
-          <div class="field-group">
-            <label>Destino no Firestore:</label>
-            <select id="pi_destino">
-              <option value="produtos">tenants/{tenantId}/produtos</option>
-              <option value="config/produtos">tenants/{tenantId}/config/produtos</option>
-            </select>
-            <small>ID do doc = nome normalizado (evita duplicação). Operação é <i>upsert</i> (merge).</small>
-          </div>
-          <div id="pi_preview" class="muted" style="max-height:200px; overflow:auto; border:1px solid #e2e8f0; padding:8px; display:none"></div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" data-close="1">Cancelar</button>
-          <button class="btn-primary" id="pi_btnImportar" disabled>Importar</button>
-        </div>
-      </div>
-    </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function openModal(){
-  injectModal();
-  document.getElementById('prodImportModal').classList.remove('hidden');
-}
-
-function closeModal(){
-  const m = document.getElementById('prodImportModal');
-  if (m) m.classList.add('hidden');
-}
-
-async function doImport(rows){
+/* =============== SALVAR NO FIRESTORE =============== */
+async function salvarProdutosFirestore(rows) {
   const tenantId = await getTenantId();
-  const dest = (document.getElementById('pi_destino')?.value || 'produtos');
-  const baseCol = collection(db, 'tenants', tenantId, ...dest.split('/'));
+  if (!tenantId) throw new Error('Tenant não identificado (usuário não autenticado).');
 
-  let ok = 0, fail = 0;
+  const colRef = collection(db, 'tenants', tenantId, 'produtos');
+  const uid = auth?.currentUser?.uid || null;
+
+  let count = 0;
   for (const r of rows) {
-    try {
-      const ref = doc(baseCol, r.id);
-      await setDoc(ref, { ...r.data, updatedAt: serverTimestamp() }, { merge: true });
-      ok++;
-    } catch { fail++; }
+    const nome = (r.NOME || r.nome || '').trim().toUpperCase();
+    if (!nome) continue;
+    const precoRaw = String(r.PRECO || r.preco || '').replace(',', '.');
+    const preco = parseFloat(precoRaw);
+    if (!isFinite(preco)) continue;
+
+    const unidade = (r.UNIDADE || r.unidade || 'KG').trim().toUpperCase();
+    const aliases = (r.ALIASES || r['OUTROS NOMES'] || '').split(/[;,|]/).map(x=>x.trim()).filter(Boolean);
+    const ativo = String(r.ATIVO || r.ativo || 'TRUE').toUpperCase() !== 'FALSE';
+
+    const payload = {
+      tenantId,
+      nome,
+      preco,
+      unidade,
+      aliases,
+      ativo,
+      updatedAt: serverTimestamp(),
+      updatedBy: uid
+    };
+
+    await setDoc(doc(colRef, nome), payload, { merge: true });
+    count++;
   }
-  alert(`Importação concluída: ${ok} ok • ${fail} falhas`);
+  return count;
 }
 
-function wire(){
-  // fechar
-  document.body.addEventListener('click', (ev)=>{
-    if (ev.target?.dataset?.close) closeModal();
-  });
+/* =============== UI =============== */
+export function setupProdutosImportUI() {
+  const idBtn = 'importar-produtos';
+  if (document.getElementById(idBtn)) return;
 
-  // pré-visualização + habilitar botão
-  document.body.addEventListener('change', async (ev)=>{
-    if (ev.target?.id !== 'pi_arquivo') return;
-    const file = ev.target.files?.[0];
-    const prev = document.getElementById('pi_preview');
-    const btn  = document.getElementById('pi_btnImportar');
-    if (!file) { prev.style.display='none'; btn.disabled=true; return; }
-    try{
-      const rows = await parseFile(file);
-      ev.target._rows = rows;
-      prev.style.display='block';
-      prev.innerHTML = `<pre style="margin:0; white-space:pre-wrap">${rows.slice(0,30).map(r=>JSON.stringify(r.data)).join('\n')}</pre>`;
-      btn.disabled = rows.length === 0;
-    }catch(e){
-      alert('Falha ao ler arquivo: ' + (e?.message||e));
-      prev.style.display='none'; btn.disabled=true;
+  const btn = document.createElement('button');
+  btn.id = idBtn;
+  btn.textContent = 'Importar Produtos';
+  btn.className = 'btn';
+  btn.style.position = 'fixed';
+  btn.style.bottom = '18px';
+  btn.style.right = '18px';
+  btn.style.zIndex = '9999';
+  btn.style.background = '#1e7f46';
+  btn.style.color = '#fff';
+  btn.style.fontWeight = 'bold';
+  btn.style.border = 'none';
+  btn.style.borderRadius = '6px';
+  btn.style.padding = '10px 14px';
+  btn.style.cursor = 'pointer';
+  btn.title = 'Importar produtos da planilha para este tenant';
+  document.body.appendChild(btn);
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.csv,.json';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      let rows = [];
+      if (file.name.endsWith('.xlsx')) rows = await importarXLSX(file);
+      else if (file.name.endsWith('.csv')) rows = await importarCSV(file);
+      else if (file.name.endsWith('.json')) rows = await importarJSON(file);
+      else throw new Error('Formato de arquivo não suportado.');
+
+      const count = await salvarProdutosFirestore(rows);
+      alert(`✅ Importação concluída com sucesso!\n${count} produtos salvos em ${await getTenantId()}.`);
+    } catch (e) {
+      console.error('[ImportarProdutos]', e);
+      alert(`❌ Erro ao importar: ${e.message}`);
+    } finally {
+      input.value = '';
     }
   });
 
-  // importar
-  document.body.addEventListener('click', async (ev)=>{
-    if (ev.target?.id !== 'pi_btnImportar') return;
-    const input = document.getElementById('pi_arquivo');
-    const rows = input?._rows || [];
-    if (!rows.length) { alert('Selecione um arquivo válido.'); return; }
-    ev.target.disabled = true;
-    try { await doImport(rows); closeModal(); }
-    finally { ev.target.disabled = false; }
-  });
-}
-
-export function setupProdutosImportUI(){
-  injectModal();
-  wire();
-
-  // abrir por hash (#importar-produtos) ou atalho (Ctrl+Alt+P)
-  if (location.hash === '#importar-produtos') openModal();
-  document.addEventListener('keydown', (e)=>{
-    if ((e.ctrlKey || e.metaKey) && e.altKey && String(e.key).toLowerCase() === 'p'){
-      e.preventDefault(); openModal();
-    }
+  // clique direto ou atalho (Ctrl+Alt+P)
+  btn.addEventListener('click', () => input.click());
+  window.addEventListener('keydown', (ev)=>{
+    if (ev.ctrlKey && ev.altKey && ev.key.toUpperCase()==='P') input.click();
   });
 
-  // expõe global opcional
-  window.openProdutosImport = openModal;
+  console.log('[ProdutosImport] módulo pronto.');
 }
