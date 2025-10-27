@@ -52,4 +52,8 @@ export function isLoggedIn(){ return !!currentUser; }
 export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser) : new Promise(r=>pendingLoginWaiters.add(r)); }
 
 // Reexports Firestore (compat com outros apps)
-export { collection, doc, addDoc, setDoc, getDoc, getDocs, query, where, orderBy, limit, serverTimestamp };
+export {
+  collection, doc, addDoc, setDoc, getDoc, getDocs,
+  query, where, orderBy, limit, serverTimestamp,
+  writeBatch            // ← ADICIONE AQUI
+} from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
