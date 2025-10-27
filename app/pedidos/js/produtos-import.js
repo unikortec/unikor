@@ -8,7 +8,7 @@ import {
   collection, doc, serverTimestamp
 } from './firebase.js';
 
-// 🔧 pega writeBatch direto do CDN para evitar erro
+// Importa writeBatch diretamente do CDN (evita conflito de export reencaminhado)
 import { writeBatch } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
 // UI mínima: tecla de atalho e <input type=file> oculto ---------------------
@@ -24,14 +24,17 @@ export function setupProdutosImportUI() {
   }
 
   document.addEventListener('keydown', (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.altKey && ev.key.toLowerCase() === 'p') {
+    // suporta layouts diferentes (Ctrl/Meta + Alt + P)
+    const key = (ev.key || '').toLowerCase();
+    if ((ev.ctrlKey || ev.metaKey) && ev.altKey && key === 'p') {
       ev.preventDefault();
-      document.getElementById('prodImportInput').click();
+      const el = document.getElementById('prodImportInput');
+      if (el) el.click();
     }
   });
 
   if (location.hash === '#importar-produtos') {
-    setTimeout(() => document.getElementById('prodImportInput').click(), 200);
+    setTimeout(() => document.getElementById('prodImportInput')?.click(), 200);
   }
 
   console.log('[ProdutosImport] pronto (Ctrl+Alt+P ativo).');
