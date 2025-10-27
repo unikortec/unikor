@@ -4,7 +4,7 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import {
   getFirestore, enableIndexedDbPersistence,
   collection, doc, addDoc, setDoc, getDoc, getDocs,
-  query, where, orderBy, limit, serverTimestamp
+  query, where, orderBy, limit, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import { getStorage } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-storage.js";
 
@@ -13,7 +13,7 @@ export const firebaseConfig = {
   apiKey: "AIzaSyC12s4PvUWtNxOlShPc7zXlzq4XWqlVo2w",
   authDomain: "unikorapp.firebaseapp.com",
   projectId: "unikorapp",
-  storageBucket: "unikorapp.firebasestorage.app", // <<< bucket certo
+  storageBucket: "unikorapp.firebasestorage.app",
   messagingSenderId: "329806123621",
   appId: "1:329806123621:web:9aeff2f5947cd106cf2c8c",
 };
@@ -54,6 +54,12 @@ export function waitForLogin(){ return currentUser ? Promise.resolve(currentUser
 // Reexports Firestore (compat com outros apps)
 export {
   collection, doc, addDoc, setDoc, getDoc, getDocs,
-  query, where, orderBy, limit, serverTimestamp,
-  writeBatch
+  query, where, orderBy, limit, serverTimestamp, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+/* ===== DEBUG HELP: expõe no window para usar no DevTools ===== */
+try {
+  // Assim você pode rodar no console:
+  //   (await window.unikor.auth.currentUser.getIdTokenResult(true)).claims
+  window.unikor = Object.assign(window.unikor || {}, { auth, db, serverTimestamp, writeBatch });
+} catch {}
