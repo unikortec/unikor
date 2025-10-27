@@ -200,7 +200,7 @@ async function importToFirestore(items) {
   const tenantId = await getTenantId();
   if (!tenantId) throw new Error('Tenant não identificado (login exigido).');
 
-  const col = collection(db, 'tenants', tenantId, 'produtos'); // ✅ 3 segmentos (coleção válida)
+  const col = collection(db, 'tenants', tenantId, 'produtos');// ✅ 3 segmentos (coleção válida)
   const batch = writeBatch(db);
 
   let count = 0; const errors = [];
