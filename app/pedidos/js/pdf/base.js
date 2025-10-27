@@ -99,62 +99,68 @@ export function construirPDFBase(data){
   y += 12;
 
   // Itens
-  let subtotalCents = 0;
-  doc.setFont("helvetica","normal"); doc.setFontSize(9);
+let subtotalCents = 0;
+doc.setFont("helvetica","normal"); doc.setFontSize(9);
 
-  (data.itens || []).forEach((it, idx) => {
-    const prod = it.produto || "";
-    const qtdStr = String(it.qtdTxt || "");
-    const tipo = it.tipo || "KG";
-    const precoTxt = it.precoTxt || "";
-    const totalCents = Math.round(it.totalCents || 0);
-    const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
+(data.itens || []).forEach((it, idx) => {
+  const prod = it.produto || "";
+  const qtdStr = String(it.qtdTxt || "");
+  const tipo = it.tipo || "KG";
+  const precoTxt = it.precoTxt || "";
+  const totalCents = Math.round(it.totalCents || 0);
+  const pesoTotalKgMil = Math.round(it._pesoTotalKgMil || 0);
 
-    // ← sem limite de linhas para o nome do produto
-    const prodLines = splitToWidth(doc, prod, W_PROD - 2);
-    const rowHi = Math.max(14, 6 + (prodLines.length * 5));
-    ensureSpace(rowHi + (pesoTotalKgMil ? 6 : 0));
+  // ⬇️ sem limite de linhas
+  const prodLines = splitToWidth(doc, prod, W_PROD - 2);
+  const rowHi = Math.max(14, 6 + prodLines.length * 5);
+  ensureSpace(rowHi + (pesoTotalKgMil ? 6 : 0));
 
-    doc.rect(margemX, y, W_PROD, rowHi, "S");
-    doc.rect(margemX+W_PROD, y, W_QDE, rowHi, "S");
-    doc.rect(margemX+W_PROD+W_QDE, y, W_UNIT, rowHi, "S");
-    doc.rect(margemX+W_PROD+W_QDE+W_UNIT, y, W_TOTAL, rowHi, "S");
+  doc.rect(margemX, y, W_PROD, rowHi, "S");
+  doc.rect(margemX + W_PROD, y, W_QDE, rowHi, "S");
+  doc.rect(margemX + W_PROD + W_QDE, y, W_UNIT, rowHi, "S");
+  doc.rect(margemX + W_PROD + W_QDE + W_UNIT, y, W_TOTAL, rowHi, "S");
 
-    const center=(cx, lines)=>{ const block=(lines.length-1)*5; const base=y+(rowHi-block)/2; lines.forEach((ln,k)=>doc.text(ln,cx,base+k*5,{align:"center"})); };
+  const center = (cx, lines) => {
+    const block = (lines.length - 1) * 5;
+    const base = y + (rowHi - block) / 2;
+    lines.forEach((ln, k) => doc.text(ln, cx, base + k * 5, { align: "center" }));
+  };
 
-    center(margemX+W_PROD/2, prodLines);
-    center(margemX+W_PROD+W_QDE/2, (qtdStr ? [qtdStr, tipo] : [""]));
-    if (tipo==='UN' && pesoTotalKgMil) center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$/KG", precoTxt] : ["—"]);
-    else                               center(margemX+W_PROD+W_QDE+W_UNIT/2, precoTxt ? ["R$",    precoTxt] : ["—"]);
-    center(margemX+W_PROD+W_QDE+W_UNIT+W_TOTAL/2, (totalCents > 0) ? ["R$", moneyBRfromCents(totalCents)] : ["—"]);
+  center(margemX + W_PROD / 2, prodLines);
+  center(margemX + W_PROD + W_QDE / 2, (qtdStr ? [qtdStr, tipo] : [""]));
+  if (tipo === 'UN' && pesoTotalKgMil)
+    center(margemX + W_PROD + W_QDE + W_UNIT / 2, precoTxt ? ["R$/KG", precoTxt] : ["—"]);
+  else
+    center(margemX + W_PROD + W_QDE + W_UNIT / 2, precoTxt ? ["R$", precoTxt] : ["—"]);
+  center(margemX + W_PROD + W_QDE + W_UNIT + W_TOTAL / 2, (totalCents > 0) ? ["R$", moneyBRfromCents(totalCents)] : ["—"]);
 
-    y += rowHi;
+  y += rowHi;
 
-    if (tipo==='UN' && pesoTotalKgMil) {
-      const kgTxt = (pesoTotalKgMil/1000).toFixed(3).replace('.', ',');
-      doc.setFontSize(7); doc.setFont("helvetica","italic");
-      doc.text(`(*) Peso total: ${kgTxt} kg`, margemX+3, y+4);
-      doc.setFont("helvetica","normal"); doc.setFontSize(9);
-      y += 5;
-    }
+  if (tipo === 'UN' && pesoTotalKgMil) {
+    const kgTxt = (pesoTotalKgMil / 1000).toFixed(3).replace('.', ',');
+    doc.setFontSize(7); doc.setFont("helvetica", "italic");
+    doc.text(`(*) Peso total: ${kgTxt} kg`, margemX + 3, y + 4);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    y += 5;
+  }
 
-    const obs = (it.obs||"").trim();
-    if (obs){
-      const corpoLines = splitToWidth(doc, obs.toUpperCase(), larguraCaixa-6);
-      const obsH = 9 + corpoLines.length*5;
-      ensureSpace(obsH);
-      doc.rect(margemX, y, larguraCaixa, obsH, "S");
-      doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      const titulo="OBSERVAÇÕES:"; const tx=margemX+3, ty=y+6;
-      doc.text(titulo, tx, ty); doc.line(tx, ty+.8, tx+doc.getTextWidth(titulo), ty+.8);
-      doc.setFont("helvetica","normal");
-      let baseY3=y+12; corpoLines.forEach((ln,ix)=>doc.text(ln, margemX+3, baseY3+ix*5));
-      y += obsH;
-    }
+  const obs = (it.obs || "").trim();
+  if (obs) {
+    const corpoLines = splitToWidth(doc, obs.toUpperCase(), larguraCaixa - 6);
+    const obsH = 9 + corpoLines.length * 5;
+    ensureSpace(obsH);
+    doc.rect(margemX, y, larguraCaixa, obsH, "S");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    const titulo = "OBSERVAÇÕES:"; const tx = margemX + 3, ty = y + 6;
+    doc.text(titulo, tx, ty); doc.line(tx, ty + .8, tx + doc.getTextWidth(titulo), ty + .8);
+    doc.setFont("helvetica", "normal");
+    let baseY3 = y + 12; corpoLines.forEach((ln, ix) => doc.text(ln, margemX + 3, baseY3 + ix * 5));
+    y += obsH;
+  }
 
-    subtotalCents += totalCents;
-    if (idx < (data.itens?.length||0)-1) y += 2;
-  });
+  subtotalCents += totalCents;
+  if (idx < (data.itens?.length || 0) - 1) y += 2;
+});
 
   // Soma produtos
   const w2tercos = Math.round(larguraCaixa*(2/3));
