@@ -148,6 +148,12 @@
   <!-- ⚠️ IMPORTA O MODAL (necessário para injetar HTML e buscar clientes) -->
   <script type="module" src="./js/modal-cliente.js"></script>
   
+  <!-- Importador de produtos (XLSX/CSV/JSON -> Firestore). Abre com Ctrl+Alt+P ou #importar-produtos -->
+<script type="module">
+  import { setupProdutosImportUI } from './js/produtos-import.js';
+  setupProdutosImportUI();
+</script>
+  
   <!-- Autocomplete de produtos (catálogo + preço + unidade) -->
 <script type="module" src="./js/autocomplete-produtos.js"></script>
 
