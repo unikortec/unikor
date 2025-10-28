@@ -36,11 +36,29 @@ const parseBRNumber = (val) => {
   return isNaN(n) ? 0 : n;
 };
 
-// <<< ALTERADO: formatação para inputs, sem milhar >>>
+// <<< ALTERADO: formatação para inputs, sem milhar, mantendo vírgula >>>
 const toMoney = (n) => {
   const v = Number(n || 0);
   return Number.isFinite(v) ? v.toFixed(2).replace('.', ',') : '0,00';
 };
+
+// --- NOVO: força vírgula em vez de ponto durante a DIGITAÇÃO ---
+function forceCommaInput(el, { dec = 2 } = {}){
+  if (!el) return;
+  el.addEventListener("input", () => {
+    // troca ponto -> vírgula e remove caracteres inválidos
+    let v = (el.value || "").replace(/\./g, ",").replace(/[^0-9,]/g, "");
+    // máximo de 1 vírgula
+    const parts = v.split(",");
+    if (parts.length > 2) v = parts[0] + "," + parts.slice(1).join("");
+    // limita casas decimais
+    if (v.includes(",")) {
+      const [a,b=""] = v.split(",");
+      v = a + "," + b.slice(0, dec);
+    }
+    el.value = v;
+  }, { passive:true });
+}
 
 function kgPorUnFromDesc(desc=""){
   const s = String(desc).toLowerCase().replace(',', '.');
@@ -117,6 +135,12 @@ export function addItemRow(item={}){
   `;
   $("itemsBody").appendChild(tr);
 
+  // Força vírgula nos campos numéricos digitáveis
+  forceCommaInput(tr.querySelector(".it-qtd"),   { dec: 3 });
+  forceCommaInput(tr.querySelector(".it-preco"), { dec: 2 });
+  // Subtotal pode ser editado manualmente; manter vírgula também
+  forceCommaInput(tr.querySelector(".it-sub"),   { dec: 2 });
+
   tr.querySelectorAll(".it-desc,.it-qtd,.it-un,.it-preco").forEach(i=>{
     i.addEventListener("input", ()=>{
       tr.querySelector(".it-sub").dataset.dirty = "";
@@ -175,6 +199,9 @@ export async function carregarPedidoEmModal(id){
     (r?.frete?.isento ? 0 : (r?.frete?.valorCobravel ?? r?.frete?.valorBase ?? 0))
   ) || 0;
   $("mFrete").value = toMoney(freteNum);
+
+  // Força vírgula também no FRETE
+  forceCommaInput($("mFrete"), { dec: 2 });
 
   openModal();
 }
