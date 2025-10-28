@@ -1,13 +1,11 @@
 // relatorios/js/export.js
-// Exporta LISTA => XLSX (preferencial) ou CSV (fallback).
+// Exporta LISTA => CSV em padrão BR (separador ';' e decimal com vírgula).
 // PDF paisagem permanece igual (jsPDF).
 
 const { jsPDF } = window.jspdf || {};
 
 // ===== Helpers comuns =====
-const moneyBR = (n)=> (Number(n||0)).toFixed(2).replace(".", ",");
 const toBRDate = (iso)=> (iso ? iso.split("-").reverse().join("/") : "");
-const norm = (s="") => String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
 // Mesmo cálculo usado na listagem/modal
 function kgPorUnFromDesc(desc=""){
@@ -66,7 +64,7 @@ function rowsToAOA(rows=[]){
         toBRDate(r.dataEntregaISO||""),
         String(r.horaEntrega||""),
         String(r.cliente||""),
-        String(it.descricao || it.produto || ""),
+        String(it.descricao || it.produto || "").replace(/\r?\n/g, " "),
         qtd, un, pu, sub,
         tipo, String(r.pagamento||""), frete, cupom, r.id
       ]);
@@ -86,13 +84,37 @@ function downloadBlob(filename, mime, data){
   setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 150);
 }
 
-function aoaToCSV(aoa){
-  // CSV separado por ';' para abrir bonito no Excel BR
-  return aoa.map(row =>
-    row.map(v=>{
-      if (v == null) return "";
-      const s = String(v);
-      const mustQuote = /[;"\n,]/.test(s);
+// ====== Formatação BR para CSV ======
+function fmtQtdBR(n){ // 0,000
+  const v = Number(n||0);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+}
+function fmtMoneyBR(n){ // 0.000,00
+  const v = Number(n||0);
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function aoaToCSV_BR(aoa){
+  // colunas: Data(0) Hora(1) Cliente(2) Produto(3) Qtd(4) Un(5) Unit(6) Sub(7) Tipo(8) Pag(9) Frete(10) Cupom(11) ID(12)
+  const COL_QTD   = 4;
+  const COL_UNIT  = 6;
+  const COL_SUB   = 7;
+  const COL_FRETE = 10;
+
+  return aoa.map((row, rIdx) =>
+    row.map((v, cIdx) => {
+      let s = v;
+      if (rIdx > 0) {
+        if (cIdx === COL_QTD)   s = fmtQtdBR(v);
+        else if (cIdx === COL_UNIT)  s = fmtMoneyBR(v);
+        else if (cIdx === COL_SUB)   s = fmtMoneyBR(v);
+        else if (cIdx === COL_FRETE) s = fmtMoneyBR(v);
+        else s = String(v ?? "");
+      } else {
+        s = String(v ?? "");
+      }
+      // Escapa se tiver ; " ou quebra de linha
+      const mustQuote = /[;"\n]/.test(s);
       const esc = s.replace(/"/g,'""');
       return mustQuote ? `"${esc}"` : esc;
     }).join(";")
@@ -110,60 +132,12 @@ function timestampName(prefix){
 }
 
 // ========== EXPORTAÇÕES ==========
+// Mantemos o nome exportarXLSX porque app.js chama essa função,
+// mas aqui geramos CSV direto (XLSX indisponível no ambiente atual).
 export async function exportarXLSX(rows=[]){
-  try{
-    // importa SheetJS em runtime (sem mexer no index.html)
-    const XLSX = await import("https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js")
-      .then(m => m.default || m);
-
-    const aoa = rowsToAOA(rows);
-    const ws  = XLSX.utils.aoa_to_sheet(aoa);
-
-    // formata colunas numéricas (qtd, unit, sub, frete)
-    const colNums = [4,6,7,10]; // 0-based
-    const range = XLSX.utils.decode_range(ws['!ref']);
-    for (let R = 1; R <= range.e.r; R++){
-      colNums.forEach(C=>{
-        const cell = ws[XLSX.utils.encode_cell({r:R,c:C})];
-        if (!cell) return;
-        const n = Number(cell.v || 0);
-        cell.t = 'n';
-        // duas casas decimais exceto quantidade
-        cell.z = (C===4) ? "0.000" : "0.00";
-        cell.v = n;
-      });
-    }
-
-    ws['!cols'] = [
-      { wch: 10 }, // data
-      { wch: 6  }, // hora
-      { wch: 28 }, // cliente
-      { wch: 36 }, // produto
-      { wch: 7  }, // qtd
-      { wch: 5  }, // un
-      { wch: 10 }, // unit
-      { wch: 12 }, // subtotal
-      { wch: 10 }, // tipo
-      { wch: 14 }, // pagamento
-      { wch: 12 }, // frete
-      { wch: 10 }, // cupom
-      { wch: 24 }, // id
-    ];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
-    const ab = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-
-    downloadBlob(`${timestampName("Relatorios")}.xlsx`,
-                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                 ab);
-  }catch(err){
-    console.warn("Falhou XLSX; exportando CSV. Motivo:", err);
-    const aoa = rowsToAOA(rows);
-    const csv = aoaToCSV(aoa);
-    downloadBlob(`${timestampName("Relatorios")}.csv`, "text/csv;charset=utf-8", csv);
-    alert("XLSX indisponível no momento. Exportei em CSV como alternativa.");
-  }
+  const aoa = rowsToAOA(rows);
+  const csv = aoaToCSV_BR(aoa);
+  downloadBlob(`${timestampName("Relatorios")}.csv`, "text/csv;charset=utf-8", csv);
 }
 
 // ====== PDF (igual ao que você já estava usando) ======
@@ -189,8 +163,20 @@ export function exportarPDF(rows = []){
   // Cabeçalho
   setBold(12);
   doc.text("RELATÓRIO DE PEDIDOS", margin, y); setReg(9);
-  const totalGeral = rows.reduce((s,r)=> s + (Array.isArray(r.itens) ? r.itens.reduce((a,it)=>a+subtotalItem(it),0) : 0), 0);
-  doc.text(`Total de pedidos: ${rows.length}  •  Soma dos produtos: R$ ${moneyBR(totalGeral)}`, margin, y+6);
+  const totalGeral = rows.reduce((s,r)=> s + (Array.isArray(r.itens) ? r.itens.reduce((a,it)=>a+(
+    (typeof it.subtotal === "number") ? Number(it.subtotal||0)
+    : (()=>{
+        const qtd = Number(it.qtd ?? it.quantidade ?? 0);
+        const un  = (it.un || it.unidade || it.tipo || "UN").toString().toUpperCase();
+        const pu  = Number(it.precoUnit ?? it.preco ?? 0);
+        if (un === "UN"){
+          const kgUn = kgPorUnFromDesc(it.descricao || it.produto || "");
+          return kgUn > 0 ? (qtd * kgUn) * pu : (qtd * pu);
+        }
+        return qtd * pu;
+      })()
+  ),0) : 0), 0);
+  doc.text(`Total de pedidos: ${rows.length}  •  Soma dos produtos: R$ ${fmtMoneyBR(totalGeral)}`, margin, y+6);
   y += 12;
 
   // Agrupar por cliente
@@ -262,8 +248,8 @@ export function exportarPDF(rows = []){
 
     doc.text(String(qtd), x, y+4); x += col.qtd;
     doc.text(un, x, y+4); x += col.un;
-    doc.text(moneyBR(pu), x, y+4, { align:"right" }); x += col.val;
-    doc.text(moneyBR(sub), x, y+4, { align:"right" });
+    doc.text(fmtMoneyBR(pu), x, y+4, { align:"right" }); x += col.val;
+    doc.text(fmtMoneyBR(sub), x, y+4, { align:"right" });
 
     y += h;
   }
@@ -271,7 +257,7 @@ export function exportarPDF(rows = []){
     ensureSpace(10);
     setBold(9);
     doc.text("SOMA DOS PRODUTOS DO CLIENTE:", pageW - margin - 90, y+5);
-    doc.text(`R$ ${moneyBR(totalCliente)}`, pageW - margin, y+5, { align:"right" });
+    doc.text(`R$ ${fmtMoneyBR(totalCliente)}`, pageW - margin, y+5, { align:"right" });
     y += 8;
   }
 
@@ -281,7 +267,7 @@ export function exportarPDF(rows = []){
     let somaCliente = 0;
     pedidos.forEach((r)=>{
       const itens = Array.isArray(r.itens) ? r.itens : [];
-      itens.forEach((it, idx)=>{ somaCliente += subtotalItem(it); rowItem(idx, it, r); });
+      itens.forEach((it, idx)=>{ somaCliente += (typeof it.subtotal === "number") ? Number(it.subtotal||0) : subtotalItem(it); rowItem(idx, it, r); });
     });
     footerCliente(somaCliente);
     y += 2;
