@@ -1,0 +1,1 @@
+// (vazio por enquanto) — deixado para futura lógica se precisar.
