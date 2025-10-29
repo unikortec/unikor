@@ -1,4 +1,4 @@
-const VERSION = 'despesas-v4';
+const VERSION = 'despesas-v4.1';
 const PRECACHE = [
   './',
   './index.html',
