@@ -1,170 +1,45 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Unikor – Despesas</title>
+  <title>Unikor – Arquivos</title>
   <meta name="theme-color" content="#1e7f46" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16x16.png">
-<link rel="apple-touch-icon" href="/assets/logo/apple-touch-icon.png">
+  <base href="./" />
   <link rel="manifest" href="./manifest.json" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <button id="btnVoltar" class="btn-back" title="Voltar">&larr;</button>
-    <img class="logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
-    <div style="margin-left:auto;text-align:right">
-      <div class="title-strong">Despesas</div>
-      <div id="usuarioLogado" class="user-mini">Usuário: —</div>
-    </div>
+  <header class="brandbar">
+    <a class="brandbar__left" href="/app/">
+      <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+      <h1>Arquivos</h1>
+    </a>
   </header>
 
-  <div class="wrap">
+  <main class="center">
     <div class="card">
-      <h2>Lançamento de Nota</h2>
-
-      <div class="row">
-        <label for="categoria">Categoria:</label>
-        <input id="categoria" list="listaCategorias" placeholder="Digite ou escolha" />
-        <datalist id="listaCategorias"></datalist>
-      </div>
-
-      <div class="row">
-        <label>Tipo:</label>
-        <div>
-          <label style="margin-right:16px"><input type="radio" name="tipo" value="CUPOM" checked /> CUPOM</label>
-          <label><input type="radio" name="tipo" value="DANFE" /> DANFE</label>
-        </div>
-      </div>
-
-      <div class="row">
-        <label for="fornecedor">Fornecedor:</label>
-        <input id="fornecedor" placeholder="Nome do fornecedor" />
-      </div>
-
-      <div class="row">
-        <label for="cnpj">CNPJ Fornecedor:</label>
-        <input id="cnpj" placeholder="__.___.___/____-__" inputmode="numeric" maxlength="18" />
-      </div>
-
-      <div class="row">
-        <label for="formaPagamento">Forma de pagamento:</label>
-        <select id="formaPagamento">
-          <option value="DINHEIRO">DINHEIRO</option>
-          <option value="BOLETO">BOLETO</option>
-          <option value="CARTAO">CARTÃO</option>
-        </select>
-      </div>
-
-      <div class="row hidden" id="rowParcelas">
-        <label for="parcelas">Parcelas:</label>
-        <select id="parcelas">
-          <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
-          <option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
-        </select>
-      </div>
-
-      <div class="row">
-        <label for="chave">Chave NFe:</label>
-        <input id="chave" placeholder="44 dígitos ou URL do QR" />
-      </div>
-      <div class="actions-left" style="margin-top:-8px;margin-bottom:6px">
-        <button id="btnScanChave" class="btn outline" type="button">📷 Ler código</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <h2>Produtos</h2>
-
-      <div class="table-wrap">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th style="width:55%">Item</th>
-              <th style="width:15%;text-align:right">Qtd</th>
-              <th style="width:15%;text-align:right">Valor Un</th>
-              <th style="width:15%;text-align:right">Total</th>
-            </tr>
-          </thead>
-          <tbody id="tbodyItens"></tbody>
-          <tfoot>
-            <tr class="sum-row">
-              <td></td>
-              <td style="text-align:right"><span id="sumQtd">0</span></td>
-              <td></td>
-              <td style="text-align:right"><span id="sumTotal">R$ 0,00</span></td>
-            </tr>
-          </tfoot>
-        </table>
-        <div class="grid2">
-          <button id="btnAddItem" class="btn primary" type="button">+ Adicionar item</button>
-          <button id="btnRemItem" class="btn outline" type="button" style="border-color:#e57373;color:#e57373">– Remover</button>
-        </div>
-      </div>
-
-      <div class="row" style="align-items:center">
-        <label for="totalNota">TOTAL NF:</label>
-        <input id="totalNota" placeholder="(opcional) se vazio usa total líquido" inputmode="decimal" />
-      <div class="actions-right" style="gap:10px">
-  <button id="btnSalvar" class="btn outline" type="button">Salvar</button>
-
-  <a id="btnAdicionarNota"
-     class="btn primary"
-     href="https://drive.google.com/drive/folders/15pbKqQ6Bhou6fz8O85-BC6n4ZglmL5bb"
-     target="_blank" rel="noopener">Adicionar nota</a>
-</div>
-
-      <pre id="statusBox" class="preview muted hidden" style="margin-top:12px">—</pre>
+      <h2>Abrindo a pasta de Arquivos…</h2>
+      <p>Se não abrir sozinho, clique no botão abaixo.</p>
+      <a id="openBtn" class="btn" href="https://drive.google.com/drive/folders/19GK67f-0-tipfMRT3raqQFGCGwzyAUBs" target="_blank" rel="noopener">Abrir no Google Drive</a>
     </div>
-  </div>
+  </main>
 
-  <!-- Modal Scanner -->
-<div id="scanModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Leitor de código">
-  <div class="modal-box">
-    <div class="modal-head">
-      <strong>Leitor de código</strong>
-      <button id="btnCloseScan" class="btn outline">Fechar</button>
-    </div>
-    <video id="scanVideo" autoplay playsinline muted class="scan-video"></video>
-    <div id="scanPhoto" class="hidden" style="text-align:center;padding:12px">
-      <button id="btnTakePhoto" class="btn primary" type="button">📷 Tirar foto do QR</button>
-      <div class="muted" style="margin-top:8px">Se a câmera não abrir, use este modo para enviar uma foto do QR.</div>
-    </div>
-  </div>
-</div>
-
-  <!-- Firebase raiz compartilhado -->
-  <script type="module" src="/js/firebase.js"></script>
-  <!-- Módulos locais -->
-  <script type="module" src="./js/modal.js"></script>
-  <script type="module" src="./js/scanner.js"></script>
-  <script type="module" src="./js/db.js"></script>
-  <script type="module" src="./js/app.js"></script>
-
-  <!-- SW register -->
-  <script>
+  <script type="module">
+    // Registro do SW (opcional, ajuda no PWA)
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', async ()=>{
-        try{
-          const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-          document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') reg.update(); });
-          setInterval(()=>reg.update(), 5*60*1000);
-          reg.addEventListener('updatefound', ()=>{
-            const nw = reg.installing;
-            nw && nw.addEventListener('statechange', ()=>{
-              if (nw.state==='installed' && navigator.serviceWorker.controller) {
-                reg.waiting && reg.waiting.postMessage('SKIP_WAITING');
-              }
-            });
-          });
-          navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-            if (!window._reloadedBySW) { window._reloadedBySW = true; location.reload(); }
-          });
-        }catch(e){ console.warn('SW register:', e); }
-      });
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
     }
+
+    // Redireciona automaticamente
+    const DRIVE_URL = "https://drive.google.com/drive/folders/19GK67f-0-tipfMRT3raqQFGCGwzyAUBs";
+    // Use replace() para não criar histórico extra
+    window.addEventListener('DOMContentLoaded', () => {
+      // pequeno atraso evita bloqueio em alguns navegadores
+      setTimeout(() => { window.location.replace(DRIVE_URL); }, 120);
+    });
   </script>
 </body>
 </html>
