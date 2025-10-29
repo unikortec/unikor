@@ -1,23 +1,45 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>UNIKOR • Dashboard</title>
-  <link rel="stylesheet" href="../../style.css">
-  <style>.mod-wrap{max-width:1000px;margin:0 auto;padding:18px}.mod-top{display:flex;align-items:center;gap:12px;margin-bottom:16px}.mod-top img{width:40px;height:40px}.mod-title{font-size:28px;font-weight:900;color:#1e7f46}.back{margin-left:auto;border:2px solid #1e7f46;background:#fff;color:#1e7f46;padding:8px 14px;border-radius:12px;font-weight:800}.card{border:2px solid #1e7f46;border-radius:18px;padding:16px}</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unikor – Arquivos</title>
+  <meta name="theme-color" content="#1e7f46" />
+  <base href="./" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="/assets/logo/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo/apple-touch-icon.png" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <div class="mod-wrap">
-    <div class="mod-top">
-      <img src="../../assets/logo/icon-dashboard.svg" alt="Dashboard">
-      <div class="mod-title">Dashboard</div>
-      <button class="back" onclick="location.href='../../'">Voltar</button>
+  <header class="brandbar">
+    <a class="brandbar__left" href="/app/">
+      <img class="brandbar__logo" src="/assets/logo/unikorbranco-logo.svg" alt="UNIKOR" />
+      <h1>Arquivos</h1>
+    </a>
+  </header>
+
+  <main class="center">
+    <div class="card">
+      <h2>Abrindo a pasta de Arquivos…</h2>
+      <p>Se não abrir sozinho, clique no botão abaixo.</p>
+      <a id="openBtn" class="btn" href="https://drive.google.com/drive/folders/19GK67f-0-tipfMRT3raqQFGCGwzyAUBs" target="_blank" rel="noopener">Abrir no Google Drive</a>
     </div>
-    <div class="card">Conteúdo de <b>Dashboard</b> vai aqui.</div>
-  </div>
+  </main>
+
   <script type="module">
-    import { requireAuth } from "../../js/guard.js";
-    requireAuth({ onReady(){}});
+    // Registro do SW (opcional, ajuda no PWA)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+
+    // Redireciona automaticamente
+    const DRIVE_URL = "https://drive.google.com/drive/folders/19GK67f-0-tipfMRT3raqQFGCGwzyAUBs";
+    // Use replace() para não criar histórico extra
+    window.addEventListener('DOMContentLoaded', () => {
+      // pequeno atraso evita bloqueio em alguns navegadores
+      setTimeout(() => { window.location.replace(DRIVE_URL); }, 120);
+    });
   </script>
 </body>
 </html>
